@@ -1,0 +1,20 @@
+{
+  "repoName": "fpp-plugin-watcher",
+  "name": "Watcher",
+  "version": "1.1.0",
+  "description": "Monitors internet connectivity and automatically resets network adapter after consecutive failures",
+  "author": "Bryan Brandau",
+  "homeURL": "https://github.com/agent462/fpp-plugin-watcher",
+  "srcURL": "https://github.com/agent462/fpp-plugin-watcher.git",
+  "bugURL": "https://github.com/agent462/fpp-plugin-watcher/issues",
+  "allowUpdates": 1,
+  "versions": [
+    {
+      "minFPPVersion": "9.0",
+      "maxFPPVersion": "0",
+      "branch": "main",
+      "sha": "",
+      "allowUpdates": 1
+    }
+  ]
+}
