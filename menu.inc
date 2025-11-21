@@ -19,7 +19,7 @@ $menuEntries = Array(
 		'wrap' => 1
 	),
 	Array(
-		'text' => 'Watcher - Display',
+		'text' => 'Watcher - System Info',
 		'type' => 'content',
 		'page' => 'displayUI.php',
 		'wrap' => 1
@@ -31,9 +31,9 @@ $menuEntries = Array(
 		'wrap' => 1
 	),
 	Array(
-		'text' => 'Watcher - Ping',
+		'text' => 'Watcher - Connectivity',
 		'type' => 'content',
-		'page' => 'pingUI.php',
+		'page' => 'connectivityUI.php',
 		'wrap' => 1
 	),
 	Array(

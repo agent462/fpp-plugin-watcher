@@ -265,14 +265,6 @@
                 </div>
             </div>
 
-            <!-- Ping Latency Chart -->
-            <div class="chartContainer" id="pingLatencyPanel">
-                <div class="panelTitle">
-                    <i class="fas fa-signal"></i> Network Latency (24 Hours)
-                </div>
-                <canvas id="pingLatencyChart" style="max-height: 400px;"></canvas>
-            </div>
-
             <!-- Storage Information -->
             <div class="chartContainer">
                 <div class="panelTitle">
@@ -416,9 +408,6 @@
 
             // Update Temperature Sensors
             updateTemperatureSensors(status);
-
-            // Update Ping Latency Chart
-            updatePingLatencyChart();
 
             // Update Storage Info
             updateStorageInfo(status);
@@ -658,150 +647,6 @@
             const sizes = ['Bytes', 'KB', 'MB', 'GB', 'TB'];
             const i = Math.floor(Math.log(bytes) / Math.log(k));
             return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
-        }
-
-        // Global chart instance
-        let pingLatencyChart = null;
-
-        // Update ping latency chart with last 24 hours of data
-        async function updatePingLatencyChart() {
-            try {
-                const response = await fetch('/api/plugin/fpp-plugin-watcher/metrics');
-                const metricsData = await response.json();
-
-                if (!metricsData.success || !metricsData.data || metricsData.data.length === 0) {
-                    document.getElementById('pingLatencyPanel').style.display = 'none';
-                    return;
-                }
-
-                document.getElementById('pingLatencyPanel').style.display = 'block';
-
-                // Group data by host
-                const dataByHost = {};
-                metricsData.data.forEach(entry => {
-                    if (!dataByHost[entry.host]) {
-                        dataByHost[entry.host] = [];
-                    }
-                    dataByHost[entry.host].push({
-                        x: entry.timestamp * 1000, // Convert to milliseconds for Chart.js
-                        y: entry.latency
-                    });
-                });
-
-                // Create datasets for each host
-                const colors = [
-                    { border: 'rgb(102, 126, 234)', bg: 'rgba(102, 126, 234, 0.1)' },
-                    { border: 'rgb(56, 239, 125)', bg: 'rgba(56, 239, 125, 0.1)' },
-                    { border: 'rgb(240, 147, 251)', bg: 'rgba(240, 147, 251, 0.1)' },
-                    { border: 'rgb(79, 172, 254)', bg: 'rgba(79, 172, 254, 0.1)' }
-                ];
-
-                const datasets = Object.keys(dataByHost).map((host, index) => {
-                    const color = colors[index % colors.length];
-                    return {
-                        label: host,
-                        data: dataByHost[host],
-                        borderColor: color.border,
-                        backgroundColor: color.bg,
-                        borderWidth: 2,
-                        fill: true,
-                        tension: 0.4,
-                        pointRadius: 2,
-                        pointHoverRadius: 5
-                    };
-                });
-
-                // Update existing chart or create new one
-                if (pingLatencyChart) {
-                    // Update existing chart data without destroying
-                    pingLatencyChart.data.datasets = datasets;
-                    pingLatencyChart.update('none'); // 'none' mode = no animation, instant update
-                } else {
-                    // Create new chart on first load
-                    const ctx = document.getElementById('pingLatencyChart').getContext('2d');
-                    pingLatencyChart = new Chart(ctx, {
-                        type: 'line',
-                        data: {
-                            datasets: datasets
-                        },
-                        options: {
-                            responsive: true,
-                            maintainAspectRatio: true,
-                            interaction: {
-                                mode: 'nearest',
-                                axis: 'x',
-                                intersect: false
-                            },
-                            plugins: {
-                                legend: {
-                                    display: true,
-                                    position: 'top',
-                                    labels: {
-                                        usePointStyle: true,
-                                        padding: 15,
-                                        font: {
-                                            size: 12
-                                        }
-                                    }
-                                },
-                                tooltip: {
-                                    callbacks: {
-                                        title: function(context) {
-                                            const date = new Date(context[0].parsed.x);
-                                            return date.toLocaleString();
-                                        },
-                                        label: function(context) {
-                                            return context.dataset.label + ': ' + context.parsed.y.toFixed(2) + ' ms';
-                                        }
-                                    }
-                                }
-                            },
-                            scales: {
-                                x: {
-                                    type: 'time',
-                                    time: {
-                                        unit: 'hour',
-                                        displayFormats: {
-                                            hour: 'MMM d, HH:mm'
-                                        },
-                                        tooltipFormat: 'MMM d, yyyy HH:mm:ss'
-                                    },
-                                    title: {
-                                        display: true,
-                                        text: 'Time',
-                                        font: {
-                                            size: 14,
-                                            weight: 'bold'
-                                        }
-                                    },
-                                    grid: {
-                                        display: true,
-                                        color: 'rgba(0, 0, 0, 0.05)'
-                                    }
-                                },
-                                y: {
-                                    beginAtZero: true,
-                                    title: {
-                                        display: true,
-                                        text: 'Latency (ms)',
-                                        font: {
-                                            size: 14,
-                                            weight: 'bold'
-                                        }
-                                    },
-                                    grid: {
-                                        display: true,
-                                        color: 'rgba(0, 0, 0, 0.05)'
-                                    }
-                                }
-                            }
-                        }
-                    });
-                }
-            } catch (error) {
-                console.error('Error loading ping latency metrics:', error);
-                document.getElementById('pingLatencyPanel').style.display = 'none';
-            }
         }
 
         // Escape HTML to prevent XSS
