@@ -58,6 +58,7 @@ function getRollupState() {
         foreach (array_keys(WATCHERPINGROLLUPTIERS) as $tier) {
             $state[$tier] = [
                 'last_processed' => 0,
+                'last_bucket_end' => 0,
                 'last_rollup' => time()
             ];
         }
@@ -79,6 +80,28 @@ function getRollupState() {
         logMessage("Corrupted ping rollup state file detected. Rebuilding fresh state.");
         $state = $buildFreshState();
         saveRollupState($state);
+    }
+
+    // Backfill new state fields if the file was created before they existed
+    foreach (array_keys(WATCHERPINGROLLUPTIERS) as $tier) {
+        if (!isset($state[$tier])) {
+            $state[$tier] = [
+                'last_processed' => 0,
+                'last_bucket_end' => 0,
+                'last_rollup' => time()
+            ];
+            continue;
+        }
+
+        if (!isset($state[$tier]['last_bucket_end'])) {
+            $state[$tier]['last_bucket_end'] = 0;
+        }
+        if (!isset($state[$tier]['last_rollup'])) {
+            $state[$tier]['last_rollup'] = time();
+        }
+        if (!isset($state[$tier]['last_processed'])) {
+            $state[$tier]['last_processed'] = 0;
+        }
     }
 
     return $state;
@@ -227,6 +250,7 @@ function aggregateMetrics($metrics) {
 function processRollupTier($tier, $tierConfig) {
     $state = getRollupState();
     $lastProcessed = $state[$tier]['last_processed'] ?? 0;
+    $lastBucketEnd = $state[$tier]['last_bucket_end'] ?? 0;
     $lastRollup = $state[$tier]['last_rollup'] ?? 0;
     $interval = $tierConfig['interval'];
     $retention = $tierConfig['retention'];
@@ -239,6 +263,7 @@ function processRollupTier($tier, $tierConfig) {
 
     // Get raw metrics since last processed timestamp
     $rawMetrics = readRawPingMetrics($lastProcessed);
+    $processingCutoff = $now - 1; // Only process buckets that have fully closed
 
     if (empty($rawMetrics)) {
         // Pace rollups even if no new data to avoid constant wakeups
@@ -265,7 +290,22 @@ function processRollupTier($tier, $tierConfig) {
     $rollupFile = getPingRollupFilePath($tier);
     $newEntries = [];
 
+    ksort($buckets);
+    $latestProcessedBucketEnd = $lastBucketEnd;
+
     foreach ($buckets as $bucketStart => $bucketMetrics) {
+        $bucketEnd = $bucketStart + $interval;
+
+        // Skip buckets we've already rolled up
+        if ($bucketEnd <= $lastBucketEnd) {
+            continue;
+        }
+
+        // Only finalize buckets that have fully elapsed to avoid double processing
+        if ($bucketEnd > $processingCutoff) {
+            continue;
+        }
+
         $aggregated = aggregateMetrics($bucketMetrics);
 
         if ($aggregated === null) {
@@ -279,6 +319,7 @@ function processRollupTier($tier, $tierConfig) {
         ], $aggregated);
 
         $newEntries[] = $rollupEntry;
+        $latestProcessedBucketEnd = max($latestProcessedBucketEnd, $bucketEnd);
     }
 
     // Append new entries to rollup file (with file locking)
@@ -286,8 +327,13 @@ function processRollupTier($tier, $tierConfig) {
         appendRollupEntries($rollupFile, $newEntries);
 
         // Update last processed timestamp
-        $lastMetric = end($rawMetrics);
-        $state[$tier]['last_processed'] = $lastMetric['timestamp'];
+        // Use the end of the newest processed bucket so the next run starts after it.
+        $state[$tier]['last_processed'] = $latestProcessedBucketEnd - 1;
+        $state[$tier]['last_bucket_end'] = $latestProcessedBucketEnd;
+        $state[$tier]['last_rollup'] = $now;
+        saveRollupState($state);
+    } else {
+        // Still pace rollup executions even if nothing was written
         $state[$tier]['last_rollup'] = $now;
         saveRollupState($state);
     }
