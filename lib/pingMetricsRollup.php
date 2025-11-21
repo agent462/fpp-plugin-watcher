@@ -227,13 +227,23 @@ function aggregateMetrics($metrics) {
 function processRollupTier($tier, $tierConfig) {
     $state = getRollupState();
     $lastProcessed = $state[$tier]['last_processed'] ?? 0;
+    $lastRollup = $state[$tier]['last_rollup'] ?? 0;
     $interval = $tierConfig['interval'];
     $retention = $tierConfig['retention'];
+    $now = time();
+
+    // Prevent running a tier more frequently than its interval to avoid duplicate buckets
+    if (($now - $lastRollup) < $interval) {
+        return;
+    }
 
     // Get raw metrics since last processed timestamp
     $rawMetrics = readRawPingMetrics($lastProcessed);
 
     if (empty($rawMetrics)) {
+        // Pace rollups even if no new data to avoid constant wakeups
+        $state[$tier]['last_rollup'] = $now;
+        saveRollupState($state);
         return; // No new data to process
     }
 
@@ -278,7 +288,7 @@ function processRollupTier($tier, $tierConfig) {
         // Update last processed timestamp
         $lastMetric = end($rawMetrics);
         $state[$tier]['last_processed'] = $lastMetric['timestamp'];
-        $state[$tier]['last_rollup'] = time();
+        $state[$tier]['last_rollup'] = $now;
         saveRollupState($state);
     }
 
