@@ -193,61 +193,63 @@
                 </div>
             </div>
 
-            <!-- Stats Bar -->
-            <div class="statsBar">
-                <div class="statItem">
-                    <div class="statLabel">Current Latency</div>
-                    <div class="statValue" id="currentLatency">-- ms</div>
+            <div id="chartsSection" style="display: none;">
+                <!-- Stats Bar -->
+                <div class="statsBar">
+                    <div class="statItem">
+                        <div class="statLabel">Current Latency</div>
+                        <div class="statValue" id="currentLatency">-- ms</div>
+                    </div>
+                    <div class="statItem">
+                        <div class="statLabel">Average Latency</div>
+                        <div class="statValue" id="avgLatency">-- ms</div>
+                    </div>
+                    <div class="statItem">
+                        <div class="statLabel">Min Latency</div>
+                        <div class="statValue" id="minLatency">-- ms</div>
+                    </div>
+                    <div class="statItem">
+                        <div class="statLabel">Max Latency</div>
+                        <div class="statValue" id="maxLatency">-- ms</div>
+                    </div>
+                    <div class="statItem">
+                        <div class="statLabel">Data Points</div>
+                        <div class="statValue" id="dataPoints">--</div>
+                    </div>
                 </div>
-                <div class="statItem">
-                    <div class="statLabel">Average Latency</div>
-                    <div class="statValue" id="avgLatency">-- ms</div>
-                </div>
-                <div class="statItem">
-                    <div class="statLabel">Min Latency</div>
-                    <div class="statValue" id="minLatency">-- ms</div>
-                </div>
-                <div class="statItem">
-                    <div class="statLabel">Max Latency</div>
-                    <div class="statValue" id="maxLatency">-- ms</div>
-                </div>
-                <div class="statItem">
-                    <div class="statLabel">Data Points</div>
-                    <div class="statValue" id="dataPoints">--</div>
-                </div>
-            </div>
 
-            <!-- Average Latency Chart -->
-            <div class="chartCard">
-                <div class="chartTitle">
-                    <span>
-                        <i class="fas fa-chart-line"></i> Ping Latency Over Time
-                        <span class="tierBadge" id="latencyTierBadge">1-minute averages</span>
-                    </span>
+                <!-- Average Latency Chart -->
+                <div class="chartCard">
+                    <div class="chartTitle">
+                        <span>
+                            <i class="fas fa-chart-line"></i> Ping Latency Over Time
+                            <span class="tierBadge" id="latencyTierBadge">1-minute averages</span>
+                        </span>
+                    </div>
+                    <canvas id="latencyChart" style="max-height: 400px;"></canvas>
                 </div>
-                <canvas id="latencyChart" style="max-height: 400px;"></canvas>
-            </div>
 
-            <!-- Min/Max Latency Chart -->
-            <div class="chartCard">
-                <div class="chartTitle">
-                    <span>
-                        <i class="fas fa-chart-area"></i> Latency Range (Min/Max)
-                        <span class="tierBadge" id="rangeTierBadge">1-minute averages</span>
-                    </span>
+                <!-- Min/Max Latency Chart -->
+                <div class="chartCard">
+                    <div class="chartTitle">
+                        <span>
+                            <i class="fas fa-chart-area"></i> Latency Range (Min/Max)
+                            <span class="tierBadge" id="rangeTierBadge">1-minute averages</span>
+                        </span>
+                    </div>
+                    <canvas id="rangeChart" style="max-height: 400px;"></canvas>
                 </div>
-                <canvas id="rangeChart" style="max-height: 400px;"></canvas>
-            </div>
 
-            <!-- Sample Count Chart -->
-            <div class="chartCard">
-                <div class="chartTitle">
-                    <span>
-                        <i class="fas fa-chart-bar"></i> Ping Sample Count
-                        <span class="tierBadge" id="sampleTierBadge">1-minute averages</span>
-                    </span>
+                <!-- Sample Count Chart -->
+                <div class="chartCard">
+                    <div class="chartTitle">
+                        <span>
+                            <i class="fas fa-chart-bar"></i> Ping Sample Count
+                            <span class="tierBadge" id="sampleTierBadge">1-minute averages</span>
+                        </span>
+                    </div>
+                    <canvas id="sampleChart" style="max-height: 400px;"></canvas>
                 </div>
-                <canvas id="sampleChart" style="max-height: 400px;"></canvas>
             </div>
         </div>
 
@@ -276,9 +278,8 @@
                 const hasData = await updateAllCharts();
 
                 document.getElementById('loadingIndicator').style.display = 'none';
-                if (hasData) {
-                    document.getElementById('metricsContent').style.display = 'block';
-                }
+                // Keep the controls visible even when there's no data
+                document.getElementById('metricsContent').style.display = 'block';
 
                 if (refreshBtn) {
                     refreshBtn.style.animation = '';
@@ -318,16 +319,17 @@
 
                 const noDataEl = document.getElementById('noDataMessage');
                 const metricsContent = document.getElementById('metricsContent');
+                const chartsSection = document.getElementById('chartsSection');
 
                 if (!data.success || !data.data || data.data.length === 0) {
                     console.warn('No ping rollup data available');
-                    if (metricsContent) metricsContent.style.display = 'none';
+                    if (chartsSection) chartsSection.style.display = 'none';
                     if (noDataEl) noDataEl.style.display = 'block';
                     return false;
                 }
 
                 if (noDataEl) noDataEl.style.display = 'none';
-                if (metricsContent) metricsContent.style.display = 'block';
+                if (chartsSection) chartsSection.style.display = 'block';
 
                 // Update tier badges
                 if (data.tier_info) {
@@ -362,8 +364,8 @@
             } catch (error) {
                 console.error('Error updating charts:', error);
                 const noDataEl = document.getElementById('noDataMessage');
-                const metricsContent = document.getElementById('metricsContent');
-                if (metricsContent) metricsContent.style.display = 'none';
+                const chartsSection = document.getElementById('chartsSection');
+                if (chartsSection) chartsSection.style.display = 'none';
                 if (noDataEl) noDataEl.style.display = 'block';
                 return false;
             }
