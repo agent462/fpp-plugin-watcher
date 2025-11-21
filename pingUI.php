@@ -169,6 +169,10 @@
             <p>Loading ping metrics data...</p>
         </div>
 
+        <div id="noDataMessage" class="infoBox" style="display: none;">
+            <strong>No Data:</strong> No rollup data is available for the selected time range yet. Try a shorter range or check back after more samples are collected.
+        </div>
+
         <div id="metricsContent" style="display: none;">
             <!-- Time Range Selector -->
             <div class="chartControls" style="margin-bottom: 1.5rem;">
@@ -269,10 +273,12 @@
                     refreshBtn.style.animation = 'spin 1s linear infinite';
                 }
 
-                await updateAllCharts();
+                const hasData = await updateAllCharts();
 
                 document.getElementById('loadingIndicator').style.display = 'none';
-                document.getElementById('metricsContent').style.display = 'block';
+                if (hasData) {
+                    document.getElementById('metricsContent').style.display = 'block';
+                }
 
                 if (refreshBtn) {
                     refreshBtn.style.animation = '';
@@ -310,10 +316,18 @@
                 const response = await fetch(`/api/plugin/fpp-plugin-watcher/metrics/ping/rollup?hours=${hours}`);
                 const data = await response.json();
 
+                const noDataEl = document.getElementById('noDataMessage');
+                const metricsContent = document.getElementById('metricsContent');
+
                 if (!data.success || !data.data || data.data.length === 0) {
                     console.warn('No ping rollup data available');
-                    return;
+                    if (metricsContent) metricsContent.style.display = 'none';
+                    if (noDataEl) noDataEl.style.display = 'block';
+                    return false;
                 }
+
+                if (noDataEl) noDataEl.style.display = 'none';
+                if (metricsContent) metricsContent.style.display = 'block';
 
                 // Update tier badges
                 if (data.tier_info) {
@@ -344,8 +358,14 @@
                 updateLatencyChart(data.data, hours);
                 updateRangeChart(data.data, hours);
                 updateSampleChart(data.data, hours);
+                return true;
             } catch (error) {
                 console.error('Error updating charts:', error);
+                const noDataEl = document.getElementById('noDataMessage');
+                const metricsContent = document.getElementById('metricsContent');
+                if (metricsContent) metricsContent.style.display = 'none';
+                if (noDataEl) noDataEl.style.display = 'block';
+                return false;
             }
         }
 
