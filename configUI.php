@@ -387,7 +387,7 @@ if (!in_array($config['networkAdapter'], $interfaces)) {
                         <div class="settingDescription">
                             Enable or disable the collectd service. Collectd collects system metrics including CPU usage, memory usage,
                             disk space, network interface statistics, and system load averages. These metrics are displayed in the
-                            "Watcher - Display" dashboard. Disabling this service will stop metric collection and reduce system overhead,
+                            "Watcher - Metrics" dashboard. Disabling this service will stop metric collection and reduce system overhead,
                             but historical data will be preserved.
                         </div>
                     </div>
