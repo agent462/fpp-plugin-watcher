@@ -64,8 +64,12 @@ function getPingMetrics() {
  * Get hostname for collectd RRD path
  */
 function getCollectdHostname() {
+    /** Normally I delete commented code but I will leave this here.  Why hardcode the collectd hostname?
+     * If a user changes the hostname of their FPP system after installing collectd, the RRD files will be
+     * stored under the old hostname.  So we hardcode it to 'fpplocal' to avoid issues.
+     */
     #return trim(shell_exec('hostname'));
-    return trim(shell_exec('fpplocal')); //We will use this once collectd.conf becomes custom.
+    return 'fpplocal';
 }
 
 /**
