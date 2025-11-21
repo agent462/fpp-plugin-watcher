@@ -149,6 +149,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['save_settings'])) {
     $checkInterval = intval($_POST['checkInterval']);
     $maxFailures = intval($_POST['maxFailures']);
     $networkAdapter = trim($_POST['networkAdapter']);
+    $collectdEnabled = isset($_POST['collectdEnabled']) ? 'true' : 'false';
 
     // Process test hosts (comes as array from form)
     $testHosts = [];
@@ -177,13 +178,18 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['save_settings'])) {
     }
 
     if (empty($errors)) {
+        // Check if collectdEnabled changed
+        $currentConfig = readPluginConfig();
+        $collectdChanged = ($currentConfig['collectdEnabled'] != ($collectdEnabled === 'true'));
+
         // Save settings using FPP's WriteSettingToFile
         $settingsToSave = [
             'enabled' => $enabled,
             'checkInterval' => $checkInterval,
             'maxFailures' => $maxFailures,
             'networkAdapter' => $networkAdapter,
-            'testHosts' => implode(',', $testHosts)
+            'testHosts' => implode(',', $testHosts),
+            'collectdEnabled' => $collectdEnabled
         ];
 
         foreach ($settingsToSave as $settingName => $settingValue) {
@@ -191,12 +197,24 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['save_settings'])) {
             WriteSettingToFile($settingName, $settingValue, WATCHERPLUGINNAME);
         }
 
-        // Set FPP restart flag to notify that fppd restart is needed
-        /** @disregard P1010 */
-        WriteSettingToFile('restartFlag', 1);
+        // Manage collectd service if setting changed
+        if ($collectdChanged) {
+            $collectdSuccess = manageCollectdService($collectdEnabled === 'true');
+            if (!$collectdSuccess) {
+                $statusMessage = 'Settings saved, but failed to ' . ($collectdEnabled === 'true' ? 'enable' : 'disable') . ' collectd service. Check logs for details.';
+                $statusType = 'error';
+            }
+        }
 
-        $statusMessage = 'Settings saved successfully!';
-        $statusType = 'success';
+        // Set success message if not already set by collectd error
+        if (empty($statusMessage)) {
+            // Set FPP restart flag to notify that fppd restart is needed
+            /** @disregard P1010 */
+            WriteSettingToFile('restartFlag', 1);
+
+            $statusMessage = 'Settings saved successfully!';
+            $statusType = 'success';
+        }
 
         // Reload config
         $config = readPluginConfig();
@@ -335,6 +353,42 @@ if (!in_array($config['networkAdapter'], $interfaces)) {
                         <div class="settingDescription">
                             List of hostnames or IP addresses to check for connectivity. At least one host should be reachable (e.g., gateway, public DNS like 8.8.8.8 or 1.1.1.1).
                             We don't recommend more than 3 hosts to avoid excessive network traffic and metric fize size.
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Form Actions -->
+                <div class="formActions">
+                    <button type="button" class="buttons btn-outline-secondary" onclick="window.location.reload();">
+                        <i class="fas fa-undo"></i> Reset
+                    </button>
+                    <button type="submit" name="save_settings" class="buttons btn-success">
+                        <i class="fas fa-save"></i> Save Settings
+                    </button>
+                </div>
+            </div>
+
+            <!-- System Metrics Collection Settings -->
+            <div class="settingsPanel" style="margin-top: 2rem;">
+                <div class="panelTitle">
+                    <i class="fas fa-chart-line"></i> System Metrics Collection (collectd)
+                </div>
+
+                <!-- Enable/Disable collectd -->
+                <div class="row settingRow">
+                    <div class="col-md-4 col-lg-3">
+                        <label class="settingLabel">
+                            <input type="checkbox" id="collectdEnabled" name="collectdEnabled" class="form-check-input" value="1"
+                                <?php echo (!empty($config['collectdEnabled'])) ? 'checked' : ''; ?>>
+                            Enable collectd Service
+                        </label>
+                    </div>
+                    <div class="col-md-8">
+                        <div class="settingDescription">
+                            Enable or disable the collectd service. Collectd collects system metrics including CPU usage, memory usage,
+                            disk space, network interface statistics, and system load averages. These metrics are displayed in the
+                            "Watcher - Display" dashboard. Disabling this service will stop metric collection and reduce system overhead,
+                            but historical data will be preserved.
                         </div>
                     </div>
                 </div>

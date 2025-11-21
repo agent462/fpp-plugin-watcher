@@ -24,6 +24,13 @@ function prepareConfig($config) {
         $config['enabled'] = false;
     }
 
+    // Normalize collectdEnabled flag to a real boolean
+    if (isset($config['collectdEnabled'])) {
+        $config['collectdEnabled'] = filter_var($config['collectdEnabled'], FILTER_VALIDATE_BOOLEAN);
+    } else {
+        $config['collectdEnabled'] = true; // Default to enabled
+    }
+
     // Process testHosts into an array
     if (isset($config['testHosts'])) {
         $config['testHosts'] = array_map('trim', explode(',', $config['testHosts']));
@@ -33,18 +40,43 @@ function prepareConfig($config) {
     return $config;
 }
 
+// Manage collectd service (enable or disable)
+function manageCollectdService($enable) {
+    $action = $enable ? 'enable' : 'disable';
+    $logAction = $enable ? 'Enabling' : 'Disabling';
+
+    logMessage("$logAction collectd service...");
+
+    // Use systemctl to enable/disable and start/stop the service
+    // --now flag makes systemctl start/stop the service immediately
+    $command = "sudo systemctl --now $action collectd.service 2>&1";
+    $output = [];
+    $returnCode = 0;
+
+    exec($command, $output, $returnCode);
+
+    if ($returnCode === 0) {
+        logMessage("Successfully {$action}d collectd service");
+        return true;
+    } else {
+        $errorMsg = implode("\n", $output);
+        logMessage("ERROR: Failed to $action collectd service. Return code: $returnCode. Output: $errorMsg");
+        return false;
+    }
+}
+
 // Read plugin configuration file
 function readPluginConfig() {
     global $settings;
     $configFile = WATCHERCONFIGFILELOCATION;
-    
+
     if (!file_exists($configFile)) {
         logMessage('Watcher config file does not exist. Creating default config file.');
         setDefaultWatcherSettings();
     }
 
     ensureFppOwnership($configFile);
-    
+
     logMessage("Loading existing Watcher config file: ".WATCHERCONFIGFILELOCATION);
     $fd = fopen($configFile, 'r');
     if ($fd === false) {
@@ -56,7 +88,7 @@ function readPluginConfig() {
     $config = parse_ini_file($configFile);
     flock($fd, LOCK_UN);
     fclose($fd);
-    
+
     return prepareConfig($config);
 }
 ?>

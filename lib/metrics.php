@@ -64,7 +64,8 @@ function getPingMetrics() {
  * Get hostname for collectd RRD path
  */
 function getCollectdHostname() {
-    return trim(shell_exec('hostname'));
+    #return trim(shell_exec('hostname'));
+    return trim(shell_exec('fpplocal')); //We will use this once collectd.conf becomes custom.
 }
 
 /**

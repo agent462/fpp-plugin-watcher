@@ -18,7 +18,8 @@ define("WATCHERDEFAULTSETTINGS",
         'maxFailures' => 3,
         'networkAdapter' => 'eth0',
         'testHosts' => '8.8.8.8,1.1.1.1',
-        'metricsRotationInterval' => 1800)
+        'metricsRotationInterval' => 1800,
+        'collectdEnabled' => true)
         );
 
 // Ensure plugin-created files are owned by the FPP user/group for web access

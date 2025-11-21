@@ -1,6 +1,7 @@
 #!/bin/bash
 
-sudo apt remove -y collectd
+sudo apt remove -y collectd-core rrdtool
+sudo apt autoremove -y
 
 # Include common FPP functions
 . ${FPPDIR}/scripts/common
