@@ -239,7 +239,7 @@ if (!in_array($config['networkAdapter'], $interfaces)) {
                     <div class="col-md-4 col-lg-3">
                         <label class="settingLabel">
                             <input type="checkbox" id="watcherEnabled" name="enabled" class="form-check-input" value="1"
-                                <?php echo ($config['enabled'] === 'true' || $config['enabled'] === '1') ? 'checked' : ''; ?>>
+                                <?php echo (!empty($config['enabled'])) ? 'checked' : ''; ?>>
                             Enable Watcher Service
                         </label>
                     </div>

@@ -17,6 +17,13 @@ function setDefaultWatcherSettings() {
 }
 // Prepare configuration by processing specific fields
 function prepareConfig($config) {
+    // Normalize enabled flag to a real boolean since INI parsing returns strings
+    if (isset($config['enabled'])) {
+        $config['enabled'] = filter_var($config['enabled'], FILTER_VALIDATE_BOOLEAN);
+    } else {
+        $config['enabled'] = false;
+    }
+
     // Process testHosts into an array
     if (isset($config['testHosts'])) {
         $config['testHosts'] = array_map('trim', explode(',', $config['testHosts']));
