@@ -6,7 +6,7 @@ apt-get -y install collectd-core rrdtool
 sudo systemctl disable --now collectd.service
 
 # Copy our custom collectd configuration
-PLUGIN_DIR="${FPPDIR}/../media/plugins/fpp-plugin-watcher"
+PLUGIN_DIR="/home/fpp/media/plugins/fpp-plugin-watcher"
 if [ -f "${PLUGIN_DIR}/config/collectd.conf" ]; then
     echo "Installing custom collectd configuration..."
     cp "${PLUGIN_DIR}/config/collectd.conf" /etc/collectd/collectd.conf
