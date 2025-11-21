@@ -68,10 +68,12 @@ function rotateMetricsFile() {
     // Write recent metrics back to the file
     if (!empty($recentMetrics)) {
         file_put_contents($metricsFile, implode('', $recentMetrics));
+        ensureFppOwnership($metricsFile);
         logMessage("Metrics file rotated. Kept " . count($recentMetrics) . " recent entries.");
     } else {
         // Create empty file
         touch($metricsFile);
+        ensureFppOwnership($metricsFile);
         logMessage("Metrics file rotated. No recent entries to keep.");
     }
 }

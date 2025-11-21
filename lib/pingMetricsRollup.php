@@ -97,6 +97,7 @@ function saveRollupState($state) {
     }
 
     fclose($fp);
+    ensureFppOwnership($stateFile);
     return true;
 }
 
@@ -282,6 +283,7 @@ function appendRollupEntries($rollupFile, $entries) {
     }
 
     fclose($fp);
+    ensureFppOwnership($rollupFile);
     return true;
 }
 
@@ -343,6 +345,7 @@ function rotateRollupFile($rollupFile, $retentionSeconds) {
         // No recent entries, truncate file
         file_put_contents($rollupFile, '');
     }
+    ensureFppOwnership($rollupFile);
 }
 
 /**

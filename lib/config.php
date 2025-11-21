@@ -35,6 +35,8 @@ function readPluginConfig() {
         logMessage('Watcher config file does not exist. Creating default config file.');
         setDefaultWatcherSettings();
     }
+
+    ensureFppOwnership($configFile);
     
     logMessage("Loading existing Watcher config file: ".WATCHERCONFIGFILELOCATION);
     $fd = fopen($configFile, 'r');

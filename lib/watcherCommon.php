@@ -9,6 +9,8 @@ define("WATCHERPLUGINDIR", $settings['pluginDirectory']."/".WATCHERPLUGINNAME."/
 define("WATCHERCONFIGFILELOCATION", $settings['configDirectory']."/plugin.".WATCHERPLUGINNAME);
 define("WATCHERLOGFILE", $settings['logDirectory']."/".WATCHERPLUGINNAME.".log");
 define("WATCHERPINGMETRICSFILE", $settings['logDirectory']."/".WATCHERPLUGINNAME."-ping-metrics.log");
+define("WATCHERFPPUSER", 'fpp');
+define("WATCHERFPPGROUP", 'fpp');
 define("WATCHERDEFAULTSETTINGS",
     array(
         'enabled' => false,
@@ -19,10 +21,21 @@ define("WATCHERDEFAULTSETTINGS",
         'metricsRotationInterval' => 1800)
         );
 
+// Ensure plugin-created files are owned by the FPP user/group for web access
+function ensureFppOwnership($path) {
+    if (!$path || !file_exists($path)) {
+        return;
+    }
+
+    @chown($path, WATCHERFPPUSER);
+    @chgrp($path, WATCHERFPPGROUP);
+}
+
 // Function to log messages
 function logMessage($message, $file = WATCHERLOGFILE) {
     $timestamp = date('Y-m-d H:i:s');
     $logEntry = "[$timestamp] $message\n";
     file_put_contents($file, $logEntry, FILE_APPEND);
+    ensureFppOwnership($file);
 }
 ?>
