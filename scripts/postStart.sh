@@ -1,7 +1,7 @@
 #!/bin/sh
 
 # Check if collectd should be enabled based on plugin configuration
-CONFIG_FILE="/opt/fpp/media/config/plugin.fpp-plugin-watcher" # need to make this dynamic later
+CONFIG_FILE="/home/fpp/media/config/plugin.fpp-plugin-watcher" # need to make this dynamic later
 
 if [ -f "$CONFIG_FILE" ]; then
     # Read collectdEnabled setting from config file
