@@ -35,7 +35,18 @@ function ensureFppOwnership($path) {
 function logMessage($message, $file = WATCHERLOGFILE) {
     $timestamp = date('Y-m-d H:i:s');
     $logEntry = "[$timestamp] $message\n";
-    file_put_contents($file, $logEntry, FILE_APPEND);
+
+    // Serialize writes to avoid interleaving across processes
+    $fp = @fopen($file, 'a');
+    if ($fp) {
+        if (flock($fp, LOCK_EX)) {
+            fwrite($fp, $logEntry);
+            fflush($fp);
+            flock($fp, LOCK_UN);
+        }
+        fclose($fp);
+    }
+
     ensureFppOwnership($file);
 }
 ?>

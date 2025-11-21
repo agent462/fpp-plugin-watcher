@@ -52,8 +52,8 @@ function getPingRollupFilePath($tier) {
 function getRollupState() {
     $stateFile = WATCHERPINGROLLUPSTATEFILE;
 
-    if (!file_exists($stateFile)) {
-        // Initialize state with current time for all tiers
+    // Helper to create a fresh state structure without recursion
+    $buildFreshState = function() {
         $state = [];
         foreach (array_keys(WATCHERPINGROLLUPTIERS) as $tier) {
             $state[$tier] = [
@@ -61,6 +61,12 @@ function getRollupState() {
                 'last_rollup' => time()
             ];
         }
+        return $state;
+    };
+
+    if (!file_exists($stateFile)) {
+        // Initialize state with current time for all tiers
+        $state = $buildFreshState();
         saveRollupState($state);
         return $state;
     }
@@ -68,9 +74,11 @@ function getRollupState() {
     $content = file_get_contents($stateFile);
     $state = json_decode($content, true);
 
-    if (!$state) {
-        // Corrupted state, reinitialize
-        return getRollupState();
+    if (!$state || !is_array($state)) {
+        // Corrupted state, reinitialize without recursion
+        logMessage("Corrupted ping rollup state file detected. Rebuilding fresh state.");
+        $state = $buildFreshState();
+        saveRollupState($state);
     }
 
     return $state;
@@ -160,6 +168,7 @@ function aggregateMetrics($metrics) {
     $latencies = [];
     $hosts = [];
     $successCount = 0;
+    $failureCount = 0;
 
     foreach ($metrics as $entry) {
         if (isset($entry['latency']) && $entry['latency'] !== null) {
@@ -176,19 +185,37 @@ function aggregateMetrics($metrics) {
 
         if (isset($entry['status']) && $entry['status'] === 'success') {
             $successCount++;
+        } elseif (isset($entry['status']) && $entry['status'] === 'failure') {
+            $failureCount++;
         }
     }
 
+    $sampleCount = count($metrics);
+    if ($failureCount === 0) {
+        // Backfill failure count if status was missing but we have samples
+        $failureCount = $sampleCount - $successCount;
+    }
+
     if (empty($latencies)) {
-        return null;
+        // No latency data (e.g., all failures). Still return counts to surface failures.
+        return [
+            'min_latency' => null,
+            'max_latency' => null,
+            'avg_latency' => null,
+            'sample_count' => $sampleCount,
+            'success_count' => $successCount,
+            'failure_count' => $failureCount,
+            'hosts' => $hosts
+        ];
     }
 
     return [
         'min_latency' => round(min($latencies), 3),
         'max_latency' => round(max($latencies), 3),
         'avg_latency' => round(array_sum($latencies) / count($latencies), 3),
-        'sample_count' => count($metrics),
+        'sample_count' => $sampleCount,
         'success_count' => $successCount,
+        'failure_count' => $failureCount,
         'hosts' => $hosts
     ];
 }

@@ -35,7 +35,9 @@ function getPingMetrics() {
                         $metrics[] = [
                             'timestamp' => $entry['timestamp'],
                             'host' => $entry['host'],
-                            'latency' => floatval($entry['latency']),
+                            'latency' => isset($entry['latency']) && $entry['latency'] !== null
+                                ? floatval($entry['latency'])
+                                : null,
                             'status' => $entry['status']
                         ];
                     }

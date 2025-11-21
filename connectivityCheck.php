@@ -26,10 +26,24 @@ function rotateMetricsFile() {
         return;
     }
 
-    $fileSize = filesize($metricsFile);
+    $fp = fopen($metricsFile, 'c+');
+    if (!$fp) {
+        return;
+    }
+
+    // Take an exclusive lock so writes pause during rotation
+    if (!flock($fp, LOCK_EX)) {
+        fclose($fp);
+        return;
+    }
+
+    $stat = fstat($fp);
+    $fileSize = $stat['size'] ?? 0;
 
     // Check if rotation is needed
     if ($fileSize <= WATCHERMETRICSFILEMAXSIZE) {
+        flock($fp, LOCK_UN);
+        fclose($fp);
         return;
     }
 
@@ -39,23 +53,20 @@ function rotateMetricsFile() {
     $twentyFourHoursAgo = time() - (24 * 60 * 60);
     $recentMetrics = [];
 
-    $file = fopen($metricsFile, 'r');
-    if ($file) {
-        while (($line = fgets($file)) !== false) {
-            // Extract JSON from log entry format: [timestamp] JSON
-            if (preg_match('/\[.*?\]\s+(.+)$/', $line, $matches)) {
-                $jsonData = trim($matches[1]);
-                $entry = json_decode($jsonData, true);
+    rewind($fp);
+    while (($line = fgets($fp)) !== false) {
+        // Extract JSON from log entry format: [timestamp] JSON
+        if (preg_match('/\[.*?\]\s+(.+)$/', $line, $matches)) {
+            $jsonData = trim($matches[1]);
+            $entry = json_decode($jsonData, true);
 
-                if ($entry && isset($entry['timestamp'])) {
-                    // Keep only entries from last 24 hours
-                    if ($entry['timestamp'] >= $twentyFourHoursAgo) {
-                        $recentMetrics[] = $line;
-                    }
+            if ($entry && isset($entry['timestamp'])) {
+                // Keep only entries from last 24 hours
+                if ($entry['timestamp'] >= $twentyFourHoursAgo) {
+                    $recentMetrics[] = $line;
                 }
             }
         }
-        fclose($file);
     }
 
     // Backup old file
@@ -63,19 +74,28 @@ function rotateMetricsFile() {
     if (file_exists($backupFile)) {
         unlink($backupFile);
     }
-    rename($metricsFile, $backupFile);
+    // Copy contents while locked, then truncate
+    rewind($fp);
+    $existingContent = stream_get_contents($fp);
+    file_put_contents($backupFile, $existingContent);
 
     // Write recent metrics back to the file
+    ftruncate($fp, 0);
+    rewind($fp);
+
     if (!empty($recentMetrics)) {
-        file_put_contents($metricsFile, implode('', $recentMetrics));
-        ensureFppOwnership($metricsFile);
+        fwrite($fp, implode('', $recentMetrics));
+        fflush($fp);
         logMessage("Metrics file rotated. Kept " . count($recentMetrics) . " recent entries.");
     } else {
-        // Create empty file
-        touch($metricsFile);
-        ensureFppOwnership($metricsFile);
         logMessage("Metrics file rotated. No recent entries to keep.");
     }
+
+    flock($fp, LOCK_UN);
+    fclose($fp);
+
+    ensureFppOwnership($metricsFile);
+    ensureFppOwnership($backupFile);
 }
 
 // Function to check internet connectivity and capture ping statistics
@@ -118,6 +138,15 @@ function checkConnectivity($testHosts, $networkAdapter) {
             logMessage($metricsEntry, WATCHERPINGMETRICSFILE);
 
             $anySuccess = true;
+        } else {
+            // Log failed ping attempt
+            $metricsEntry = json_encode([
+                'timestamp' => time(),
+                'host' => $host,
+                'latency' => null,
+                'status' => 'failure'
+            ]);
+            logMessage($metricsEntry, WATCHERPINGMETRICSFILE);
         }
     }
     return $anySuccess;
