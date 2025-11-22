@@ -414,6 +414,90 @@ function getLoadAverageMetrics($hoursBack = 24) {
     ];
 }
 
+/**
+ * Get list of available thermal zones
+ *
+ * @return array List of thermal zone names
+ */
+function getThermalZones() {
+    $hostname = getCollectdHostname();
+    $thermalDirs = glob("/var/lib/collectd/rrd/{$hostname}/thermal-*", GLOB_ONLYDIR);
+
+    $zones = [];
+    foreach ($thermalDirs as $dir) {
+        // Extract zone name from path (e.g., thermal-thermal_zone0 -> thermal_zone0)
+        if (preg_match('/thermal-(.+)$/', basename($dir), $matches)) {
+            $zones[] = $matches[1];
+        }
+    }
+
+    return $zones;
+}
+
+/**
+ * Fetch thermal zone temperature metrics for all zones
+ *
+ * @param int $hoursBack Number of hours to fetch (default: 24)
+ * @return array Result with formatted temperature data for all zones
+ */
+function getThermalMetrics($hoursBack = 24) {
+    $zones = getThermalZones();
+
+    if (empty($zones)) {
+        return [
+            'success' => false,
+            'error' => 'No thermal zones found',
+            'data' => []
+        ];
+    }
+
+    // Fetch temperature data for all zones
+    $allZoneData = [];
+    foreach ($zones as $zone) {
+        $result = getCollectdMetrics("thermal-{$zone}", 'temperature', 'AVERAGE', $hoursBack);
+        if ($result['success'] && !empty($result['data'])) {
+            $allZoneData[$zone] = $result['data'];
+        }
+    }
+
+    if (empty($allZoneData)) {
+        return [
+            'success' => false,
+            'error' => 'No thermal data available',
+            'data' => []
+        ];
+    }
+
+    // Build a map of timestamps with all zone temperatures
+    $timestampMap = [];
+    foreach ($allZoneData as $zone => $zoneData) {
+        foreach ($zoneData as $entry) {
+            $timestamp = $entry['timestamp'];
+            if (!isset($timestampMap[$timestamp])) {
+                $timestampMap[$timestamp] = ['timestamp' => $timestamp];
+            }
+            // Temperature is stored in the 'value' field
+            $timestampMap[$timestamp][$zone] = isset($entry['value']) && $entry['value'] !== null
+                ? round($entry['value'], 2)
+                : null;
+        }
+    }
+
+    // Convert to array and sort by timestamp
+    $formattedData = array_values($timestampMap);
+    usort($formattedData, function($a, $b) {
+        return $a['timestamp'] - $b['timestamp'];
+    });
+
+    return [
+        'success' => true,
+        'count' => count($formattedData),
+        'data' => $formattedData,
+        'period' => $hoursBack . 'h',
+        'zones' => $zones
+    ];
+}
+
 // If this file is called directly (not included), output JSON
 if (basename($_SERVER['PHP_SELF']) == basename(__FILE__)) {
     header('Content-Type: application/json');

@@ -75,6 +75,18 @@ function getEndpointsfpppluginwatcher() {
         'callback' => 'fpppluginWatcherPingRollupTier');
     array_push($result, $ep);
 
+    $ep = array(
+        'method' => 'GET',
+        'endpoint' => 'metrics/thermal',
+        'callback' => 'fpppluginWatcherThermal');
+    array_push($result, $ep);
+
+    $ep = array(
+        'method' => 'GET',
+        'endpoint' => 'metrics/thermal/zones',
+        'callback' => 'fpppluginWatcherThermalZones');
+    array_push($result, $ep);
+
     return $result;
 }
 
@@ -180,6 +192,26 @@ function fpppluginwatcherPingRollupTier() {
     $startTime = $endTime - ($hoursBack * 3600);
 
     $result = readRollupData($tier, $startTime, $endTime);
+    /** @disregard P1010 */
+    return json($result);
+}
+
+// GET /api/plugin/fpp-plugin-watcher/metrics/thermal
+function fpppluginwatcherThermal() {
+    $hoursBack = isset($_GET['hours']) ? intval($_GET['hours']) : 24;
+    $result = getThermalMetrics($hoursBack);
+    /** @disregard P1010 */
+    return json($result);
+}
+
+// GET /api/plugin/fpp-plugin-watcher/metrics/thermal/zones
+function fpppluginwatcherThermalZones() {
+    $zones = getThermalZones();
+    $result = [
+        'success' => true,
+        'count' => count($zones),
+        'zones' => $zones
+    ];
     /** @disregard P1010 */
     return json($result);
 }

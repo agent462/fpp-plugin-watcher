@@ -228,6 +228,14 @@
                 </div>
                 <canvas id="networkChart" style="max-height: 400px;"></canvas>
             </div>
+
+            <!-- Thermal Zones Chart -->
+            <div class="chartCard" id="thermalCard" style="display: none;">
+                <div class="chartTitle">
+                    <span><i class="fas fa-thermometer-half"></i> Temperature (Thermal Zones)</span>
+                </div>
+                <canvas id="thermalChart" style="max-height: 400px;"></canvas>
+            </div>
         </div>
 
         <button class="refreshButton" onclick="loadAllMetrics()" title="Refresh Data">
@@ -241,6 +249,7 @@
         let loadChart = null;
         let diskChart = null;
         let networkChart = null;
+        let thermalChart = null;
         let isRefreshing = false;
 
         // Load all metrics
@@ -262,7 +271,8 @@
                     updateCPUChart(),
                     updateLoadChart(),
                     updateDiskChart(),
-                    updateNetworkChart()
+                    updateNetworkChart(),
+                    updateThermalChart()
                 ]);
 
                 document.getElementById('loadingIndicator').style.display = 'none';
@@ -326,7 +336,8 @@
                 updateCPUChart(),
                 updateLoadChart(),
                 updateDiskChart(),
-                updateNetworkChart()
+                updateNetworkChart(),
+                updateThermalChart()
             ]);
         }
 
@@ -934,6 +945,133 @@
                 }
             } catch (error) {
                 console.error('Error updating network chart:', error);
+            }
+        }
+
+        // Update thermal chart
+        async function updateThermalChart() {
+            try {
+                const hours = document.getElementById('timeRange').value;
+                const response = await fetch(`/api/plugin/fpp-plugin-watcher/metrics/thermal?hours=${hours}`);
+                const data = await response.json();
+
+                if (!data.success || !data.data || data.data.length === 0 || !data.zones || data.zones.length === 0) {
+                    // Hide thermal card if no data available
+                    document.getElementById('thermalCard').style.display = 'none';
+                    return;
+                }
+
+                // Show thermal card
+                document.getElementById('thermalCard').style.display = 'block';
+
+                // Define colors for up to 8 thermal zones
+                const zoneColors = [
+                    { border: 'rgb(255, 99, 132)', bg: 'rgba(255, 99, 132, 0.1)' },
+                    { border: 'rgb(54, 162, 235)', bg: 'rgba(54, 162, 235, 0.1)' },
+                    { border: 'rgb(255, 206, 86)', bg: 'rgba(255, 206, 86, 0.1)' },
+                    { border: 'rgb(75, 192, 192)', bg: 'rgba(75, 192, 192, 0.1)' },
+                    { border: 'rgb(153, 102, 255)', bg: 'rgba(153, 102, 255, 0.1)' },
+                    { border: 'rgb(255, 159, 64)', bg: 'rgba(255, 159, 64, 0.1)' },
+                    { border: 'rgb(201, 203, 207)', bg: 'rgba(201, 203, 207, 0.1)' },
+                    { border: 'rgb(83, 102, 255)', bg: 'rgba(83, 102, 255, 0.1)' }
+                ];
+
+                // Prepare datasets for each thermal zone
+                const datasets = [];
+                data.zones.forEach((zone, index) => {
+                    const zoneData = data.data.map(entry => ({
+                        x: entry.timestamp * 1000,
+                        y: entry[zone]
+                    }));
+
+                    const colorIndex = index % zoneColors.length;
+                    datasets.push({
+                        label: zone,
+                        data: zoneData,
+                        borderColor: zoneColors[colorIndex].border,
+                        backgroundColor: zoneColors[colorIndex].bg,
+                        borderWidth: 2,
+                        fill: false,
+                        tension: 0.4,
+                        pointRadius: 0,
+                        pointHoverRadius: 5
+                    });
+                });
+
+                // Update or create chart
+                if (thermalChart) {
+                    thermalChart.data.datasets = datasets;
+                    // Update time scale unit
+                    thermalChart.options.scales.x.time.unit = getTimeUnit(hours);
+                    thermalChart.options.scales.x.time.displayFormats = getTimeFormats(hours);
+                    thermalChart.update('none');
+                } else {
+                    const ctx = document.getElementById('thermalChart').getContext('2d');
+                    thermalChart = new Chart(ctx, {
+                        type: 'line',
+                        data: {
+                            datasets: datasets
+                        },
+                        options: {
+                            responsive: true,
+                            maintainAspectRatio: true,
+                            interaction: {
+                                mode: 'nearest',
+                                axis: 'x',
+                                intersect: false
+                            },
+                            plugins: {
+                                legend: {
+                                    display: true,
+                                    position: 'top'
+                                },
+                                tooltip: {
+                                    callbacks: {
+                                        title: function(context) {
+                                            const date = new Date(context[0].parsed.x);
+                                            return date.toLocaleString();
+                                        },
+                                        label: function(context) {
+                                            return context.dataset.label + ': ' + context.parsed.y.toFixed(1) + '°C';
+                                        }
+                                    }
+                                }
+                            },
+                            scales: {
+                                x: {
+                                    type: 'time',
+                                    time: {
+                                        unit: getTimeUnit(hours),
+                                        displayFormats: getTimeFormats(hours),
+                                        tooltipFormat: 'MMM d, yyyy HH:mm:ss'
+                                    },
+                                    title: {
+                                        display: true,
+                                        text: 'Time',
+                                        font: { size: 14, weight: 'bold' }
+                                    }
+                                },
+                                y: {
+                                    beginAtZero: false,
+                                    title: {
+                                        display: true,
+                                        text: 'Temperature (°C)',
+                                        font: { size: 14, weight: 'bold' }
+                                    },
+                                    ticks: {
+                                        callback: function(value) {
+                                            return value.toFixed(0) + '°C';
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    });
+                }
+            } catch (error) {
+                console.error('Error updating thermal chart:', error);
+                // Hide thermal card on error
+                document.getElementById('thermalCard').style.display = 'none';
             }
         }
 
