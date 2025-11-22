@@ -3,7 +3,7 @@
 <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Watcher - System Monitor</title>
+    <title>Watcher - System Information</title>
     <link rel="stylesheet" href="/css/fpp-bootstrap/dist-new/fpp-bootstrap-5-3.css">
     <link rel="stylesheet" href="/css/fpp.css">
     <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
@@ -216,7 +216,7 @@
 <body>
     <div class="systemMonitorContainer">
         <h2 style="margin-bottom: 2rem; color: #212529;">
-            <i class="fas fa-chart-line"></i> Watcher System Monitor
+            <i class="fas fa-chart-line"></i> Watcher System Information
         </h2>
 
         <div id="loadingIndicator" class="loadingSpinner">

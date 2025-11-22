@@ -160,7 +160,7 @@
         </h2>
 
         <div class="infoBox">
-            <strong>About Rollup Data:</strong>Data is automatically aggregated at different resolutions based on the selected time range
+            <strong>About Rollup Data:</strong>  Data is automatically aggregated at different resolutions based on the selected time range
             for optimal performance and storage efficiency.
         </div>
 
@@ -170,7 +170,7 @@
         </div>
 
         <div id="noDataMessage" class="infoBox" style="display: none;">
-            <strong>No Data:</strong> No rollup data is available for the selected time range yet. Try a shorter range or check back after more samples are collected.
+            <strong>No Data:</strong>  No rollup data is available for the selected time range yet. Try a shorter range or check back after more samples are collected.
         </div>
 
         <div id="metricsContent" style="display: none;">

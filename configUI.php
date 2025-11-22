@@ -362,7 +362,7 @@ if (!in_array($config['networkAdapter'], $interfaces)) {
             <!-- System Metrics Collection Settings -->
             <div class="settingsPanel" style="margin-top: 2rem;">
                 <div class="panelTitle">
-                    <i class="fas fa-chart-line"></i> System Metrics Collection (collectd)
+                    <i class="fas fa-chart-line"></i> System Metrics Collection
                 </div>
 
                 <!-- Enable/Disable collectd -->
@@ -377,9 +377,9 @@ if (!in_array($config['networkAdapter'], $interfaces)) {
                     <div class="col-md-8">
                         <div class="settingDescription">
                             Enable or disable the collectd service. Collectd collects system metrics including CPU usage, memory usage,
-                            disk space, network interface statistics, and system load averages. These metrics are displayed in the
-                            "Watcher - Metrics" dashboard. Disabling this service will stop metric collection and reduce system overhead,
-                            but historical data will be preserved.
+                            disk space, network interface statistics, temperature and system load averages. On average collectd will use about 60MB of
+                            storage to keep historical data for these metrics.  These metrics are displayed in the. "Watcher - Metrics" dashboard. 
+                            Disabling this service will stop metric collection and reduce system overhead, but historical data will be preserved.
                         </div>
                     </div>
                 </div>
