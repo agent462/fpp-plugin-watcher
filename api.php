@@ -87,6 +87,18 @@ function getEndpointsfpppluginwatcher() {
         'callback' => 'fpppluginWatcherThermalZones');
     array_push($result, $ep);
 
+    $ep = array(
+        'method' => 'GET',
+        'endpoint' => 'metrics/wireless',
+        'callback' => 'fpppluginWatcherWireless');
+    array_push($result, $ep);
+
+    $ep = array(
+        'method' => 'GET',
+        'endpoint' => 'metrics/wireless/interfaces',
+        'callback' => 'fpppluginWatcherWirelessInterfaces');
+    array_push($result, $ep);
+
     return $result;
 }
 
@@ -211,6 +223,26 @@ function fpppluginwatcherThermalZones() {
         'success' => true,
         'count' => count($zones),
         'zones' => $zones
+    ];
+    /** @disregard P1010 */
+    return json($result);
+}
+
+// GET /api/plugin/fpp-plugin-watcher/metrics/wireless
+function fpppluginwatcherWireless() {
+    $hoursBack = isset($_GET['hours']) ? intval($_GET['hours']) : 24;
+    $result = getWirelessMetrics($hoursBack);
+    /** @disregard P1010 */
+    return json($result);
+}
+
+// GET /api/plugin/fpp-plugin-watcher/metrics/wireless/interfaces
+function fpppluginwatcherWirelessInterfaces() {
+    $interfaces = getWirelessInterfaces();
+    $result = [
+        'success' => true,
+        'count' => count($interfaces),
+        'interfaces' => $interfaces
     ];
     /** @disregard P1010 */
     return json($result);

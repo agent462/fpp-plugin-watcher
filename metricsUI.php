@@ -236,6 +236,14 @@
                 </div>
                 <canvas id="thermalChart" style="max-height: 400px;"></canvas>
             </div>
+
+            <!-- Wireless Metrics Chart -->
+            <div class="chartCard" id="wirelessCard" style="display: none;">
+                <div class="chartTitle">
+                    <span><i class="fas fa-wifi"></i> Wireless Signal Quality</span>
+                </div>
+                <canvas id="wirelessChart" style="max-height: 400px;"></canvas>
+            </div>
         </div>
 
         <button class="refreshButton" onclick="loadAllMetrics()" title="Refresh Data">
@@ -250,6 +258,7 @@
         let diskChart = null;
         let networkChart = null;
         let thermalChart = null;
+        let wirelessChart = null;
         let isRefreshing = false;
 
         // Load all metrics
@@ -272,7 +281,8 @@
                     updateLoadChart(),
                     updateDiskChart(),
                     updateNetworkChart(),
-                    updateThermalChart()
+                    updateThermalChart(),
+                    updateWirelessChart()
                 ]);
 
                 document.getElementById('loadingIndicator').style.display = 'none';
@@ -337,7 +347,8 @@
                 updateLoadChart(),
                 updateDiskChart(),
                 updateNetworkChart(),
-                updateThermalChart()
+                updateThermalChart(),
+                updateWirelessChart()
             ]);
         }
 
@@ -1072,6 +1083,151 @@
                 console.error('Error updating thermal chart:', error);
                 // Hide thermal card on error
                 document.getElementById('thermalCard').style.display = 'none';
+            }
+        }
+
+        // Update wireless chart
+        async function updateWirelessChart() {
+            try {
+                const hours = document.getElementById('timeRange').value;
+                const response = await fetch(`/api/plugin/fpp-plugin-watcher/metrics/wireless?hours=${hours}`);
+                const data = await response.json();
+
+                if (!data.success || !data.data || data.data.length === 0 || !data.interfaces || data.interfaces.length === 0) {
+                    // Hide wireless card if no data available
+                    document.getElementById('wirelessCard').style.display = 'none';
+                    return;
+                }
+
+                // Show wireless card
+                document.getElementById('wirelessCard').style.display = 'block';
+
+                // Define colors for different metrics and interfaces
+                const metricColors = {
+                    bitrate: { border: 'rgb(54, 162, 235)', bg: 'rgba(54, 162, 235, 0.1)' },
+                    signal_quality: { border: 'rgb(75, 192, 192)', bg: 'rgba(75, 192, 192, 0.1)' },
+                    signal_power: { border: 'rgb(255, 99, 132)', bg: 'rgba(255, 99, 132, 0.1)' },
+                    signal_noise: { border: 'rgb(255, 159, 64)', bg: 'rgba(255, 159, 64, 0.1)' }
+                };
+
+                // Additional colors for multiple interfaces
+                const interfaceColorOffsets = [
+                    { border: '', bg: '' },  // Use original colors
+                    { border: 'rgb(153, 102, 255)', bg: 'rgba(153, 102, 255, 0.1)' },
+                    { border: 'rgb(54, 162, 235)', bg: 'rgba(54, 162, 235, 0.1)' },
+                    { border: 'rgb(201, 203, 207)', bg: 'rgba(201, 203, 207, 0.1)' }
+                ];
+
+                // Prepare datasets for each interface and metric combination
+                const datasets = [];
+                data.interfaces.forEach((iface, ifaceIndex) => {
+                    if (data.available_metrics[iface]) {
+                        data.available_metrics[iface].forEach(metric => {
+                            const key = `${iface}_${metric}`;
+                            const metricData = data.data.map(entry => ({
+                                x: entry.timestamp * 1000,
+                                y: entry[key]
+                            }));
+
+                            // Get color for this metric/interface combo
+                            let color = metricColors[metric] || metricColors.signal_quality;
+                            if (ifaceIndex > 0 && ifaceIndex < interfaceColorOffsets.length && interfaceColorOffsets[ifaceIndex].border) {
+                                color = interfaceColorOffsets[ifaceIndex];
+                            }
+
+                            // Create friendly label
+                            let metricLabel = metric.replace('signal_', '').replace('_', ' ');
+                            metricLabel = metricLabel.charAt(0).toUpperCase() + metricLabel.slice(1);
+
+                            datasets.push({
+                                label: `${iface} - ${metricLabel}`,
+                                data: metricData,
+                                borderColor: color.border,
+                                backgroundColor: color.bg,
+                                borderWidth: 2,
+                                fill: false,
+                                tension: 0.4,
+                                pointRadius: 0,
+                                pointHoverRadius: 5
+                            });
+                        });
+                    }
+                });
+
+                // Update or create chart
+                if (wirelessChart) {
+                    wirelessChart.data.datasets = datasets;
+                    // Update time scale unit
+                    wirelessChart.options.scales.x.time.unit = getTimeUnit(hours);
+                    wirelessChart.options.scales.x.time.displayFormats = getTimeFormats(hours);
+                    wirelessChart.update('none');
+                } else {
+                    const ctx = document.getElementById('wirelessChart').getContext('2d');
+                    wirelessChart = new Chart(ctx, {
+                        type: 'line',
+                        data: {
+                            datasets: datasets
+                        },
+                        options: {
+                            responsive: true,
+                            maintainAspectRatio: true,
+                            interaction: {
+                                mode: 'nearest',
+                                axis: 'x',
+                                intersect: false
+                            },
+                            plugins: {
+                                legend: {
+                                    display: true,
+                                    position: 'top'
+                                },
+                                tooltip: {
+                                    callbacks: {
+                                        title: function(context) {
+                                            const date = new Date(context[0].parsed.x);
+                                            return date.toLocaleString();
+                                        },
+                                        label: function(context) {
+                                            return context.dataset.label + ': ' + context.parsed.y.toFixed(1);
+                                        }
+                                    }
+                                }
+                            },
+                            scales: {
+                                x: {
+                                    type: 'time',
+                                    time: {
+                                        unit: getTimeUnit(hours),
+                                        displayFormats: getTimeFormats(hours),
+                                        tooltipFormat: 'MMM d, yyyy HH:mm:ss'
+                                    },
+                                    title: {
+                                        display: true,
+                                        text: 'Time',
+                                        font: { size: 14, weight: 'bold' }
+                                    }
+                                },
+                                y: {
+                                    beginAtZero: false,
+                                    title: {
+                                        display: true,
+                                        text: 'Signal Metrics',
+                                        font: { size: 14, weight: 'bold' }
+                                    },
+                                    ticks: {
+                                        callback: function(value) {
+                                            return value.toFixed(0);
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    });
+                }
+            } catch (error) {
+                console.error('Error updating wireless chart:', error);
+                // Hide wireless card on error
+                document.getElementById('wirelessCard').style.display = 'none';
             }
         }
 

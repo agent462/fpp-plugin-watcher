@@ -435,6 +435,26 @@ function getThermalZones() {
 }
 
 /**
+ * Get list of available wireless interfaces
+ *
+ * @return array List of wireless interface names
+ */
+function getWirelessInterfaces() {
+    $hostname = getCollectdHostname();
+    $wirelessDirs = glob("/var/lib/collectd/rrd/{$hostname}/wireless-*", GLOB_ONLYDIR);
+
+    $interfaces = [];
+    foreach ($wirelessDirs as $dir) {
+        // Extract interface name from path (e.g., wireless-wlan0 -> wlan0)
+        if (preg_match('/wireless-(.+)$/', basename($dir), $matches)) {
+            $interfaces[] = $matches[1];
+        }
+    }
+
+    return $interfaces;
+}
+
+/**
  * Fetch thermal zone temperature metrics for all zones
  *
  * @param int $hoursBack Number of hours to fetch (default: 24)
@@ -495,6 +515,83 @@ function getThermalMetrics($hoursBack = 24) {
         'data' => $formattedData,
         'period' => $hoursBack . 'h',
         'zones' => $zones
+    ];
+}
+
+/**
+ * Fetch wireless metrics for all wireless interfaces
+ * Includes signal quality, signal level, and noise level
+ *
+ * @param int $hoursBack Number of hours to fetch (default: 24)
+ * @return array Result with formatted wireless data for all interfaces
+ */
+function getWirelessMetrics($hoursBack = 24) {
+    $interfaces = getWirelessInterfaces();
+
+    if (empty($interfaces)) {
+        return [
+            'success' => false,
+            'error' => 'No wireless interfaces found',
+            'data' => []
+        ];
+    }
+
+    // Fetch metrics for all wireless interfaces
+    // Common wireless metrics: signal_quality, signal_power, signal_noise
+    $allInterfaceData = [];
+    $availableMetrics = [];
+
+    foreach ($interfaces as $iface) {
+        // Try to fetch different wireless metrics from collectd
+        // Available RRD files: bitrate.rrd, signal_noise.rrd, signal_power.rrd, signal_quality.rrd
+        $metrics = ['bitrate', 'signal_quality', 'signal_power', 'signal_noise'];
+
+        foreach ($metrics as $metric) {
+            $result = getCollectdMetrics("wireless-{$iface}", $metric, 'AVERAGE', $hoursBack);
+            if ($result['success'] && !empty($result['data'])) {
+                $key = "{$iface}_{$metric}";
+                $allInterfaceData[$key] = $result['data'];
+                $availableMetrics[$iface][] = $metric;
+            }
+        }
+    }
+
+    if (empty($allInterfaceData)) {
+        return [
+            'success' => false,
+            'error' => 'No wireless data available',
+            'data' => []
+        ];
+    }
+
+    // Build a map of timestamps with all interface metrics
+    $timestampMap = [];
+    foreach ($allInterfaceData as $key => $metricData) {
+        foreach ($metricData as $entry) {
+            $timestamp = $entry['timestamp'];
+            if (!isset($timestampMap[$timestamp])) {
+                $timestampMap[$timestamp] = ['timestamp' => $timestamp];
+            }
+            // Value is stored in the 'value' field
+            $timestampMap[$timestamp][$key] = isset($entry['value']) && $entry['value'] !== null
+                ? round($entry['value'], 2)
+                : null;
+        }
+    }
+
+    // Convert to array and sort by timestamp
+    $formattedData = array_values($timestampMap);
+    usort($formattedData, function($a, $b) {
+        return $a['timestamp'] - $b['timestamp'];
+    });
+
+    return [
+        'success' => true,
+        'count' => count($formattedData),
+        'data' => $formattedData,
+        'period' => $hoursBack . 'h',
+        'interfaces' => $interfaces,
+        'available_metrics' => $availableMetrics
     ];
 }
 
