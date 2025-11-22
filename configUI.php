@@ -145,7 +145,7 @@ $statusType = '';
 // Handle form submission
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['save_settings'])) {
     // Get form values
-    $enabled = isset($_POST['enabled']) ? 'true' : 'false';
+    $connectivityCheckEnabled = isset($_POST['connectivityCheckEnabled']) ? 'true' : 'false';
     $checkInterval = intval($_POST['checkInterval']);
     $maxFailures = intval($_POST['maxFailures']);
     $networkAdapter = trim($_POST['networkAdapter']);
@@ -184,7 +184,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['save_settings'])) {
 
         // Save settings using FPP's WriteSettingToFile
         $settingsToSave = [
-            'enabled' => $enabled,
+            'connectivityCheckEnabled' => $connectivityCheckEnabled,
             'checkInterval' => $checkInterval,
             'maxFailures' => $maxFailures,
             'networkAdapter' => $networkAdapter,
@@ -256,9 +256,9 @@ if (!in_array($config['networkAdapter'], $interfaces)) {
                 <div class="row settingRow">
                     <div class="col-md-4 col-lg-3">
                         <label class="settingLabel">
-                            <input type="checkbox" id="watcherEnabled" name="enabled" class="form-check-input" value="1"
-                                <?php echo (!empty($config['enabled'])) ? 'checked' : ''; ?>>
-                            Enable Watcher Service
+                            <input type="checkbox" id="watcherEnabled" name="connectivityCheckEnabled" class="form-check-input" value="1"
+                                <?php echo (!empty($config['connectivityCheckEnabled'])) ? 'checked' : ''; ?>>
+                            Enable Connectivity Check
                         </label>
                     </div>
                     <div class="col-md-8">

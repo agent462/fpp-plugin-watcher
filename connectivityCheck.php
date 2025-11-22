@@ -164,8 +164,8 @@ function formatPingStats($stats) {
 }
 
 
-if (!$config['enabled']) {
-    logMessage("Watcher Plugin is disabled. Exiting.");    exit(0);
+if (!$config['connectivityCheckEnabled']) {
+    logMessage("Watcher Plugin connectivity check is disabled. Exiting.");    exit(0);
 }
 
 // Main monitoring loop

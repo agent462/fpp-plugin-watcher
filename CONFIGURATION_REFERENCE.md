@@ -12,12 +12,12 @@ INI-style configuration with URL-encoded values
 
 ## Configuration Parameters
 
-### 1. enabled (boolean)
+### 1. connectivityCheckEnabled (boolean)
 
-**Description**: Enable or disable the Watcher service
+**Description**: Enable or disable the connectivity check service
 **Values**: `0` (disabled) or `1` (enabled)
 **Default**: `0`
-**Example**: `enabled=1`
+**Example**: `connectivityCheckEnabled=1`
 
 ### 2. checkInterval (integer)
 
@@ -79,7 +79,7 @@ To find your adapter, run: `ip link show` or `ifconfig`
 ### Basic Setup
 
 ```ini
-enabled=1
+connectivityCheckEnabled=1
 checkInterval=20
 maxFailures=3
 networkAdapter=eth0
@@ -90,7 +90,7 @@ metricsRotationInterval=1800
 ### Aggressive Monitoring (Fast Detection)
 
 ```ini
-enabled=1
+connectivityCheckEnabled=1
 checkInterval=10
 maxFailures=2
 networkAdapter=eth0
@@ -101,7 +101,7 @@ metricsRotationInterval=1800
 ### Conservative Monitoring (Less Disruptive)
 
 ```ini
-enabled=1
+connectivityCheckEnabled=1
 checkInterval=60
 maxFailures=5
 networkAdapter=eth0
@@ -112,7 +112,7 @@ metricsRotationInterval=1800
 ### WiFi Monitoring
 
 ```ini
-enabled=1
+connectivityCheckEnabled=1
 checkInterval=30
 maxFailures=3
 networkAdapter=wlan0
@@ -123,7 +123,7 @@ metricsRotationInterval=1800
 ### Multi-Host Monitoring
 
 ```ini
-enabled=1
+connectivityCheckEnabled=1
 checkInterval=25
 maxFailures=3
 networkAdapter=eth0
@@ -183,7 +183,7 @@ Settings are stored as individual config file entries:
 
 ```bash
 # Set a single setting
-curl -X POST http://localhost/api/settings/fpp-plugin-watcher/enabled -d "1"
+curl -X POST http://localhost/api/settings/fpp-plugin-watcher/connectivityCheckEnabled -d "1"
 curl -X POST http://localhost/api/settings/fpp-plugin-watcher/checkInterval -d "20"
 curl -X POST http://localhost/api/settings/fpp-plugin-watcher/testHosts -d "8.8.8.8,1.1.1.1"
 ```

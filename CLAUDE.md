@@ -25,7 +25,7 @@ Watcher is an FPP (Falcon Player) plugin that enables comprehensive system monit
 
 ### UI Files
 
-- `configUI.php` - Configuration interface for plugin settings (enabled, interval, failures, adapter, hosts)
+- `configUI.php` - Configuration interface for plugin settings (connectivityCheckEnabled, interval, failures, adapter, hosts)
 - `displayUI.php` - Real-time system monitor dashboard with CPU, memory, disk, and network interface metrics
 - `metricsUI.php` - Connectivity metrics dashboard with detailed ping statistics and charts
 - `about.php` - Plugin information and credits page
@@ -92,7 +92,7 @@ The connectivity checker runs as a continuous PHP process managed by FPP:
 1. **Initialization**:
    - Includes required libraries from `lib/` directory
    - Loads configuration from `/opt/fpp/media/config/plugin.fpp-plugin-watcher`
-   - Exits if `enabled` setting is false
+   - Exits if `connectivityCheckEnabled` setting is false
    - Logs startup information
 
 2. **Main Loop**:
@@ -119,12 +119,13 @@ Stored in INI-format file: `/opt/fpp/media/config/plugin.fpp-plugin-watcher`
 
 Managed through web UI or FPP API:
 
-- `enabled` (boolean) - Enable/disable the connectivity checker
+- `connectivityCheckEnabled` (boolean) - Enable/disable the connectivity checker
 - `checkInterval` (integer) - Seconds between connectivity checks (default: 20)
 - `maxFailures` (integer) - Consecutive failures before reset (default: 3)
 - `networkAdapter` (string) - Interface to monitor/reset (default: 'eth0')
 - `testHosts` (comma-separated string) - Hosts to ping (default: '8.8.8.8,1.1.1.1')
-- `verboseLogging` (boolean) - Enable detailed debug logging (optional)
+- `collectdEnabled` (boolean) - Enable/disable collectd service for system metrics (default: false)
+- `metricsRotationInterval` (integer) - Interval in seconds for rotating metrics logs (default: 1800)
 
 Configuration is automatically bootstrapped with defaults if file doesn't exist.
 
@@ -339,7 +340,7 @@ The watcher service is controlled by FPP's plugin system:
    - Loads `lib/watcherCommon.php` (constants, logging)
    - Loads `lib/resetNetworkAdapter.php` (reset function)
    - Loads `lib/config.php` (which reads/creates config)
-   - Checks if `enabled` is true, exits if false
+   - Checks if `connectivityCheckEnabled` is true, exits if false
    - Enters infinite loop
 
 #### Monitoring Loop Flow
@@ -479,7 +480,7 @@ Each command is defined in `commands/descriptions.json`:
 ### Connectivity Not Being Monitored
 
 1. Check if process is running: `ps aux | grep connectivityCheck`
-2. Verify `enabled=1` in config: `cat /opt/fpp/media/config/plugin.fpp-plugin-watcher`
+2. Verify `connectivityCheckEnabled=1` in config: `cat /opt/fpp/media/config/plugin.fpp-plugin-watcher`
 3. Check for errors in log file
 4. Test ping manually: `ping -I eth0 -c 1 8.8.8.8`
 

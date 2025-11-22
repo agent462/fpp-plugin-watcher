@@ -13,7 +13,7 @@ define("WATCHERFPPUSER", 'fpp');
 define("WATCHERFPPGROUP", 'fpp');
 define("WATCHERDEFAULTSETTINGS",
     array(
-        'enabled' => false,
+        'connectivityCheckEnabled' => false,
         'checkInterval' => 20,
         'maxFailures' => 3,
         'networkAdapter' => 'eth0',

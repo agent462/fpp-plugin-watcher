@@ -28,7 +28,7 @@ Navigate to **Content Setup → Watcher - Config** in the FPP web interface.
 
 ### Settings
 
-- **Enable Watcher Service**: Toggle to enable/disable the connectivity monitor
+- **Enable Connectivity Check**: Toggle to enable/disable the connectivity monitor
 - **Check Interval**: How often to test connectivity (5-3600 seconds, default: 20)
 - **Max Failures Before Reset**: Number of consecutive failures before resetting adapter (1-100, default: 3)
 - **Network Adapter**: Select your network interface (eth0, wlan0, etc.)
@@ -160,7 +160,7 @@ View system metrics in real-time through the **Watcher - Display** page.
 ### Connectivity Not Being Monitored
 
 1. Check if service is running: `ps aux | grep connectivityCheck`
-2. Verify `enabled=true` in config: `cat /opt/fpp/media/config/plugin.fpp-plugin-watcher`
+2. Verify `connectivityCheckEnabled=true` in config: `cat /opt/fpp/media/config/plugin.fpp-plugin-watcher`
 3. Check for errors in log file
 4. Test ping manually: `ping -I eth0 -c 1 8.8.8.8`
 
