@@ -1104,7 +1104,6 @@
 
                 // Define colors for different metrics and interfaces
                 const metricColors = {
-                    bitrate: { border: 'rgb(54, 162, 235)', bg: 'rgba(54, 162, 235, 0.1)' },
                     signal_quality: { border: 'rgb(75, 192, 192)', bg: 'rgba(75, 192, 192, 0.1)' },
                     signal_power: { border: 'rgb(255, 99, 132)', bg: 'rgba(255, 99, 132, 0.1)' },
                     signal_noise: { border: 'rgb(255, 159, 64)', bg: 'rgba(255, 159, 64, 0.1)' }

@@ -543,8 +543,8 @@ function getWirelessMetrics($hoursBack = 24) {
 
     foreach ($interfaces as $iface) {
         // Try to fetch different wireless metrics from collectd
-        // Available RRD files: bitrate.rrd, signal_noise.rrd, signal_power.rrd, signal_quality.rrd
-        $metrics = ['bitrate', 'signal_quality', 'signal_power', 'signal_noise'];
+        // Available RRD files: signal_noise.rrd, signal_power.rrd, signal_quality.rrd
+        $metrics = ['signal_quality', 'signal_power', 'signal_noise'];
 
         foreach ($metrics as $metric) {
             $result = getCollectdMetrics("wireless-{$iface}", $metric, 'AVERAGE', $hoursBack);

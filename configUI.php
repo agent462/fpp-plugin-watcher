@@ -357,15 +357,6 @@ if (!in_array($config['networkAdapter'], $interfaces)) {
                     </div>
                 </div>
 
-                <!-- Form Actions -->
-                <div class="formActions">
-                    <button type="button" class="buttons btn-outline-secondary" onclick="window.location.reload();">
-                        <i class="fas fa-undo"></i> Reset
-                    </button>
-                    <button type="submit" name="save_settings" class="buttons btn-success">
-                        <i class="fas fa-save"></i> Save Settings
-                    </button>
-                </div>
             </div>
 
             <!-- System Metrics Collection Settings -->
