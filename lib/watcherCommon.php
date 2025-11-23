@@ -3,7 +3,6 @@ include_once "/opt/fpp/www/common.php";
 
 global $settings;
 
-define("WATCHERVERSION", 'v1.1.0');
 define("WATCHERPLUGINNAME", 'fpp-plugin-watcher');
 define("WATCHERPLUGINDIR", $settings['pluginDirectory']."/".WATCHERPLUGINNAME."/");
 define("WATCHERCONFIGFILELOCATION", $settings['configDirectory']."/plugin.".WATCHERPLUGINNAME);

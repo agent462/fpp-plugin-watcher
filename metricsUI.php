@@ -568,7 +568,14 @@
                                     title: {
                                         display: true,
                                         text: 'Time',
-                                        font: { size: 14, weight: 'bold' }
+                                        font: {
+                                            size: 14,
+                                            weight: 'bold'
+                                        }
+                                    },
+                                    grid: {
+                                        display: true,
+                                        color: 'rgba(0, 0, 0, 0.05)'
                                     }
                                 },
                                 y: {
@@ -577,7 +584,14 @@
                                     title: {
                                         display: true,
                                         text: 'CPU Usage (%)',
-                                        font: { size: 14, weight: 'bold' }
+                                        font: {
+                                            size: 14,
+                                            weight: 'bold'
+                                        }
+                                    },
+                                    grid: {
+                                        display: true,
+                                        color: 'rgba(0, 0, 0, 0.05)'
                                     },
                                     ticks: {
                                         callback: function(value) {
@@ -708,7 +722,14 @@
                                     title: {
                                         display: true,
                                         text: 'Time',
-                                        font: { size: 14, weight: 'bold' }
+                                        font: {
+                                            size: 14,
+                                            weight: 'bold'
+                                        }
+                                    },
+                                    grid: {
+                                        display: true,
+                                        color: 'rgba(0, 0, 0, 0.05)'
                                     }
                                 },
                                 y: {
@@ -716,7 +737,14 @@
                                     title: {
                                         display: true,
                                         text: 'Load Average',
-                                        font: { size: 14, weight: 'bold' }
+                                        font: {
+                                            size: 14,
+                                            weight: 'bold'
+                                        }
+                                    },
+                                    grid: {
+                                        display: true,
+                                        color: 'rgba(0, 0, 0, 0.05)'
                                     },
                                     ticks: {
                                         callback: function(value) {
@@ -811,7 +839,14 @@
                                     title: {
                                         display: true,
                                         text: 'Time',
-                                        font: { size: 14, weight: 'bold' }
+                                        font: {
+                                            size: 14,
+                                            weight: 'bold'
+                                        }
+                                    },
+                                    grid: {
+                                        display: true,
+                                        color: 'rgba(0, 0, 0, 0.05)'
                                     }
                                 },
                                 y: {
@@ -819,7 +854,14 @@
                                     title: {
                                         display: true,
                                         text: 'Free Space (GB)',
-                                        font: { size: 14, weight: 'bold' }
+                                        font: {
+                                            size: 14,
+                                            weight: 'bold'
+                                        }
+                                    },
+                                    grid: {
+                                        display: true,
+                                        color: 'rgba(0, 0, 0, 0.05)'
                                     },
                                     ticks: {
                                         callback: function(value) {
@@ -934,7 +976,14 @@
                                     title: {
                                         display: true,
                                         text: 'Time',
-                                        font: { size: 14, weight: 'bold' }
+                                        font: {
+                                            size: 14,
+                                            weight: 'bold'
+                                        }
+                                    },
+                                    grid: {
+                                        display: true,
+                                        color: 'rgba(0, 0, 0, 0.05)'
                                     }
                                 },
                                 y: {
@@ -942,7 +991,14 @@
                                     title: {
                                         display: true,
                                         text: 'Bandwidth (Kbps)',
-                                        font: { size: 14, weight: 'bold' }
+                                        font: {
+                                            size: 14,
+                                            weight: 'bold'
+                                        }
+                                    },
+                                    grid: {
+                                        display: true,
+                                        color: 'rgba(0, 0, 0, 0.05)'
                                     },
                                     ticks: {
                                         callback: function(value) {
@@ -1059,7 +1115,14 @@
                                     title: {
                                         display: true,
                                         text: 'Time',
-                                        font: { size: 14, weight: 'bold' }
+                                        font: {
+                                            size: 14,
+                                            weight: 'bold'
+                                        }
+                                    },
+                                    grid: {
+                                        display: true,
+                                        color: 'rgba(0, 0, 0, 0.05)'
                                     }
                                 },
                                 y: {
@@ -1067,7 +1130,14 @@
                                     title: {
                                         display: true,
                                         text: 'Temperature (°C)',
-                                        font: { size: 14, weight: 'bold' }
+                                        font: {
+                                            size: 14,
+                                            weight: 'bold'
+                                        }
+                                    },
+                                    grid: {
+                                        display: true,
+                                        color: 'rgba(0, 0, 0, 0.05)'
                                     },
                                     ticks: {
                                         callback: function(value) {
@@ -1203,7 +1273,14 @@
                                     title: {
                                         display: true,
                                         text: 'Time',
-                                        font: { size: 14, weight: 'bold' }
+                                        font: {
+                                            size: 14,
+                                            weight: 'bold'
+                                        }
+                                    },
+                                    grid: {
+                                        display: true,
+                                        color: 'rgba(0, 0, 0, 0.05)'
                                     }
                                 },
                                 y: {
@@ -1211,7 +1288,14 @@
                                     title: {
                                         display: true,
                                         text: 'Signal Metrics',
-                                        font: { size: 14, weight: 'bold' }
+                                        font: {
+                                            size: 14,
+                                            weight: 'bold'
+                                        }
+                                    },
+                                    grid: {
+                                        display: true,
+                                        color: 'rgba(0, 0, 0, 0.05)'
                                     },
                                     ticks: {
                                         callback: function(value) {

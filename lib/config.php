@@ -2,34 +2,33 @@
 include_once "/opt/fpp/www/common.php";
 include_once __DIR__ . '/watcherCommon.php';
 
-define("WATCHERCONFIGFILE", readPluginConfig(WATCHERPLUGINNAME));
 /**
  * Bootstrap default settings
  */
 function setDefaultWatcherSettings() {
     logMessage("Setting default Watcher Config");
 
-    foreach (WATCHERDEFAULTSETTINGS as $settingName => $settingValue) {        
+    foreach (WATCHERDEFAULTSETTINGS as $settingName => $settingValue) {
         logMessage("Setting $settingName = $settingValue");
-        /** @disregard P1010 */     
-        WriteSettingToFile($settingName, $settingValue, $plugin = WATCHERPLUGINNAME); //Call WriteSettingToFile from common.php
+        /** @disregard P1010 */
+        WriteSettingToFile($settingName, $settingValue, $plugin = WATCHERPLUGINNAME);
     }
 }
+
+// Helper function to normalize boolean config values
+function normalizeBoolean(&$config, $key, $default = false) {
+    if (isset($config[$key])) {
+        $config[$key] = filter_var($config[$key], FILTER_VALIDATE_BOOLEAN);
+    } else {
+        $config[$key] = $default;
+    }
+}
+
 // Prepare configuration by processing specific fields
 function prepareConfig($config) {
-    // Normalize connectivityCheckEnabled flag to a real boolean since INI parsing returns strings
-    if (isset($config['connectivityCheckEnabled'])) {
-        $config['connectivityCheckEnabled'] = filter_var($config['connectivityCheckEnabled'], FILTER_VALIDATE_BOOLEAN);
-    } else {
-        $config['connectivityCheckEnabled'] = false;
-    }
-
-    // Normalize collectdEnabled flag to a real boolean
-    if (isset($config['collectdEnabled'])) {
-        $config['collectdEnabled'] = filter_var($config['collectdEnabled'], FILTER_VALIDATE_BOOLEAN);
-    } else {
-        $config['collectdEnabled'] = true; // Default to enabled
-    }
+    // Normalize boolean flags (INI parsing returns strings)
+    normalizeBoolean($config, 'connectivityCheckEnabled', false);
+    normalizeBoolean($config, 'collectdEnabled', true);
 
     // Process testHosts into an array
     if (isset($config['testHosts'])) {
@@ -37,6 +36,7 @@ function prepareConfig($config) {
     } else {
         $config['testHosts'] = ['8.8.8.8']; // Default host
     }
+
     return $config;
 }
 

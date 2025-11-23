@@ -6,7 +6,7 @@ include_once __DIR__ ."/lib/resetNetworkAdapter.php";
 include_once __DIR__ ."/lib/config.php"; //Check for Config file and bootstrap if needed
 include_once __DIR__ ."/lib/pingMetricsRollup.php"; //Rollup and rotation management
 
-$config = WATCHERCONFIGFILE; // Load and prepare configuration
+$config = readPluginConfig(); // Load and prepare configuration
 
 // Maximum file size in bytes (10MB default)
 define("WATCHERMETRICSFILEMAXSIZE", 10 * 1024 * 1024);

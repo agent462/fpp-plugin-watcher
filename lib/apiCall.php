@@ -40,7 +40,7 @@ function apiCall($method, $uri, $data = []) {
         logMessage("cURL Error: $curlError");
         return false;
     }
-    
+
     if ($httpCode >= 200 && $httpCode < 300) {
         logMessage("API Request sent successfully via FPP API");
         logMessage("API Response (HTTP $httpCode): $response");
