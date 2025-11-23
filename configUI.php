@@ -313,7 +313,7 @@ if ($config['networkAdapter'] !== 'default' && !in_array($config['networkAdapter
                     <div class="col-md-8">
                         <select id="networkAdapter" name="networkAdapter" class="form-control">
                             <option value="default" <?php echo ($config['networkAdapter'] === 'default') ? 'selected' : ''; ?>>
-                                Auto-detect (currently: <?php echo htmlspecialchars($actualAdapter); ?>)
+                                Auto-detect (detected: <?php echo htmlspecialchars($actualAdapter); ?>)
                             </option>
                             <?php foreach ($interfaces as $iface): ?>
                             <option value="<?php echo htmlspecialchars($iface); ?>"
