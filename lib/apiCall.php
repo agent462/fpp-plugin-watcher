@@ -1,12 +1,12 @@
 #!/usr/bin/php
 <?php
 // Function to make calls to the FPP API
-function apiCall($method, $uri, $data = []) {
+function apiCall($method, $uri, $data = [], $returnResponse = false, $timeout = 15) {
     logMessage("Attempting to make the api call to: $uri");
-        
+
     $ch = curl_init($uri);
     curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
-    curl_setopt($ch, CURLOPT_TIMEOUT, 15);
+    curl_setopt($ch, CURLOPT_TIMEOUT, $timeout);
     curl_setopt($ch, CURLOPT_HTTPHEADER, [
         'Content-Type: application/json',
         'Accept: application/json'
@@ -17,7 +17,7 @@ function apiCall($method, $uri, $data = []) {
         if (!empty($data)) {
             curl_setopt($ch, CURLOPT_URL, $uri);
         }
-    } 
+    }
     // Handle POST requests
     elseif (strtoupper($method) === 'POST') {
         curl_setopt($ch, CURLOPT_POST, true);
@@ -44,6 +44,12 @@ function apiCall($method, $uri, $data = []) {
     if ($httpCode >= 200 && $httpCode < 300) {
         logMessage("API Request sent successfully via FPP API");
         logMessage("API Response (HTTP $httpCode): $response");
+
+        // Return response data if requested
+        if ($returnResponse) {
+            $decoded = json_decode($response, true);
+            return ($decoded !== null) ? $decoded : $response;
+        }
         return true;
     } else {
         logMessage("API Request failed via FPP API");

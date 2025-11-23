@@ -151,6 +151,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['save_settings'])) {
     $networkAdapter = trim($_POST['networkAdapter']);
     $collectdEnabled = isset($_POST['collectdEnabled']) ? 'true' : 'false';
 
+    // If 'default' is selected, auto-detect and save the actual interface
+    if ($networkAdapter === 'default') {
+        $networkAdapter = detectActiveNetworkInterface();
+        logMessage("Auto-detected network adapter '$networkAdapter' from 'default' setting");
+    }
+
     // Process test hosts (comes as array from form)
     $testHosts = [];
     if (isset($_POST['testHosts']) && is_array($_POST['testHosts'])) {
@@ -227,14 +233,17 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['save_settings'])) {
 // Load current settings
 $config = readPluginConfig();
 
+// Detect actual adapter when config is 'default'
+$actualAdapter = ($config['networkAdapter'] === 'default') ? detectActiveNetworkInterface() : $config['networkAdapter'];
+
 // Get network interfaces from system
 $interfaces = [];
 exec("ip link show | grep -E '^[0-9]+:' | awk -F': ' '{print $2}' | grep -v '^lo'", $interfaces);
 $interfaces = array_map('trim', $interfaces);
 $interfaces = array_filter($interfaces); // Remove empty values
 
-// Ensure current adapter is in the list
-if (!in_array($config['networkAdapter'], $interfaces)) {
+// Ensure current adapter is in the list (if not using 'default')
+if ($config['networkAdapter'] !== 'default' && !in_array($config['networkAdapter'], $interfaces)) {
     $interfaces[] = $config['networkAdapter'];
 }
 ?>
@@ -303,6 +312,9 @@ if (!in_array($config['networkAdapter'], $interfaces)) {
                     </div>
                     <div class="col-md-8">
                         <select id="networkAdapter" name="networkAdapter" class="form-control">
+                            <option value="default" <?php echo ($config['networkAdapter'] === 'default') ? 'selected' : ''; ?>>
+                                Auto-detect (currently: <?php echo htmlspecialchars($actualAdapter); ?>)
+                            </option>
                             <?php foreach ($interfaces as $iface): ?>
                             <option value="<?php echo htmlspecialchars($iface); ?>"
                                 <?php echo ($config['networkAdapter'] === $iface) ? 'selected' : ''; ?>>
@@ -311,7 +323,7 @@ if (!in_array($config['networkAdapter'], $interfaces)) {
                             <?php endforeach; ?>
                         </select>
                         <div class="settingDescription">
-                            Select the network adapter to monitor and reset if necessary. Detected network interfaces are shown.
+                            Select the network adapter to monitor and reset if necessary. Use "Auto-detect" to automatically select the active interface, or choose a specific interface from the detected network interfaces.
                         </div>
                     </div>
                 </div>

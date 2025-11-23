@@ -8,6 +8,17 @@ include_once __DIR__ ."/lib/pingMetricsRollup.php"; //Rollup and rotation manage
 
 $config = readPluginConfig(); // Load and prepare configuration
 
+// Resolve 'default' network adapter to actual interface and save it
+if ($config['networkAdapter'] === 'default') {
+    $actualNetworkAdapter = detectActiveNetworkInterface();
+    // Save the detected interface to config so it's persistent
+    /** @disregard P1010 */
+    WriteSettingToFile('networkAdapter', $actualNetworkAdapter, WATCHERPLUGINNAME);
+    logMessage("Auto-detected network adapter '$actualNetworkAdapter' from 'default' setting and saved to config");
+} else {
+    $actualNetworkAdapter = $config['networkAdapter'];
+}
+
 // Maximum file size in bytes (10MB default)
 define("WATCHERMETRICSFILEMAXSIZE", 10 * 1024 * 1024);
 
@@ -178,11 +189,11 @@ $lastRollupCheck = 0; // Track when rollup was last processed
 logMessage("=== Watcher Plugin Started ===");
 logMessage("Check Interval: {$config['checkInterval']} seconds");
 logMessage("Max Failures: {$config['maxFailures']}");
-logMessage("Network Adapter: {$config['networkAdapter']}");
+logMessage("Network Adapter: {$config['networkAdapter']}" . ($config['networkAdapter'] === 'default' ? " (detected: $actualNetworkAdapter)" : ""));
 logMessage("Test Hosts: " . implode(', ', $config['testHosts']));
 
 while (true) {
-    if (checkConnectivity($config['testHosts'], $config['networkAdapter'])) {
+    if (checkConnectivity($config['testHosts'], $actualNetworkAdapter)) {
         if ($failureCount > 0) {
             logMessage("Internet connectivity restored");
         }
@@ -206,10 +217,10 @@ while (true) {
     } else {
         $failureCount++;
         logMessage("Connection FAILED (Failure count: $failureCount/{$config['maxFailures']})");
-        
+
         if ($failureCount >= $config['maxFailures'] && !$hasResetAdapter) {
             logMessage("Maximum failures reached. Resetting network adapter...");
-            resetNetworkAdapter($config['networkAdapter']);
+            resetNetworkAdapter($actualNetworkAdapter);
             $hasResetAdapter = true;
             $failureCount = 0;
             sleep(10);
@@ -219,7 +230,7 @@ while (true) {
             exit(1);
         }
     }
-    
+
     sleep($config['checkInterval']);
 }
 ?>
