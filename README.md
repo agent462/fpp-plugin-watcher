@@ -2,6 +2,16 @@
 
 Automatically monitors network connectivity and system health, resetting the network adapter when connection failures are detected. Includes dual real-time dashboards for visualizing network connectivity metrics and comprehensive system performance metrics.
 
+## Supported Platforms
+
+- FPP 9.X+
+- BBB
+- PI 3, 4, 5
+- PB2
+- PB (To be tested)
+
+BBB and PB are both single core and has little memory.  While CPU and memory usage is low with this plugin, if you are doing a lot of other intensive things with FPP be mindful of performance.  The good thing is you should be able to clearly see it in the metrics.
+
 ## Features
 
 - **Network Connectivity Monitoring**: Continuously checks network connectivity at configurable intervals (default: 20 seconds)
@@ -140,8 +150,8 @@ tail -f /home/fpp/media/logs/fpp-plugin-watcher-ping-metrics.log
 
 ### Via Dashboards
 
-View connectivity metrics in real-time through the **Watcher - Metrics** page.
-View system metrics in real-time through the **Watcher - Display** page.
+View connectivity metrics in real-time through the **Watcher - Connectivity** page.
+View system metrics in real-time through the **Watcher - Metrics** page.
 
 ---
 
@@ -163,6 +173,7 @@ View system metrics in real-time through the **Watcher - Display** page.
 2. Verify `connectivityCheckEnabled=true` in config: `cat /opt/fpp/media/config/plugin.fpp-plugin-watcher`
 3. Check for errors in log file
 4. Test ping manually: `ping -I eth0 -c 1 8.8.8.8`
+5. Make sure you have the proper network interface selected.
 
 ### Network Not Resetting
 
@@ -177,7 +188,7 @@ View system metrics in real-time through the **Watcher - Display** page.
 2. Check metrics file has data: `tail /home/fpp/media/logs/fpp-plugin-watcher-ping-metrics.log`
 3. Test API endpoint: `curl http://127.0.0.1/api/plugin/fpp-plugin-watcher/metrics`
 4. Check browser console for JavaScript errors
-5. Verify Chart.js CDN is accessible (requires internet connection)
+5. Verify Chart.js CDN is accessible (requires internet connection to view)
 
 ### Configuration Not Saving
 

@@ -174,26 +174,49 @@
         </div>
 
         <div id="metricsContent" style="display: none;">
-            <!-- Time Range Selector -->
-            <div class="chartControls" style="margin-bottom: 1.5rem;">
-                <div class="controlGroup">
-                    <label for="timeRange">Time Range:</label>
-                    <select id="timeRange" onchange="updateAllCharts()">
-                        <option value="1">Last 1 Hour</option>
-                        <option value="6">Last 6 Hours</option>
-                        <option value="12">Last 12 Hours</option>
-                        <option value="24" selected>Last 24 Hours</option>
-                        <option value="48">Last 2 Days</option>
-                        <option value="72">Last 3 Days</option>
-                        <option value="168">Last 7 Days</option>
-                        <option value="336">Last 2 Weeks</option>
-                        <option value="720">Last 30 Days</option>
-                        <option value="2160">Last 90 Days</option>
-                    </select>
-                </div>
-            </div>
-
             <div id="chartsSection" style="display: none;">
+                <!-- Raw Ping Chart with its own selector -->
+                <div class="chartCard">
+                    <div class="chartTitle">
+                        <span>
+                            <i class="fas fa-signal"></i> Real-time Network Latency
+                            <span class="tierBadge">raw samples</span>
+                        </span>
+                    </div>
+                    <div class="chartControls" style="margin-bottom: 1rem;">
+                        <div class="controlGroup">
+                            <label for="rawTimeRange">Time Range:</label>
+                            <select id="rawTimeRange" onchange="updateRawPingLatencyChart()">
+                                <option value="2">Last 2 Hours</option>
+                                <option value="4">Last 4 Hours</option>
+                                <option value="8">Last 8 Hours</option>
+                                <option value="12">Last 12 Hours</option>
+                                <option value="24" selected>Last 24 Hours</option>
+                            </select>
+                        </div>
+                    </div>
+                    <canvas id="rawPingLatencyChart" style="max-height: 400px;"></canvas>
+                </div>
+
+                <!-- Time Range Selector for Rollup Charts -->
+                <div class="chartControls" style="margin-bottom: 1.5rem;">
+                    <div class="controlGroup">
+                        <label for="timeRange">Rollup Time Range:</label>
+                        <select id="timeRange" onchange="updateAllCharts()">
+                            <option value="1">Last 1 Hour</option>
+                            <option value="6">Last 6 Hours</option>
+                            <option value="12" selected>Last 12 Hours</option>
+                            <option value="24">Last 24 Hours</option>
+                            <option value="48">Last 2 Days</option>
+                            <option value="72">Last 3 Days</option>
+                            <option value="168">Last 7 Days</option>
+                            <option value="336">Last 2 Weeks</option>
+                            <option value="720">Last 30 Days</option>
+                            <option value="2160">Last 90 Days</option>
+                        </select>
+                    </div>
+                </div>
+
                 <!-- Stats Bar -->
                 <div class="statsBar">
                     <div class="statItem">
@@ -216,17 +239,6 @@
                         <div class="statLabel">Data Points</div>
                         <div class="statValue" id="dataPoints">--</div>
                     </div>
-                </div>
-
-                <!-- Real-time Ping Latency Chart (24 Hours) -->
-                <div class="chartCard">
-                    <div class="chartTitle">
-                        <span>
-                            <i class="fas fa-signal"></i> Real-time Network Latency (24 Hours)
-                            <span class="tierBadge">raw samples</span>
-                        </span>
-                    </div>
-                    <canvas id="rawPingLatencyChart" style="max-height: 400px;"></canvas>
                 </div>
 
                 <!-- Average Latency Chart -->
@@ -679,10 +691,11 @@
             }
         }
 
-        // Update raw ping latency chart (24 hours of raw data)
+        // Update raw ping latency chart with selected time range
         async function updateRawPingLatencyChart() {
             try {
-                const response = await fetch('/api/plugin/fpp-plugin-watcher/metrics');
+                const hours = parseInt(document.getElementById('rawTimeRange').value);
+                const response = await fetch(`/api/plugin/fpp-plugin-watcher/metrics/ping/raw?hours=${hours}`);
                 const metricsData = await response.json();
 
                 if (!metricsData.success || !metricsData.data || metricsData.data.length === 0) {
@@ -725,10 +738,18 @@
                     };
                 });
 
+                // Determine appropriate time unit based on hours
+                const timeUnit = hours <= 4 ? 'minute' : 'hour';
+                const displayFormats = hours <= 4 ?
+                    { minute: 'HH:mm', hour: 'MMM d, HH:mm' } :
+                    { hour: 'MMM d, HH:mm' };
+
                 // Update existing chart or create new one
                 if (rawPingLatencyChart) {
-                    // Update existing chart data without destroying
+                    // Update existing chart data and time scale without destroying
                     rawPingLatencyChart.data.datasets = datasets;
+                    rawPingLatencyChart.options.scales.x.time.unit = timeUnit;
+                    rawPingLatencyChart.options.scales.x.time.displayFormats = displayFormats;
                     rawPingLatencyChart.update('none'); // 'none' mode = no animation, instant update
                 } else {
                     // Create new chart on first load
@@ -774,10 +795,8 @@
                                 x: {
                                     type: 'time',
                                     time: {
-                                        unit: 'hour',
-                                        displayFormats: {
-                                            hour: 'MMM d, HH:mm'
-                                        },
+                                        unit: timeUnit,
+                                        displayFormats: displayFormats,
                                         tooltipFormat: 'MMM d, yyyy HH:mm:ss'
                                     },
                                     title: {

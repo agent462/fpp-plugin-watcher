@@ -149,8 +149,8 @@
                     <select id="timeRange" onchange="updateAllCharts()">
                         <option value="1">Last 1 Hour</option>
                         <option value="6">Last 6 Hours</option>
-                        <option value="12">Last 12 Hours</option>
-                        <option value="24" selected>Last 24 Hours</option>
+                        <option value="12" selected>Last 12 Hours</option>
+                        <option value="24">Last 24 Hours</option>
                         <option value="48">Last 2 Days</option>
                         <option value="72">Last 3 Days</option>
                         <option value="168">Last 7 Days</option>

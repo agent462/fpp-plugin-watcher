@@ -17,8 +17,8 @@ function getEndpointsfpppluginwatcher() {
 
     $ep = array(
         'method' => 'GET',
-        'endpoint' => 'metrics',
-        'callback' => 'fpppluginWatcherMetrics');
+        'endpoint' => 'metrics/ping/raw',
+        'callback' => 'fpppluginWatcherPingRaw');
     array_push($result, $ep);
 
     $ep = array(
@@ -110,9 +110,10 @@ function fpppluginwatcherVersion() {
     return json($result);
 }
 
-// GET /api/plugin/fpp-plugin-watcher/metrics
-function fpppluginwatcherMetrics() {
-    $result = getPingMetrics();
+// GET /api/plugin/fpp-plugin-watcher/metrics/ping/raw
+function fpppluginWatcherPingRaw() {
+    $hoursBack = isset($_GET['hours']) ? intval($_GET['hours']) : 24;
+    $result = getPingMetrics($hoursBack);
     /** @disregard P1010 */
     return json($result);
 }

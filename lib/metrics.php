@@ -3,9 +3,12 @@ include_once "/opt/fpp/www/common.php";
 include_once __DIR__ . "/watcherCommon.php";
 
 /**
- * Fetch ping metrics from the last 24 hours
+ * Fetch ping metrics from the last N hours
+ *
+ * @param int $hoursBack Number of hours to fetch (default: 24)
+ * @return array Result with success status and data
  */
-function getPingMetrics() {
+function getPingMetrics($hoursBack = 24) {
     $metricsFile = WATCHERPINGMETRICSFILE;
 
     if (!file_exists($metricsFile)) {
@@ -16,7 +19,7 @@ function getPingMetrics() {
         ];
     }
 
-    $twentyFourHoursAgo = time() - (24 * 60 * 60);
+    $cutoffTime = time() - ($hoursBack * 60 * 60);
     $metrics = [];
 
     // Read the file line by line
@@ -30,8 +33,8 @@ function getPingMetrics() {
                 $entry = json_decode($jsonData, true);
 
                 if ($entry && isset($entry['timestamp'])) {
-                    // Only include entries from last 24 hours
-                    if ($entry['timestamp'] >= $twentyFourHoursAgo) {
+                    // Only include entries from the specified time range
+                    if ($entry['timestamp'] >= $cutoffTime) {
                         $metrics[] = [
                             'timestamp' => $entry['timestamp'],
                             'host' => $entry['host'],
@@ -56,7 +59,7 @@ function getPingMetrics() {
         'success' => true,
         'count' => count($metrics),
         'data' => $metrics,
-        'period' => '24h'
+        'period' => $hoursBack . 'h'
     ];
 }
 
