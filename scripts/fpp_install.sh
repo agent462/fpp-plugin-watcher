@@ -18,6 +18,10 @@ if [ ${#missing_packages[@]} -gt 0 ]; then
     apt-get update
     apt-get -y install --no-install-recommends "${missing_packages[@]}"
 fi
+
+# Disable the default collectd service if it's enabled/running.  
+# If collectd is enabled, it will start when FPP is started.
+echo "Disabling default collectd service. If collectd is enabled, it will start when FPP is started..."
 sudo systemctl disable --now collectd.service
 
 # Copy our custom collectd service file.  We are setting a Nice on the service.
