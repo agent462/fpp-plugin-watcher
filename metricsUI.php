@@ -4,8 +4,12 @@ include_once __DIR__ . '/lib/config.php';
 $config = readPluginConfig();
 $configuredAdapter = isset($config['networkAdapter']) ? $config['networkAdapter'] : 'default';
 
-// If set to 'default', fall back to eth0
-$defaultAdapter = ($configuredAdapter === 'default') ? 'eth0' : $configuredAdapter;
+// If set to 'default', auto-detect the active interface
+if ($configuredAdapter === 'default') {
+    $defaultAdapter = detectActiveNetworkInterface();
+} else {
+    $defaultAdapter = $configuredAdapter;
+}
 ?>
 <!DOCTYPE html>
 <html>
