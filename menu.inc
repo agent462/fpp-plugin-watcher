@@ -20,19 +20,19 @@ $menuEntries = Array(
 	),
 	Array(
 		'text' => 'Watcher - System Info',
-		'type' => 'content',
+		'type' => 'status',
 		'page' => 'displayUI.php',
 		'wrap' => 1
 	),
 	Array(
 		'text' => 'Watcher - Metrics',
-		'type' => 'content',
+		'type' => 'status',
 		'page' => 'metricsUI.php',
 		'wrap' => 1
 	),
 	Array(
 		'text' => 'Watcher - Connectivity',
-		'type' => 'content',
+		'type' => 'status',
 		'page' => 'connectivityUI.php',
 		'wrap' => 1
 	),
@@ -40,12 +40,6 @@ $menuEntries = Array(
 		'text' => 'Watcher - Home',
 		'type' => 'help',
 		'page' => 'https://github.com/agent462/fpp-plugin-watcher',
-		'wrap' => 1
-	),
-	Array(
-		'text' => 'Watcher - About',
-		'type' => 'help',
-		'page' => 'about.php',
 		'wrap' => 1
 	)
 );

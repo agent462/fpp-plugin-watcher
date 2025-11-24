@@ -1,3 +1,9 @@
+<?php
+// Load configuration to get the default network adapter
+include_once __DIR__ . '/lib/config.php';
+$config = readPluginConfig();
+$defaultAdapter = isset($config['networkAdapter']) ? $config['networkAdapter'] : 'eth0';
+?>
 <!DOCTYPE html>
 <html>
 <head>
@@ -221,7 +227,7 @@
                 <div class="chartControls">
                     <div class="controlGroup">
                         <label for="interfaceSelect">Interface:</label>
-                        <select id="interfaceSelect" onchange="updateNetworkChart()">
+                        <select id="interfaceSelect" onchange="saveSelectedInterface(this.value); updateNetworkChart();">
                             <option value="eth0">eth0</option>
                         </select>
                     </div>
@@ -252,6 +258,10 @@
     </div>
 
     <script>
+        // Configuration from PHP
+        const CONFIG_DEFAULT_ADAPTER = '<?php echo $defaultAdapter; ?>';
+        const STORAGE_KEY_INTERFACE = 'watcher_selected_interface';
+
         let memoryChart = null;
         let cpuChart = null;
         let loadChart = null;
@@ -298,6 +308,23 @@
             }
         }
 
+        // Get the preferred interface (from localStorage, then config default, then current selection)
+        function getPreferredInterface() {
+            // Check localStorage first
+            const stored = localStorage.getItem(STORAGE_KEY_INTERFACE);
+            if (stored) {
+                return stored;
+            }
+
+            // Fall back to config default
+            return CONFIG_DEFAULT_ADAPTER;
+        }
+
+        // Save the selected interface to localStorage
+        function saveSelectedInterface(interfaceName) {
+            localStorage.setItem(STORAGE_KEY_INTERFACE, interfaceName);
+        }
+
         // Load available network interfaces
         async function loadInterfaces() {
             try {
@@ -306,14 +333,29 @@
 
                 if (data.success && data.interfaces && data.interfaces.length > 0) {
                     const select = document.getElementById('interfaceSelect');
-                    select.innerHTML = '';
 
+                    // Save current selection before rebuilding
+                    const currentSelection = select.value || getPreferredInterface();
+
+                    // Rebuild dropdown
+                    select.innerHTML = '';
                     data.interfaces.forEach(iface => {
                         const option = document.createElement('option');
                         option.value = iface;
                         option.textContent = iface;
                         select.appendChild(option);
                     });
+
+                    // Restore selection if it exists in the new list
+                    if (currentSelection && data.interfaces.includes(currentSelection)) {
+                        select.value = currentSelection;
+                    } else if (data.interfaces.includes(CONFIG_DEFAULT_ADAPTER)) {
+                        // Fall back to config default if available
+                        select.value = CONFIG_DEFAULT_ADAPTER;
+                    } else {
+                        // Otherwise use the first interface
+                        select.value = data.interfaces[0];
+                    }
                 }
             } catch (error) {
                 console.error('Error loading interfaces:', error);
