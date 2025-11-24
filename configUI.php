@@ -390,7 +390,10 @@ if ($config['networkAdapter'] !== 'default' && !in_array($config['networkAdapter
                         <div class="settingDescription">
                             Enable or disable the collectd service. Collectd collects system metrics including CPU usage, memory usage,
                             disk space, network interface statistics, temperature and system load averages. On average collectd will use about 60MB of
-                            storage to keep historical data for these metrics.  These metrics are displayed in the. "Watcher - Metrics" dashboard. 
+                            storage to keep historical data for these metrics.  On Linux we also run this process at a lower priority.  This ensures FPP
+                            performance is not impacted while still collecting useful system metrics.
+                            <p></p>
+                            These metrics are displayed in the. "Watcher - Metrics" dashboard. 
                             Disabling this service will stop metric collection and reduce system overhead, but historical data will be preserved.
                         </div>
                     </div>
