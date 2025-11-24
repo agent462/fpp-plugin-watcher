@@ -246,6 +246,15 @@ $interfaces = array_filter($interfaces); // Remove empty values
 if ($config['networkAdapter'] !== 'default' && !in_array($config['networkAdapter'], $interfaces)) {
     $interfaces[] = $config['networkAdapter'];
 }
+
+$gatewaySuggestion = detectGatewayForInterface($actualAdapter);
+$gatewayAlreadyConfigured = $gatewaySuggestion && in_array($gatewaySuggestion, $config['testHosts'], true);
+$hostPlaceholder = 'Enter hostname or IP address (e.g., 8.8.8.8';
+if ($gatewaySuggestion) {
+    $hostPlaceholder .= ' or ' . $gatewaySuggestion;
+}
+$hostPlaceholder .= ')';
+$gatewayInputValue = ($gatewaySuggestion && !$gatewayAlreadyConfigured) ? $gatewaySuggestion : '';
 ?>
 
     <div class="watcherSettingsContainer">
@@ -335,11 +344,19 @@ if ($config['networkAdapter'] !== 'default' && !in_array($config['networkAdapter
                     </div>
                     <div class="col-md-8">
                         <div class="hostInputGroup">
-                            <input type="text" id="newHostInput" class="form-control" placeholder="Enter hostname or IP address (e.g., 8.8.8.8)">
+                            <input type="text" id="newHostInput" class="form-control"
+                                placeholder="<?php echo htmlspecialchars($hostPlaceholder); ?>"
+                                value="<?php echo htmlspecialchars($gatewayInputValue); ?>">
                             <button type="button" class="buttons btn-success" onclick="AddTestHost()">
                                 <i class="fas fa-plus"></i> Add
                             </button>
                         </div>
+                        <?php if ($gatewaySuggestion): ?>
+                        <div class="settingDescription" style="margin-top: -0.5rem;">
+                            Detected reachable gateway <?php echo htmlspecialchars($gatewaySuggestion); ?>.
+                            Click "Add" to include it as a test host.
+                        </div>
+                        <?php endif; ?>
 
                         <div class="testHostsList" id="testHostsList">
                             <?php

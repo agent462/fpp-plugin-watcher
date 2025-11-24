@@ -89,4 +89,47 @@ function detectActiveNetworkInterface() {
     logMessage("Network interface detection: No interface with IP found, using fallback 'eth0'");
     return 'eth0';
 }
+
+// Try to find a reachable gateway for a specific interface
+function detectGatewayForInterface($interface) {
+    if (empty($interface)) {
+        return null;
+    }
+
+    $routesOutput = [];
+    $gateway = null;
+
+    // Prefer the gateway bound to the detected interface
+    exec("ip -4 route show default dev " . escapeshellarg($interface) . " 2>/dev/null", $routesOutput);
+
+    // Fall back to any default route if none found for the interface
+    if (empty($routesOutput)) {
+        exec("ip -4 route show default 2>/dev/null", $routesOutput);
+    }
+
+    foreach ($routesOutput as $line) {
+        if (preg_match('/default via ([0-9.]+)/', $line, $matches)) {
+            $gateway = $matches[1];
+            break;
+        }
+    }
+
+    if (!$gateway) {
+        logMessage("Gateway detection: No default route found for interface '$interface'");
+        return null;
+    }
+
+    // Confirm the gateway is reachable before suggesting it
+    $pingOutput = [];
+    $returnVar = 0;
+    exec("ping -I " . escapeshellarg($interface) . " -c 1 -W 1 " . escapeshellarg($gateway) . " 2>&1", $pingOutput, $returnVar);
+
+    if ($returnVar !== 0) {
+        logMessage("Gateway detection: Found gateway '$gateway' for interface '$interface' but ping failed");
+        return null;
+    }
+
+    logMessage("Gateway detection: Found reachable gateway '$gateway' for interface '$interface'");
+    return $gateway;
+}
 ?>
