@@ -7,13 +7,10 @@ function apiCall($method, $uri, $data = [], $returnResponse = false, $timeout = 
     $ch = curl_init($uri);
     curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
     curl_setopt($ch, CURLOPT_TIMEOUT, $timeout);
-    curl_setopt($ch, CURLOPT_HTTPHEADER, [
-        'Content-Type: application/json',
-        'Accept: application/json'
-    ]);
 
     // Handle GET requests
     if (strtoupper($method) === 'GET') {
+        // Don't set Content-Type for GET requests - FPP API doesn't handle it well
         if (!empty($data)) {
             curl_setopt($ch, CURLOPT_URL, $uri);
         }
@@ -21,6 +18,10 @@ function apiCall($method, $uri, $data = [], $returnResponse = false, $timeout = 
     // Handle POST requests
     elseif (strtoupper($method) === 'POST') {
         curl_setopt($ch, CURLOPT_POST, true);
+        // Only set headers for POST requests with data
+        curl_setopt($ch, CURLOPT_HTTPHEADER, [
+            'Content-Type: application/json'
+        ]);
         if (!empty($data)) {
             settype($data, "string");
             curl_setopt($ch, CURLOPT_POSTFIELDS, $data); // Can be array or URL-encoded string
