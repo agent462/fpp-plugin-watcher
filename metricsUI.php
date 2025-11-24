@@ -19,7 +19,7 @@ if ($configuredAdapter === 'default') {
     <title>Watcher - System Metrics</title>
     <link rel="stylesheet" href="/css/fpp-bootstrap/dist-new/fpp-bootstrap-5-3.css">
     <link rel="stylesheet" href="/css/fpp.css">
-    <link rel="stylesheet" href="/plugin.php?plugin=gpp-plugin-watcher&file=css/metricsUI.css&nopage=1">
+    <link rel="stylesheet" href="/plugin.php?plugin=fpp-plugin-watcher&file=css/metricsUI.css&nopage=1">
     <script>
         window.config = window.config || {};
         window.config.defaultAdapter = <?php echo json_encode($defaultAdapter); ?>;
