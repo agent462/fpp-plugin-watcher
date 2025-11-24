@@ -1,7 +1,5 @@
 #!/bin/bash
 
-set -euo pipefail
-
 if [ "${EUID}" -ne 0 ]; then
     echo "This install script must be run as root."
     exit 1
@@ -48,6 +46,8 @@ if [ -f "${PLUGIN_DIR}/config/collectd.conf" ]; then
 else
     echo "WARNING: Custom collectd.conf not found at ${PLUGIN_DIR}/config/collectd.conf"
 fi
+
+echo ${FPPDIR}
 
 # Include common scripts functions and variables
 . ${FPPDIR}/scripts/common
