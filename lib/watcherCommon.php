@@ -71,7 +71,7 @@ function detectActiveNetworkInterface() {
     $interfaces = fetchWatcherNetworkInterfaces();
 
     // If API call failed or no interfaces returned
-    if (empty($interfaces)) {
+    if (empty($interfaces) || !is_array($interfaces)) {
         logMessage("Network interface detection: API call failed, using fallback 'eth0'");
         return 'eth0';
     }
@@ -79,7 +79,7 @@ function detectActiveNetworkInterface() {
     $bestInterface = null;
     $bestScore = -1;
 
-    // Choose the interface with a global IPv4, preferring an interface that is UP and has carrier
+    // Choose the interface with a usable IPv4 (from addr_info or config), preferring one that is UP and has carrier
     foreach ($interfaces as $interface) {
         $ifname = $interface['ifname'] ?? null;
         if (!$ifname) {
@@ -91,20 +91,31 @@ function detectActiveNetworkInterface() {
             $addrInfo = [];
         }
 
-        $hasIpv4 = false;
+        $ipv4Candidates = [];
         foreach ($addrInfo as $addr) {
             if (($addr['family'] ?? '') === 'inet' && !empty($addr['local'])) {
                 // Require IPv4; optionally ensure it's global (default scope when omitted)
                 $scope = $addr['scope'] ?? 'global';
-                if ($scope === 'global') {
-                    $hasIpv4 = true;
-                    break;
+                $ip = $addr['local'];
+
+                // Skip link-local IPv4 addresses (169.254.x.x)
+                if (strpos($ip, '169.254.') === 0) {
+                    continue;
                 }
+                $ipv4Candidates[] = ['ip' => $ip, 'scope' => $scope];
             }
         }
 
-        if (!$hasIpv4) {
-            continue; // Skip interfaces without a global IPv4 address
+        // Fall back to configured ADDRESS if addr_info is empty (some FPP builds populate config only)
+        if (empty($ipv4Candidates) && isset($interface['config']['ADDRESS']) && !empty($interface['config']['ADDRESS'])) {
+            $ip = $interface['config']['ADDRESS'];
+            if (filter_var($ip, FILTER_VALIDATE_IP, FILTER_FLAG_IPV4) && strpos($ip, '169.254.') !== 0) {
+                $ipv4Candidates[] = ['ip' => $ip, 'scope' => 'config'];
+            }
+        }
+
+        if (empty($ipv4Candidates)) {
+            continue; // Skip interfaces without a usable IPv4 address
         }
 
         $operState = strtoupper($interface['operstate'] ?? '');
@@ -112,12 +123,27 @@ function detectActiveNetworkInterface() {
         $isUp = ($operState === 'UP') || in_array('LOWER_UP', $flags ?? [], true) || in_array('RUNNING', $flags ?? [], true);
         $hasCarrier = !in_array('NO-CARRIER', $flags ?? [], true);
 
-        // Score: IPv4 (2), UP (2), has carrier (1)
-        $score = 2 + ($isUp ? 2 : 0) + ($hasCarrier ? 1 : 0);
+        // Score: usable IPv4 (3), global scope bonus (1), UP (2), has carrier (1)
+        $score = 3 + ($isUp ? 2 : 0) + ($hasCarrier ? 1 : 0);
+
+        // If any address is truly global, add a bonus to prefer it over config-only entries
+        foreach ($ipv4Candidates as $candidate) {
+            if ($candidate['scope'] === 'global') {
+                $score += 1;
+                break;
+            }
+        }
+
         if ($score > $bestScore) {
             $bestScore = $score;
             $bestInterface = $ifname;
         }
+
+        $candidateIps = array_map(function($c) {
+            return $c['ip'] . ($c['scope'] !== 'global' ? " ({$c['scope']})" : '');
+        }, $ipv4Candidates);
+        $stateSummary = "state={$operState}, flags=" . implode(',', $flags ?? []);
+        logMessage("Network interface detection: Candidate '$ifname' with IP(s): " . implode(', ', $candidateIps) . " | $stateSummary | score=$score");
     }
 
     if ($bestInterface) {
