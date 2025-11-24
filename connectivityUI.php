@@ -37,8 +37,8 @@
                             <option value="2">Last 2 Hours</option>
                             <option value="4">Last 4 Hours</option>
                             <option value="8">Last 8 Hours</option>
-                            <option value="12" selected>Last 12 Hours</option>
-                            <option value="24">Last 24 Hours</option>
+                            <option value="12">Last 12 Hours</option>
+                            <option value="24" selected>Last 24 Hours</option>
                         </select>
                     </div>
                 </div>
