@@ -2,7 +2,10 @@
 // Load configuration to get the default network adapter
 include_once __DIR__ . '/lib/config.php';
 $config = readPluginConfig();
-$defaultAdapter = isset($config['networkAdapter']) ? $config['networkAdapter'] : 'eth0';
+$configuredAdapter = isset($config['networkAdapter']) ? $config['networkAdapter'] : 'default';
+
+// If set to 'default', fall back to eth0
+$defaultAdapter = ($configuredAdapter === 'default') ? 'eth0' : $configuredAdapter;
 ?>
 <!DOCTYPE html>
 <html>
@@ -308,21 +311,14 @@ $defaultAdapter = isset($config['networkAdapter']) ? $config['networkAdapter'] :
             }
         }
 
-        // Get the preferred interface (from localStorage, then config default, then current selection)
+        // Get the preferred interface - always use config default on initial load
         function getPreferredInterface() {
-            // Check localStorage first
-            const stored = localStorage.getItem(STORAGE_KEY_INTERFACE);
-            if (stored) {
-                return stored;
-            }
-
-            // Fall back to config default
             return CONFIG_DEFAULT_ADAPTER;
         }
 
-        // Save the selected interface to localStorage
+        // Save the selected interface to localStorage (for session continuity only)
         function saveSelectedInterface(interfaceName) {
-            localStorage.setItem(STORAGE_KEY_INTERFACE, interfaceName);
+            // Not saving to localStorage anymore - just triggers chart update
         }
 
         // Load available network interfaces
@@ -334,8 +330,11 @@ $defaultAdapter = isset($config['networkAdapter']) ? $config['networkAdapter'] :
                 if (data.success && data.interfaces && data.interfaces.length > 0) {
                     const select = document.getElementById('interfaceSelect');
 
-                    // Save current selection before rebuilding
-                    const currentSelection = select.value || getPreferredInterface();
+                    // Check if this is initial load (only has the hardcoded eth0 option)
+                    const isInitialLoad = (select.options.length === 1);
+
+                    // Get current selection: use preferred interface on initial load, otherwise preserve selection
+                    const currentSelection = isInitialLoad ? getPreferredInterface() : select.value;
 
                     // Rebuild dropdown
                     select.innerHTML = '';
