@@ -16,7 +16,7 @@
             <i class="fas fa-chart-line"></i> Watcher System Information
         </h2>
 
-        <div id="loadingIndicator" class="loadingSpinner">
+        <div id="loadingIndicator" class="systemLoadingSpinner">
             <i class="fas fa-spinner"></i>
             <p>Loading system information...</p>
         </div>
@@ -24,12 +24,12 @@
         <div id="systemStats" style="display: none;">
             <!-- Stats Grid -->
             <div class="statsGrid">
-                <div class="statCard success">
+                <div class="statCard statCardSuccess">
                     <div class="statIcon">
                         <i class="fas fa-clock"></i>
                     </div>
-                    <div class="statLabel">System Uptime</div>
-                    <div class="statValue" id="uptimeValue">--</div>
+                    <div class="systemStatLabel">System Uptime</div>
+                    <div class="systemStatValue" id="uptimeValue">--</div>
                     <div class="statSubtext" id="uptimeSubtext">Loading...</div>
                 </div>
 
@@ -37,8 +37,8 @@
                     <div class="statIcon">
                         <i class="fas fa-microchip"></i>
                     </div>
-                    <div class="statLabel">CPU Usage</div>
-                    <div class="statValue" id="cpuValue">--%</div>
+                    <div class="systemStatLabel">CPU Usage</div>
+                    <div class="systemStatValue" id="cpuValue">--%</div>
                     <div class="statSubtext" id="cpuSubtext">Loading...</div>
                 </div>
 
@@ -46,15 +46,15 @@
                     <div class="statIcon">
                         <i class="fas fa-memory"></i>
                     </div>
-                    <div class="statLabel">Memory Usage</div>
-                    <div class="statValue" id="memoryValue">--%</div>
+                    <div class="systemStatLabel">Memory Usage</div>
+                    <div class="systemStatValue" id="memoryValue">--%</div>
                     <div class="statSubtext" id="memorySubtext">Loading...</div>
                 </div>
             </div>
 
             <!-- Temperature Sensors -->
             <div class="chartContainer" id="temperaturePanel" style="display: none;">
-                <div class="panelTitle">
+                <div class="systemPanelTitle">
                     <i class="fas fa-thermometer-half"></i> Temperature Sensors
                 </div>
                 <div id="temperatureGraph">
@@ -64,7 +64,7 @@
 
             <!-- Storage Information -->
             <div class="chartContainer">
-                <div class="panelTitle">
+                <div class="systemPanelTitle">
                     <i class="fas fa-hdd"></i> Storage Usage
                 </div>
                 <div id="storageInfo">
@@ -74,7 +74,7 @@
 
             <!-- System Details Panel -->
             <div class="detailsPanel">
-                <div class="panelTitle">
+                <div class="systemPanelTitle">
                     <i class="fas fa-server"></i> System Information
                 </div>
                 <div id="systemDetails">
@@ -84,7 +84,7 @@
 
             <!-- Advanced View Data Panel -->
             <div class="detailsPanel">
-                <div class="panelTitle">
+                <div class="systemPanelTitle">
                     <i class="fas fa-chart-bar"></i> Advanced System Information
                 </div>
                 <div id="advancedMetrics">
@@ -93,7 +93,7 @@
             </div>
         </div>
 
-        <button class="refreshButton" onclick="loadSystemData()" title="Refresh Data">
+        <button class="systemRefreshButton" onclick="loadSystemData()" title="Refresh Data">
             <i class="fas fa-sync-alt"></i>
         </button>
     </div>
@@ -109,7 +109,7 @@
 
             try {
                 // Add spinning animation to refresh button
-                const refreshBtn = document.querySelector('.refreshButton i');
+                const refreshBtn = document.querySelector('.systemRefreshButton i');
                 if (refreshBtn) {
                     refreshBtn.style.animation = 'spin 1s linear infinite';
                 }
