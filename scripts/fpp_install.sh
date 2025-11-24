@@ -47,8 +47,6 @@ else
     echo "WARNING: Custom collectd.conf not found at ${PLUGIN_DIR}/config/collectd.conf"
 fi
 
-echo ${FPPDIR}
-
 # Include common scripts functions and variables
 . ${FPPDIR}/scripts/common
 
