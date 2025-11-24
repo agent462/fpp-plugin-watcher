@@ -159,65 +159,43 @@
             <i class="fas fa-network-wired"></i> Connectivity Metrics
         </h2>
 
-        <div class="infoBox">
-            <strong>About Rollup Data:</strong>  Data is automatically aggregated at different resolutions based on the selected time range
-            for optimal performance and storage efficiency.
-        </div>
-
         <div id="loadingIndicator" class="loadingSpinner">
             <i class="fas fa-spinner"></i>
             <p>Loading connectivity metrics data...</p>
         </div>
 
-        <div id="noDataMessage" class="infoBox" style="display: none;">
-            <strong>No Data:</strong>  No rollup data is available for the selected time range yet. Try a shorter range or check back after more samples are collected.
-        </div>
-
         <div id="metricsContent" style="display: none;">
-            <!-- Time Range Selector for Rollup Charts - Always visible when metricsContent is shown -->
-            <div class="chartControls" style="margin-bottom: 1.5rem;">
-                <div class="controlGroup">
-                    <label for="timeRange">Rollup Time Range:</label>
-                    <select id="timeRange" onchange="updateAllCharts()">
-                        <option value="1">Last 1 Hour</option>
-                        <option value="6">Last 6 Hours</option>
-                        <option value="12" selected>Last 12 Hours</option>
-                        <option value="24">Last 24 Hours</option>
-                        <option value="48">Last 2 Days</option>
-                        <option value="72">Last 3 Days</option>
-                        <option value="168">Last 7 Days</option>
-                        <option value="336">Last 2 Weeks</option>
-                        <option value="720">Last 30 Days</option>
-                        <option value="2160">Last 90 Days</option>
-                    </select>
+            <!-- Raw Ping Chart - Always visible (has its own data source) -->
+            <div class="chartCard">
+                <div class="chartTitle">
+                    <span>
+                        <i class="fas fa-signal"></i> Real-time Network Latency
+                        <span class="tierBadge">raw samples</span>
+                    </span>
                 </div>
+                <div class="chartControls" style="margin-bottom: 1rem;">
+                    <div class="controlGroup">
+                        <label for="rawTimeRange">Time Range:</label>
+                        <select id="rawTimeRange" onchange="updateRawPingLatencyChart()">
+                            <option value="2">Last 2 Hours</option>
+                            <option value="4">Last 4 Hours</option>
+                            <option value="8">Last 8 Hours</option>
+                            <option value="12">Last 12 Hours</option>
+                            <option value="24" selected>Last 24 Hours</option>
+                        </select>
+                    </div>
+                </div>
+                <canvas id="rawPingLatencyChart" style="max-height: 400px;"></canvas>
             </div>
 
-            <div id="chartsSection" style="display: none;">
-                <!-- Raw Ping Chart with its own selector -->
-                <div class="chartCard">
-                    <div class="chartTitle">
-                        <span>
-                            <i class="fas fa-signal"></i> Real-time Network Latency
-                            <span class="tierBadge">raw samples</span>
-                        </span>
-                    </div>
-                    <div class="chartControls" style="margin-bottom: 1rem;">
-                        <div class="controlGroup">
-                            <label for="rawTimeRange">Time Range:</label>
-                            <select id="rawTimeRange" onchange="updateRawPingLatencyChart()">
-                                <option value="2">Last 2 Hours</option>
-                                <option value="4">Last 4 Hours</option>
-                                <option value="8">Last 8 Hours</option>
-                                <option value="12">Last 12 Hours</option>
-                                <option value="24" selected>Last 24 Hours</option>
-                            </select>
-                        </div>
-                    </div>
-                    <canvas id="rawPingLatencyChart" style="max-height: 400px;"></canvas>
-                </div>
-
-                <!-- Stats Bar -->
+            <div id="noDataMessage" class="infoBox" style="display: none;">
+                <strong>No Data:</strong>  No rollup data is available for the selected time range yet. Try a shorter range or check back after more samples are collected.
+            </div>
+        <h2 style="margin-bottom: 1.5rem; color: #212529;">
+            <i class="fas fa-network-wired"></i> Rollup Connectivity Metrics
+        </h2>
+            <!-- Stats Bar - Only visible when rollup data exists -->
+            <div id="statsBarSection" style="display: none;">
                 <div class="statsBar">
                     <div class="statItem">
                         <div class="statLabel">Current Latency</div>
@@ -240,7 +218,29 @@
                         <div class="statValue" id="dataPoints">--</div>
                     </div>
                 </div>
+            </div>
 
+            <!-- Time Range Selector - Always visible so users can try different time periods -->
+            <div class="chartControls" style="margin-bottom: 1.5rem;">
+                <div class="controlGroup">
+                    <label for="timeRange">Rollup Time Range:</label>
+                    <select id="timeRange" onchange="updateAllCharts()">
+                        <option value="1">Last 1 Hour</option>
+                        <option value="6">Last 6 Hours</option>
+                        <option value="12" selected>Last 12 Hours</option>
+                        <option value="24">Last 24 Hours</option>
+                        <option value="48">Last 2 Days</option>
+                        <option value="72">Last 3 Days</option>
+                        <option value="168">Last 7 Days</option>
+                        <option value="336">Last 2 Weeks</option>
+                        <option value="720">Last 30 Days</option>
+                        <option value="2160">Last 90 Days</option>
+                    </select>
+                </div>
+            </div>
+
+            <!-- Rollup Charts - Only visible when rollup data exists -->
+            <div id="rollupChartsSection" style="display: none;">
                 <!-- Average Latency Chart -->
                 <div class="chartCard">
                     <div class="chartTitle">
@@ -345,18 +345,20 @@
                 const data = await response.json();
 
                 const noDataEl = document.getElementById('noDataMessage');
-                const metricsContent = document.getElementById('metricsContent');
-                const chartsSection = document.getElementById('chartsSection');
+                const statsBarSection = document.getElementById('statsBarSection');
+                const rollupChartsSection = document.getElementById('rollupChartsSection');
 
                 if (!data.success || !data.data || data.data.length === 0) {
                     console.warn('No connectivity rollup data available');
-                    if (chartsSection) chartsSection.style.display = 'none';
+                    if (statsBarSection) statsBarSection.style.display = 'none';
+                    if (rollupChartsSection) rollupChartsSection.style.display = 'none';
                     if (noDataEl) noDataEl.style.display = 'block';
                     return false;
                 }
 
                 if (noDataEl) noDataEl.style.display = 'none';
-                if (chartsSection) chartsSection.style.display = 'block';
+                if (statsBarSection) statsBarSection.style.display = 'block';
+                if (rollupChartsSection) rollupChartsSection.style.display = 'block';
 
                 // Update tier badges
                 if (data.tier_info) {
@@ -391,8 +393,10 @@
             } catch (error) {
                 console.error('Error updating charts:', error);
                 const noDataEl = document.getElementById('noDataMessage');
-                const chartsSection = document.getElementById('chartsSection');
-                if (chartsSection) chartsSection.style.display = 'none';
+                const statsBarSection = document.getElementById('statsBarSection');
+                const rollupChartsSection = document.getElementById('rollupChartsSection');
+                if (statsBarSection) statsBarSection.style.display = 'none';
+                if (rollupChartsSection) rollupChartsSection.style.display = 'none';
                 if (noDataEl) noDataEl.style.display = 'block';
                 return false;
             }
