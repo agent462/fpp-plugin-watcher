@@ -19,133 +19,13 @@ if ($configuredAdapter === 'default') {
     <title>Watcher - System Metrics</title>
     <link rel="stylesheet" href="/css/fpp-bootstrap/dist-new/fpp-bootstrap-5-3.css">
     <link rel="stylesheet" href="/css/fpp.css">
+    <link rel="stylesheet" href="/plugin.php?plugin=gpp-plugin-watcher&file=css/metricsUI.css&nopage=1">
     <script>
         window.config = window.config || {};
         window.config.defaultAdapter = <?php echo json_encode($defaultAdapter); ?>;
     </script>
     <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/chartjs-adapter-date-fns@3.0.0/dist/chartjs-adapter-date-fns.bundle.min.js"></script>
-    <style>
-        .metricsContainer {
-            max-width: 1400px;
-            margin: 0 auto;
-            padding: 1rem;
-        }
-
-        .chartCard {
-            background-color: #fff;
-            border: 1px solid #dee2e6;
-            border-radius: 0.5rem;
-            padding: 1.5rem;
-            margin-bottom: 1.5rem;
-            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
-        }
-
-        .chartTitle {
-            font-size: 1.25rem;
-            font-weight: 600;
-            margin-bottom: 1rem;
-            color: #212529;
-            border-bottom: 2px solid #007bff;
-            padding-bottom: 0.5rem;
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-        }
-
-        .chartControls {
-            display: flex;
-            gap: 1rem;
-            margin-bottom: 1rem;
-            flex-wrap: wrap;
-        }
-
-        .controlGroup {
-            display: flex;
-            align-items: center;
-            gap: 0.5rem;
-        }
-
-        .controlGroup label {
-            margin: 0;
-            font-weight: 500;
-            color: #6c757d;
-        }
-
-        .controlGroup select {
-            padding: 0.25rem 0.5rem;
-            border: 1px solid #ced4da;
-            border-radius: 0.25rem;
-            font-size: 0.875rem;
-        }
-
-        .loadingSpinner {
-            text-align: center;
-            padding: 3rem;
-            color: #6c757d;
-        }
-
-        .loadingSpinner i {
-            font-size: 3rem;
-            animation: spin 1s linear infinite;
-        }
-
-        @keyframes spin {
-            0% { transform: rotate(0deg); }
-            100% { transform: rotate(360deg); }
-        }
-
-        .refreshButton {
-            position: fixed;
-            bottom: 2rem;
-            right: 2rem;
-            width: 60px;
-            height: 60px;
-            border-radius: 50%;
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-            color: white;
-            border: none;
-            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
-            cursor: pointer;
-            transition: transform 0.2s, box-shadow 0.2s;
-            z-index: 1000;
-        }
-
-        .refreshButton:hover {
-            transform: scale(1.1);
-            box-shadow: 0 6px 16px rgba(0, 0, 0, 0.2);
-        }
-
-        .refreshButton i {
-            font-size: 1.5rem;
-        }
-
-        .statsBar {
-            display: flex;
-            gap: 1rem;
-            padding: 1rem;
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-            border-radius: 0.5rem;
-            margin-bottom: 1.5rem;
-            color: white;
-        }
-
-        .statItem {
-            flex: 1;
-            text-align: center;
-        }
-
-        .statLabel {
-            font-size: 0.875rem;
-            opacity: 0.9;
-            margin-bottom: 0.25rem;
-        }
-
-        .statValue {
-            font-size: 1.5rem;
-            font-weight: bold;
-        }
-    </style>
 </head>
 <body>
     <div class="metricsContainer">
@@ -238,7 +118,7 @@ if ($configuredAdapter === 'default') {
                 <div class="chartControls">
                     <div class="controlGroup">
                         <label for="interfaceSelect">Interface:</label>
-                        <select id="interfaceSelect" onchange="saveSelectedInterface(this.value); refreshMetric('network');">
+                        <select id="interfaceSelect" onchange="refreshMetric('network');">
                             <option value="eth0">eth0</option>
                         </select>
                     </div>
@@ -285,40 +165,30 @@ if ($configuredAdapter === 'default') {
             return (window.config && window.config.defaultAdapter) ? window.config.defaultAdapter : 'default';
         }
 
-        function getPreferredInterface() {
-            return getDefaultAdapter();
-        }
-
         function getSelectedInterface() {
             const select = document.getElementById('interfaceSelect');
-            return select && select.value ? select.value : getPreferredInterface();
+            return select && select.value ? select.value : getDefaultAdapter();
         }
 
-        // Save the selected interface to localStorage (for session continuity only)
-        function saveSelectedInterface(interfaceName) {
-            // Not saving to localStorage anymore - just triggers chart update
-        }
+        // Get time config (unit + formats) for chart time axes
+        function getTimeConfig(hours) {
+            let unit = 'week';
+            if (hours <= 1) unit = 'minute';
+            else if (hours <= 24) unit = 'hour';
+            else if (hours <= 168) unit = 'day';
 
-        // Get appropriate time unit based on hours
-        function getTimeUnit(hours) {
-            if (hours <= 1) return 'minute';
-            if (hours <= 24) return 'hour';
-            if (hours <= 168) return 'day';  // Up to 7 days
-            return 'week';  // More than 7 days
-        }
-
-        // Get time display formats
-        function getTimeFormats(hours) {
-            const unit = getTimeUnit(hours);
-            return {
+            const formats = {
                 minute: 'HH:mm',
                 hour: 'MMM d, HH:mm',
                 day: 'MMM d',
                 week: 'MMM d, yyyy'
             };
+
+            return { unit, formats };
         }
 
         function buildChartOptions(hours, chartOptions = {}) {
+            const timeConfig = getTimeConfig(hours);
             const {
                 yLabel = 'Value',
                 beginAtZero = false,
@@ -354,8 +224,8 @@ if ($configuredAdapter === 'default') {
                     x: {
                         type: 'time',
                         time: {
-                            unit: getTimeUnit(hours),
-                            displayFormats: getTimeFormats(hours),
+                            unit: timeConfig.unit,
+                            displayFormats: timeConfig.formats,
                             tooltipFormat: 'MMM d, yyyy HH:mm:ss'
                         },
                         title: {
@@ -835,7 +705,7 @@ if ($configuredAdapter === 'default') {
                 if (data.success && data.interfaces && data.interfaces.length > 0) {
                     const select = document.getElementById('interfaceSelect');
                     const isInitialLoad = (select.options.length === 1);
-                    const currentSelection = isInitialLoad ? getPreferredInterface() : select.value;
+                    const currentSelection = isInitialLoad ? getDefaultAdapter() : select.value;
 
                     select.innerHTML = '';
                     data.interfaces.forEach(iface => {
