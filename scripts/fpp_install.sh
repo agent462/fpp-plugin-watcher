@@ -1,8 +1,18 @@
 #!/bin/bash
 
 # fpp-plugin-watcher install script
-apt-get update
-apt-get -y install collectd-core rrdtool
+packages=(collectd-core rrdtool)
+missing_packages=()
+for pkg in "${packages[@]}"; do
+    if ! dpkg -s "$pkg" >/dev/null 2>&1; then
+        missing_packages+=("$pkg")
+    fi
+done
+
+if [ ${#missing_packages[@]} -gt 0 ]; then
+    apt-get update
+    apt-get -y install "${missing_packages[@]}"
+fi
 sudo systemctl disable --now collectd.service
 
 # Copy our custom collectd service file.  We are setting a Nice on the service.
