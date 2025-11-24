@@ -1,4 +1,3 @@
-#!/usr/bin/php
 <?php
 // Function to make calls to the FPP API
 function apiCall($method, $uri, $data = [], $returnResponse = false, $timeout = 15) {

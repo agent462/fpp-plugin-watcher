@@ -233,8 +233,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['save_settings'])) {
 // Load current settings
 $config = readPluginConfig();
 
-// Detect actual adapter when config is 'default'
-$actualAdapter = ($config['networkAdapter'] === 'default') ? detectActiveNetworkInterface() : $config['networkAdapter'];
+// Always detect what auto-detect would choose (for display in the dropdown)
+// This shows users what would be detected even if they have a specific interface selected
+$actualAdapter = detectActiveNetworkInterface();
 
 // Get network interfaces from system
 $interfaces = [];
