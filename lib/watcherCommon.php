@@ -72,14 +72,21 @@ function detectActiveNetworkInterface() {
 
     // If API call failed or no interfaces returned
     if (empty($interfaces) || !is_array($interfaces)) {
-        logMessage("Network interface detection: API call failed, using fallback 'eth0'");
+        logMessage("Network interface detection: API call failed or returned invalid data, using fallback");
         return 'eth0';
+    }
+
+    // Some FPP builds wrap interfaces under 'data' or 'interfaces'
+    if (isset($interfaces['interfaces']) && is_array($interfaces['interfaces'])) {
+        $interfaces = $interfaces['interfaces'];
+    } elseif (isset($interfaces['data']) && is_array($interfaces['data'])) {
+        $interfaces = $interfaces['data'];
     }
 
     $bestInterface = null;
     $bestScore = -1;
 
-    // Choose the interface with a usable IPv4 (from addr_info or config), preferring one that is UP and has carrier
+    // Choose the interface with a usable IPv4 from addr_info, preferring one that is UP and has carrier
     foreach ($interfaces as $interface) {
         $ifname = $interface['ifname'] ?? null;
         if (!$ifname) {
@@ -106,20 +113,16 @@ function detectActiveNetworkInterface() {
             }
         }
 
-        // Fall back to configured ADDRESS if addr_info is empty (some FPP builds populate config only)
-        if (empty($ipv4Candidates) && isset($interface['config']['ADDRESS']) && !empty($interface['config']['ADDRESS'])) {
-            $ip = $interface['config']['ADDRESS'];
-            if (filter_var($ip, FILTER_VALIDATE_IP, FILTER_FLAG_IPV4) && strpos($ip, '169.254.') !== 0) {
-                $ipv4Candidates[] = ['ip' => $ip, 'scope' => 'config'];
-            }
-        }
-
         if (empty($ipv4Candidates)) {
+            logMessage("Network interface detection: Skipping '$ifname' (no usable IPv4 in addr_info)");
             continue; // Skip interfaces without a usable IPv4 address
         }
 
         $operState = strtoupper($interface['operstate'] ?? '');
         $flags = $interface['flags'] ?? [];
+        if (!is_array($flags)) {
+            $flags = [];
+        }
         $isUp = ($operState === 'UP') || in_array('LOWER_UP', $flags ?? [], true) || in_array('RUNNING', $flags ?? [], true);
         $hasCarrier = !in_array('NO-CARRIER', $flags ?? [], true);
 
