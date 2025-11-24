@@ -76,17 +76,57 @@ function detectActiveNetworkInterface() {
         return 'eth0';
     }
 
-    // Look for first interface with an active IP address
+    $bestInterface = null;
+    $bestScore = -1;
+
+    // Choose the interface with a global IPv4, preferring an interface that is UP and has carrier
     foreach ($interfaces as $interface) {
-        if (isset($interface['addr_info']) && is_array($interface['addr_info']) && !empty($interface['addr_info'])) {
-            $ifname = $interface['ifname'];
-            logMessage("Network interface detection: Found active interface '$ifname' with IP address");
-            return $ifname;
+        $ifname = $interface['ifname'] ?? null;
+        if (!$ifname) {
+            continue;
+        }
+
+        $addrInfo = $interface['addr_info'] ?? [];
+        if (!is_array($addrInfo)) {
+            $addrInfo = [];
+        }
+
+        $hasIpv4 = false;
+        foreach ($addrInfo as $addr) {
+            if (($addr['family'] ?? '') === 'inet' && !empty($addr['local'])) {
+                // Require IPv4; optionally ensure it's global (default scope when omitted)
+                $scope = $addr['scope'] ?? 'global';
+                if ($scope === 'global') {
+                    $hasIpv4 = true;
+                    break;
+                }
+            }
+        }
+
+        if (!$hasIpv4) {
+            continue; // Skip interfaces without a global IPv4 address
+        }
+
+        $operState = strtoupper($interface['operstate'] ?? '');
+        $flags = $interface['flags'] ?? [];
+        $isUp = ($operState === 'UP') || in_array('LOWER_UP', $flags ?? [], true) || in_array('RUNNING', $flags ?? [], true);
+        $hasCarrier = !in_array('NO-CARRIER', $flags ?? [], true);
+
+        // Score: IPv4 (2), UP (2), has carrier (1)
+        $score = 2 + ($isUp ? 2 : 0) + ($hasCarrier ? 1 : 0);
+        if ($score > $bestScore) {
+            $bestScore = $score;
+            $bestInterface = $ifname;
         }
     }
 
-    // No interface found with IP, fallback to eth0
-    logMessage("Network interface detection: No interface with IP found, using fallback 'eth0'");
+    if ($bestInterface) {
+        logMessage("Network interface detection: Selected interface '$bestInterface' (score $bestScore)");
+        return $bestInterface;
+    }
+
+    // No interface found with IPv4, fallback to eth0
+    logMessage("Network interface detection: No interface with IPv4 found, using fallback 'eth0'");
     return 'eth0';
 }
 
