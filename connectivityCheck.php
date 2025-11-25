@@ -159,18 +159,6 @@ function checkConnectivity($testHosts, $networkAdapter) {
     return $anySuccess;
 }
 
-// Function to format and log ping statistics
-function formatPingStats($stats) {
-    $message = "Host: {$stats['host']}";
-    
-    if ($stats['latency'] !== null) {
-        $message .= ", Latency: {$stats['latency']}ms";
-    }
-
-    return $message;
-}
-
-
 if (!$config['connectivityCheckEnabled']) {
     logMessage("Watcher Plugin connectivity check is disabled. Exiting.");    exit(0);
 }
