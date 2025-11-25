@@ -80,33 +80,34 @@ function rotateMetricsFile() {
         }
     }
 
-    // Backup old file
+    // Write recent metrics to new file, rename old file to backup atomically
     $backupFile = $metricsFile . '.old';
-    if (file_exists($backupFile)) {
-        unlink($backupFile);
-    }
-    // Copy contents while locked, then truncate
-    rewind($fp);
-    $existingContent = stream_get_contents($fp);
-    file_put_contents($backupFile, $existingContent);
+    $tempFile = $metricsFile . '.tmp';
 
-    // Write recent metrics back to the file
-    ftruncate($fp, 0);
-    rewind($fp);
+    // Write recent entries to temp file
+    $tempFp = fopen($tempFile, 'w');
+    if ($tempFp) {
+        if (!empty($recentMetrics)) {
+            fwrite($tempFp, implode('', $recentMetrics));
+        }
+        fclose($tempFp);
 
-    if (!empty($recentMetrics)) {
-        fwrite($fp, implode('', $recentMetrics));
-        fflush($fp);
-        logMessage("Metrics file rotated. Kept " . count($recentMetrics) . " recent entries.");
+        // Atomic swap: old -> backup, temp -> current
+        @unlink($backupFile);
+        rename($metricsFile, $backupFile);
+        rename($tempFile, $metricsFile);
+
+        $keptCount = count($recentMetrics);
+        logMessage("Metrics file rotated. Kept {$keptCount} recent entries.");
+
+        ensureFppOwnership($metricsFile);
+        ensureFppOwnership($backupFile);
     } else {
-        logMessage("Metrics file rotated. No recent entries to keep.");
+        logMessage("ERROR: Unable to create temp file for rotation");
     }
 
     flock($fp, LOCK_UN);
     fclose($fp);
-
-    ensureFppOwnership($metricsFile);
-    ensureFppOwnership($backupFile);
 }
 
 // Function to check internet connectivity and capture ping statistics

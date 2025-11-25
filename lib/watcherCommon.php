@@ -33,10 +33,16 @@ function ensureFppOwnership($path) {
     @chgrp($path, WATCHERFPPGROUP);
 }
 
+// Track files whose ownership has been verified this session
+$_watcherOwnershipVerified = [];
+
 // Function to log messages
 function logMessage($message, $file = WATCHERLOGFILE) {
+    global $_watcherOwnershipVerified;
+
     $timestamp = date('Y-m-d H:i:s');
     $logEntry = "[$timestamp] $message\n";
+    $fileExisted = file_exists($file);
 
     // Serialize writes to avoid interleaving across processes
     $fp = @fopen($file, 'a');
@@ -49,7 +55,11 @@ function logMessage($message, $file = WATCHERLOGFILE) {
         fclose($fp);
     }
 
-    ensureFppOwnership($file);
+    // Only set ownership once per file per session (when file is new or not yet verified)
+    if (!$fileExisted || !isset($_watcherOwnershipVerified[$file])) {
+        ensureFppOwnership($file);
+        $_watcherOwnershipVerified[$file] = true;
+    }
 }
 
 // Function to fetch network interfaces from FPP API
