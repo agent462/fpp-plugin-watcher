@@ -19,16 +19,14 @@ if ($config['networkAdapter'] === 'default') {
     $actualNetworkAdapter = $config['networkAdapter'];
 }
 
-// Maximum file size in bytes (10MB default)
-define("WATCHERMETRICSFILEMAXSIZE", 10 * 1024 * 1024);
+// Retention period for raw metrics (25 hours)
+define("WATCHERMETRICSRETENTIONSECONDS", 25 * 60 * 60);
 
 /**
- * Rotate metrics log file if it exceeds the maximum size
- * Keeps the most recent entries (last 24 hours worth)
- * 
- * Log rotation is being handled by FPP when files hit 10MB.  this function has been
- * added to allow for more frequent rotation to keep file sizes down or in the event the data
- * is moved to a location not managed by FPP.
+ * Purge metrics log entries older than retention period (25 hours)
+ *
+ * Called periodically to keep the metrics file from growing unbounded.
+ * FPP also handles log rotation at 10MB, but this provides more granular control.
  */
 function rotateMetricsFile() {
     $metricsFile = WATCHERPINGMETRICSFILE;
@@ -48,21 +46,10 @@ function rotateMetricsFile() {
         return;
     }
 
-    $stat = fstat($fp);
-    $fileSize = $stat['size'] ?? 0;
-
-    // Check if rotation is needed
-    if ($fileSize <= WATCHERMETRICSFILEMAXSIZE) {
-        flock($fp, LOCK_UN);
-        fclose($fp);
-        return;
-    }
-
-    logMessage("Metrics file size ($fileSize bytes) exceeds limit (" . WATCHERMETRICSFILEMAXSIZE . " bytes). Rotating...");
-
-    // Read current metrics and keep only last 24 hours
-    $twentyFourHoursAgo = time() - (24 * 60 * 60);
+    // Read current metrics and keep only entries within retention period
+    $cutoffTime = time() - WATCHERMETRICSRETENTIONSECONDS;
     $recentMetrics = [];
+    $purgedCount = 0;
 
     rewind($fp);
     while (($line = fgets($fp)) !== false) {
@@ -72,12 +59,20 @@ function rotateMetricsFile() {
             $entry = json_decode($jsonData, true);
 
             if ($entry && isset($entry['timestamp'])) {
-                // Keep only entries from last 24 hours
-                if ($entry['timestamp'] >= $twentyFourHoursAgo) {
+                if ($entry['timestamp'] >= $cutoffTime) {
                     $recentMetrics[] = $line;
+                } else {
+                    $purgedCount++;
                 }
             }
         }
+    }
+
+    // Only rewrite file if we actually purged entries
+    if ($purgedCount === 0) {
+        flock($fp, LOCK_UN);
+        fclose($fp);
+        return;
     }
 
     // Write recent metrics to new file, rename old file to backup atomically
@@ -97,13 +92,12 @@ function rotateMetricsFile() {
         rename($metricsFile, $backupFile);
         rename($tempFile, $metricsFile);
 
-        $keptCount = count($recentMetrics);
-        logMessage("Metrics file rotated. Kept {$keptCount} recent entries.");
+        logMessage("Metrics purge: removed {$purgedCount} old entries, kept " . count($recentMetrics) . " recent entries.");
 
         ensureFppOwnership($metricsFile);
         ensureFppOwnership($backupFile);
     } else {
-        logMessage("ERROR: Unable to create temp file for rotation");
+        logMessage("ERROR: Unable to create temp file for metrics purge");
     }
 
     flock($fp, LOCK_UN);
@@ -120,6 +114,7 @@ function checkConnectivity($testHosts, $networkAdapter) {
     ];
 
     $anySuccess = false;
+    $checkTimestamp = time(); // Single timestamp for all hosts in this check cycle
 
     foreach ($testHosts as $host) {
         $output = [];
@@ -142,7 +137,7 @@ function checkConnectivity($testHosts, $networkAdapter) {
 
             // Log ping metrics to separate file in JSON format for easy parsing
             $metricsEntry = json_encode([
-                'timestamp' => time(),
+                'timestamp' => $checkTimestamp,
                 'host' => $host,
                 'latency' => $latency,
                 'status' => 'success'
@@ -153,7 +148,7 @@ function checkConnectivity($testHosts, $networkAdapter) {
         } else {
             // Log failed ping attempt
             $metricsEntry = json_encode([
-                'timestamp' => time(),
+                'timestamp' => $checkTimestamp,
                 'host' => $host,
                 'latency' => null,
                 'status' => 'failure'
@@ -194,6 +189,8 @@ logMessage("Network Adapter: {$config['networkAdapter']}" . ($config['networkAda
 logMessage("Test Hosts: " . implode(', ', $config['testHosts']));
 
 while (true) {
+    $currentTime = time(); // Single timestamp for this iteration
+
     if (checkConnectivity($config['testHosts'], $actualNetworkAdapter)) {
         if ($failureCount > 0) {
             logMessage("Internet connectivity restored");
@@ -201,8 +198,7 @@ while (true) {
         $failureCount = 0;
 
         // Check and rotate metrics file if needed, but only every configured interval
-        $currentTime = time();
-        $rotationInterval = isset($config['metricsRotationInterval']) ? $config['metricsRotationInterval'] : 1800;
+        $rotationInterval = $config['metricsRotationInterval'] ?? 1800;
 
         if (($currentTime - $lastRotationCheck) >= $rotationInterval) {
             rotateMetricsFile();
