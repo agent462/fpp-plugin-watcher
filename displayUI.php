@@ -118,16 +118,24 @@
                 if (showLoadingIndicator) {
                     document.getElementById('loadingIndicator').style.display = 'block';
                     document.getElementById('systemStats').style.display = 'none';
-                }
 
-                // Fetch temperature preference setting
-                try {
-                    const tempSettingResponse = await fetch('/api/settings/temperatureInF');
-                    const tempSettingData = await tempSettingResponse.json();
-                    useFahrenheit = (tempSettingData.value === "1" || tempSettingData.value === 1);
-                } catch (error) {
-                    console.warn('Could not fetch temperature setting, defaulting to Celsius:', error);
-                    useFahrenheit = false;
+                    // Fetch temperature preference setting only on fresh page load
+                    try {
+                        const cachedTempSetting = localStorage.getItem('temperatureInF');
+                        if (cachedTempSetting !== null) {
+                            // Use cached value
+                            useFahrenheit = (cachedTempSetting === "true" || cachedTempSetting === true);
+                        } else {
+                            // Fetch from API and cache
+                            const tempSettingResponse = await fetch('/api/settings/temperatureInF');
+                            const tempSettingData = await tempSettingResponse.json();
+                            useFahrenheit = (tempSettingData.value === "1" || tempSettingData.value === 1);
+                            localStorage.setItem('temperatureInF', useFahrenheit);
+                        }
+                    } catch (error) {
+                        console.warn('Could not fetch temperature setting, defaulting to Celsius:', error);
+                        useFahrenheit = false;
+                    }
                 }
 
                 // Fetch system status (includes all data)
