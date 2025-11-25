@@ -53,17 +53,14 @@ function rotateMetricsFile() {
 
     rewind($fp);
     while (($line = fgets($fp)) !== false) {
-        // Extract JSON from log entry format: [timestamp] JSON
-        if (preg_match('/\[.*?\]\s+(.+)$/', $line, $matches)) {
-            $jsonData = trim($matches[1]);
-            $entry = json_decode($jsonData, true);
-
-            if ($entry && isset($entry['timestamp'])) {
-                if ($entry['timestamp'] >= $cutoffTime) {
-                    $recentMetrics[] = $line;
-                } else {
-                    $purgedCount++;
-                }
+        // Extract timestamp directly with regex - faster than JSON decode
+        // Format: [datetime] {"timestamp":1234567890,...}
+        if (preg_match('/"timestamp"\s*:\s*(\d+)/', $line, $matches)) {
+            $entryTimestamp = (int)$matches[1];
+            if ($entryTimestamp >= $cutoffTime) {
+                $recentMetrics[] = $line;
+            } else {
+                $purgedCount++;
             }
         }
     }
