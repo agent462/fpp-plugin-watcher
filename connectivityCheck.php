@@ -20,13 +20,13 @@ if ($config['networkAdapter'] === 'default') {
 }
 
 // Retention period for raw metrics (25 hours)
+// Keeps 24 hours of data for graphing plus 1 hour buffer
 define("WATCHERMETRICSRETENTIONSECONDS", 25 * 60 * 60);
 
 /**
- * Purge metrics log entries older than retention period (25 hours)
+ * Purge metrics log entries older than retention period
  *
  * Called periodically to keep the metrics file from growing unbounded.
- * FPP also handles log rotation at 10MB, but this provides more granular control.
  */
 function rotateMetricsFile() {
     $metricsFile = WATCHERPINGMETRICSFILE;
@@ -104,6 +104,40 @@ function rotateMetricsFile() {
     fclose($fp);
 }
 
+/**
+ * Write multiple metrics entries in a single file operation
+ * Reduces I/O overhead by batching writes
+ */
+function writeMetricsBatch($entries) {
+    if (empty($entries)) {
+        return;
+    }
+
+    $metricsFile = WATCHERPINGMETRICSFILE;
+    $fp = @fopen($metricsFile, 'a');
+    if (!$fp) {
+        return;
+    }
+
+    if (flock($fp, LOCK_EX)) {
+        foreach ($entries as $entry) {
+            $timestamp = date('Y-m-d H:i:s', $entry['timestamp']);
+            $jsonData = json_encode($entry);
+            fwrite($fp, "[{$timestamp}] {$jsonData}\n");
+        }
+        fflush($fp);
+        flock($fp, LOCK_UN);
+    }
+    fclose($fp);
+
+    // Check ownership once per batch
+    global $_watcherOwnershipVerified;
+    if (!isset($_watcherOwnershipVerified[$metricsFile])) {
+        ensureFppOwnership($metricsFile);
+        $_watcherOwnershipVerified[$metricsFile] = true;
+    }
+}
+
 // Function to check internet connectivity and capture ping statistics
 function checkConnectivity($testHosts, $networkAdapter) {
     global $lastPingStats;
@@ -115,6 +149,7 @@ function checkConnectivity($testHosts, $networkAdapter) {
 
     $anySuccess = false;
     $checkTimestamp = time(); // Single timestamp for all hosts in this check cycle
+    $metricsBuffer = []; // Collect metrics for batch write
 
     foreach ($testHosts as $host) {
         $output = [];
@@ -135,27 +170,29 @@ function checkConnectivity($testHosts, $networkAdapter) {
                 }
             }
 
-            // Log ping metrics to separate file in JSON format for easy parsing
-            $metricsEntry = json_encode([
+            // Buffer metrics for batch write
+            $metricsBuffer[] = [
                 'timestamp' => $checkTimestamp,
                 'host' => $host,
                 'latency' => $latency,
                 'status' => 'success'
-            ]);
-            logMessage($metricsEntry, WATCHERPINGMETRICSFILE);
+            ];
 
             $anySuccess = true;
         } else {
-            // Log failed ping attempt
-            $metricsEntry = json_encode([
+            // Buffer failed ping attempt
+            $metricsBuffer[] = [
                 'timestamp' => $checkTimestamp,
                 'host' => $host,
                 'latency' => null,
                 'status' => 'failure'
-            ]);
-            logMessage($metricsEntry, WATCHERPINGMETRICSFILE);
+            ];
         }
     }
+
+    // Write all metrics in a single file operation
+    writeMetricsBatch($metricsBuffer);
+
     return $anySuccess;
 }
 
