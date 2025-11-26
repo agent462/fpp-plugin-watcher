@@ -21,7 +21,7 @@ define("WATCHERDEFAULTSETTINGS",
         'networkAdapter' => 'default',
         'testHosts' => '8.8.8.8,1.1.1.1',
         'metricsRotationInterval' => 1800,
-        'collectdEnabled' => false,
+        'collectdEnabled' => true,
         'multiSyncMetricsEnabled' => false)
         );
 
