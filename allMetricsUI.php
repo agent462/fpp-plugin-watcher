@@ -579,8 +579,6 @@ if ($showDashboard) {
             y: entry[valueKey]
         })).filter(d => d.y !== null);
 
-        if (charts[canvasId]) charts[canvasId].destroy();
-
         // Determine unit and formatting based on metric type
         const isPercent = valueKey === 'cpu_usage';
         const isMB = valueKey === 'free_mb';
@@ -596,6 +594,14 @@ if ($showDashboard) {
             return val.toFixed(2);
         };
 
+        // Update existing chart instead of destroying/recreating for better performance
+        if (charts[canvasId]) {
+            charts[canvasId].data.datasets[0].data = chartData;
+            charts[canvasId].update('none'); // 'none' skips animations for faster update
+            return;
+        }
+
+        // Create new chart with animations disabled for faster rendering
         charts[canvasId] = new Chart(ctx, {
             type: 'line',
             data: {
@@ -614,6 +620,7 @@ if ($showDashboard) {
             options: {
                 responsive: true,
                 maintainAspectRatio: true,
+                animation: false, // Disable animations for faster rendering
                 interaction: {
                     mode: 'nearest',
                     axis: 'x',
@@ -681,6 +688,16 @@ if ($showDashboard) {
         }
     }
 
+    // Destroy all existing charts to prevent stale references when DOM is rebuilt
+    function destroyAllCharts() {
+        Object.keys(charts).forEach(key => {
+            if (charts[key]) {
+                charts[key].destroy();
+                delete charts[key];
+            }
+        });
+    }
+
     async function refreshAllSystems() {
         if (isRefreshing) return;
         isRefreshing = true;
@@ -689,6 +706,7 @@ if ($showDashboard) {
         const systems = window.remoteSystems || [];
 
         if (systems.length === 0) {
+            destroyAllCharts();
             container.innerHTML = '<div class="noDataMessage"><p>No remote systems found in multi-sync configuration.</p></div>';
             document.getElementById('loadingIndicator').style.display = 'none';
             document.getElementById('metricsContent').style.display = 'block';
@@ -698,6 +716,9 @@ if ($showDashboard) {
 
         // Fetch metrics from all systems in parallel
         const results = await Promise.all(systems.map((system, index) => fetchSystemMetrics(system)));
+
+        // Destroy existing charts before rebuilding DOM
+        destroyAllCharts();
 
         // Store and render results
         systemMetrics = {};
@@ -744,5 +765,8 @@ if ($showDashboard) {
     $(document).ready(function() {
         refreshAllSystems();
     });
+
+    // Cleanup charts on page unload to prevent memory leaks
+    window.addEventListener('beforeunload', destroyAllCharts);
 </script>
 <?php endif; ?>
