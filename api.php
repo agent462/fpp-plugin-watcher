@@ -99,6 +99,12 @@ function getEndpointsfpppluginwatcher() {
         'callback' => 'fpppluginWatcherWirelessInterfaces');
     array_push($result, $ep);
 
+    $ep = array(
+        'method' => 'GET',
+        'endpoint' => 'metrics/all',
+        'callback' => 'fpppluginWatcherMetricsAll');
+    array_push($result, $ep);
+
     return $result;
 }
 
@@ -245,6 +251,27 @@ function fpppluginwatcherWirelessInterfaces() {
         'count' => count($interfaces),
         'interfaces' => $interfaces
     ];
+    /** @disregard P1010 */
+    return json($result);
+}
+
+// GET /api/plugin/fpp-plugin-watcher/metrics/all
+// Returns all metrics in a single response for better performance
+function fpppluginwatcherMetricsAll() {
+    $hoursBack = isset($_GET['hours']) ? intval($_GET['hours']) : 24;
+
+    $result = [
+        'success' => true,
+        'hours' => $hoursBack,
+        'cpu' => getCPUAverageMetrics($hoursBack),
+        'memory' => getMemoryFreeMetrics($hoursBack),
+        'disk' => getDiskFreeMetrics($hoursBack),
+        'load' => getLoadAverageMetrics($hoursBack),
+        'thermal' => getThermalMetrics($hoursBack),
+        'wireless' => getWirelessMetrics($hoursBack),
+        'ping' => getPingMetricsRollup($hoursBack)
+    ];
+
     /** @disregard P1010 */
     return json($result);
 }

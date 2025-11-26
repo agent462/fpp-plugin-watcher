@@ -289,11 +289,20 @@ if ($showDashboard) {
         };
 
         try {
-            // Try to fetch CPU metrics first to check if watcher plugin is available
-            const cpuData = await fetchJson(`${baseUrl}/metrics/cpu/average?hours=${hours}`);
+            // Fetch all metrics in a single request for better performance
+            const allData = await fetchJson(`${baseUrl}/metrics/all?hours=${hours}`);
+
+            if (!allData.success) {
+                result.online = false;
+                result.error = 'API returned unsuccessful response';
+                return result;
+            }
+
             result.online = true;
 
-            if (cpuData.success && cpuData.data && cpuData.data.length > 0) {
+            // Process CPU metrics
+            const cpuData = allData.cpu;
+            if (cpuData && cpuData.success && cpuData.data && cpuData.data.length > 0) {
                 const validCpu = cpuData.data.filter(d => d.cpu_usage !== null);
                 if (validCpu.length > 0) {
                     const latestCpu = validCpu[validCpu.length - 1].cpu_usage;
@@ -302,126 +311,114 @@ if ($showDashboard) {
                 }
             }
 
-            // Fetch memory metrics
-            try {
-                const memData = await fetchJson(`${baseUrl}/metrics/memory/free?hours=${hours}`);
-                if (memData.success && memData.data && memData.data.length > 0) {
-                    const validMem = memData.data.filter(d => d.free_mb !== null);
-                    if (validMem.length > 0) {
-                        const latestMem = validMem[validMem.length - 1].free_mb;
-                        const avgMem = validMem.reduce((a, b) => a + b.free_mb, 0) / validMem.length;
-                        result.memory = { current: latestMem, average: avgMem, data: memData.data };
+            // Process memory metrics
+            const memData = allData.memory;
+            if (memData && memData.success && memData.data && memData.data.length > 0) {
+                const validMem = memData.data.filter(d => d.free_mb !== null);
+                if (validMem.length > 0) {
+                    const latestMem = validMem[validMem.length - 1].free_mb;
+                    const avgMem = validMem.reduce((a, b) => a + b.free_mb, 0) / validMem.length;
+                    result.memory = { current: latestMem, average: avgMem, data: memData.data };
+                }
+            }
+
+            // Process disk metrics
+            const diskData = allData.disk;
+            if (diskData && diskData.success && diskData.data && diskData.data.length > 0) {
+                const validDisk = diskData.data.filter(d => d.free_gb !== null);
+                if (validDisk.length > 0) {
+                    const latestDisk = validDisk[validDisk.length - 1].free_gb;
+                    const avgDisk = validDisk.reduce((a, b) => a + b.free_gb, 0) / validDisk.length;
+                    result.disk = { current: latestDisk, average: avgDisk, data: diskData.data };
+                }
+            }
+
+            // Process load metrics
+            const loadData = allData.load;
+            if (loadData && loadData.success && loadData.data && loadData.data.length > 0) {
+                const validLoad = loadData.data.filter(d => d.shortterm !== null);
+                if (validLoad.length > 0) {
+                    const latestLoad = validLoad[validLoad.length - 1];
+                    result.load = { shortterm: latestLoad.shortterm, midterm: latestLoad.midterm, longterm: latestLoad.longterm };
+                }
+            }
+
+            // Process temperature metrics (thermal zones)
+            const tempData = allData.thermal;
+            if (tempData && tempData.success && tempData.data && tempData.data.length > 0 && tempData.zones && tempData.zones.length > 0) {
+                // Find a thermal_zone with actual temperature data (skip cooling_device, etc.)
+                let zoneKey = null;
+                let validTemp = [];
+
+                // Prefer thermal_zone* over other zone types
+                const thermalZones = tempData.zones.filter(z => z.startsWith('thermal_zone'));
+                const zonesToTry = thermalZones.length > 0 ? thermalZones : tempData.zones;
+
+                for (const zone of zonesToTry) {
+                    const filtered = tempData.data.filter(d => d[zone] !== null);
+                    if (filtered.length > 0) {
+                        zoneKey = zone;
+                        validTemp = filtered;
+                        break;
                     }
                 }
-            } catch (e) { }
 
-            // Fetch disk metrics
-            try {
-                const diskData = await fetchJson(`${baseUrl}/metrics/disk/free?hours=${hours}`);
-                if (diskData.success && diskData.data && diskData.data.length > 0) {
-                    const validDisk = diskData.data.filter(d => d.free_gb !== null);
-                    if (validDisk.length > 0) {
-                        const latestDisk = validDisk[validDisk.length - 1].free_gb;
-                        const avgDisk = validDisk.reduce((a, b) => a + b.free_gb, 0) / validDisk.length;
-                        result.disk = { current: latestDisk, average: avgDisk, data: diskData.data };
-                    }
+                if (zoneKey && validTemp.length > 0) {
+                    const latestTemp = validTemp[validTemp.length - 1][zoneKey];
+                    const avgTemp = validTemp.reduce((a, b) => a + b[zoneKey], 0) / validTemp.length;
+                    // Transform data to use 'temperature' as the key for chart rendering
+                    const chartData = tempData.data.map(d => ({
+                        timestamp: d.timestamp,
+                        temperature: d[zoneKey]
+                    }));
+                    result.temperature = { current: latestTemp, average: avgTemp, data: chartData, zone: zoneKey };
                 }
-            } catch (e) { }
+            }
 
-            // Fetch load metrics
-            try {
-                const loadData = await fetchJson(`${baseUrl}/metrics/load/average?hours=${hours}`);
-                if (loadData.success && loadData.data && loadData.data.length > 0) {
-                    const validLoad = loadData.data.filter(d => d.shortterm !== null);
-                    if (validLoad.length > 0) {
-                        const latestLoad = validLoad[validLoad.length - 1];
-                        result.load = { shortterm: latestLoad.shortterm, midterm: latestLoad.midterm, longterm: latestLoad.longterm };
-                    }
+            // Process wireless metrics
+            const wirelessData = allData.wireless;
+            if (wirelessData && wirelessData.success && wirelessData.data && wirelessData.data.length > 0 && wirelessData.interfaces && wirelessData.interfaces.length > 0) {
+                // Use the first wireless interface (usually wlan0)
+                const iface = wirelessData.interfaces[0];
+                const powerKey = `${iface}_signal_power`;
+                const qualityKey = `${iface}_signal_quality`;
+                const noiseKey = `${iface}_signal_noise`;
+
+                const validWireless = wirelessData.data.filter(d => d[powerKey] !== null);
+                if (validWireless.length > 0) {
+                    const latestWireless = validWireless[validWireless.length - 1];
+                    // Transform data to use 'signal_dbm' as the key for chart rendering
+                    const chartData = wirelessData.data.map(d => ({
+                        timestamp: d.timestamp,
+                        signal_dbm: d[powerKey]
+                    }));
+                    result.wireless = {
+                        signal: latestWireless[powerKey],
+                        noise: latestWireless[noiseKey],
+                        quality: latestWireless[qualityKey],
+                        data: chartData,
+                        interface: iface
+                    };
                 }
-            } catch (e) { }
+            }
 
-            // Fetch temperature metrics (thermal zones)
-            try {
-                const tempData = await fetchJson(`${baseUrl}/metrics/thermal?hours=${hours}`);
-                if (tempData.success && tempData.data && tempData.data.length > 0 && tempData.zones && tempData.zones.length > 0) {
-                    // Find a thermal_zone with actual temperature data (skip cooling_device, etc.)
-                    let zoneKey = null;
-                    let validTemp = [];
-
-                    // Prefer thermal_zone* over other zone types
-                    const thermalZones = tempData.zones.filter(z => z.startsWith('thermal_zone'));
-                    const zonesToTry = thermalZones.length > 0 ? thermalZones : tempData.zones;
-
-                    for (const zone of zonesToTry) {
-                        const filtered = tempData.data.filter(d => d[zone] !== null);
-                        if (filtered.length > 0) {
-                            zoneKey = zone;
-                            validTemp = filtered;
-                            break;
-                        }
-                    }
-
-                    if (zoneKey && validTemp.length > 0) {
-                        const latestTemp = validTemp[validTemp.length - 1][zoneKey];
-                        const avgTemp = validTemp.reduce((a, b) => a + b[zoneKey], 0) / validTemp.length;
-                        // Transform data to use 'temperature' as the key for chart rendering
-                        const chartData = tempData.data.map(d => ({
-                            timestamp: d.timestamp,
-                            temperature: d[zoneKey]
-                        }));
-                        result.temperature = { current: latestTemp, average: avgTemp, data: chartData, zone: zoneKey };
-                    }
+            // Process ping latency metrics (rollup data)
+            const pingData = allData.ping;
+            if (pingData && pingData.success && pingData.data && pingData.data.length > 0) {
+                const validPing = pingData.data.filter(d => d.avg_latency !== null);
+                if (validPing.length > 0) {
+                    const latestPing = validPing[validPing.length - 1];
+                    const avgLatency = validPing.reduce((a, b) => a + b.avg_latency, 0) / validPing.length;
+                    result.ping = {
+                        current: latestPing.avg_latency,
+                        average: avgLatency,
+                        min: Math.min(...validPing.map(d => d.min_latency)),
+                        max: Math.max(...validPing.map(d => d.max_latency)),
+                        data: pingData.data,
+                        tier: pingData.tier_info ? pingData.tier_info.label : '5-min averages'
+                    };
                 }
-            } catch (e) { }
-
-            // Fetch wireless metrics
-            try {
-                const wirelessData = await fetchJson(`${baseUrl}/metrics/wireless?hours=${hours}`);
-                if (wirelessData.success && wirelessData.data && wirelessData.data.length > 0 && wirelessData.interfaces && wirelessData.interfaces.length > 0) {
-                    // Use the first wireless interface (usually wlan0)
-                    const iface = wirelessData.interfaces[0];
-                    const powerKey = `${iface}_signal_power`;
-                    const qualityKey = `${iface}_signal_quality`;
-                    const noiseKey = `${iface}_signal_noise`;
-
-                    const validWireless = wirelessData.data.filter(d => d[powerKey] !== null);
-                    if (validWireless.length > 0) {
-                        const latestWireless = validWireless[validWireless.length - 1];
-                        // Transform data to use 'signal_dbm' as the key for chart rendering
-                        const chartData = wirelessData.data.map(d => ({
-                            timestamp: d.timestamp,
-                            signal_dbm: d[powerKey]
-                        }));
-                        result.wireless = {
-                            signal: latestWireless[powerKey],
-                            noise: latestWireless[noiseKey],
-                            quality: latestWireless[qualityKey],
-                            data: chartData,
-                            interface: iface
-                        };
-                    }
-                }
-            } catch (e) { }
-
-            // Fetch ping latency metrics (rollup data)
-            try {
-                const pingData = await fetchJson(`${baseUrl}/metrics/ping/rollup?hours=${hours}`);
-                if (pingData.success && pingData.data && pingData.data.length > 0) {
-                    const validPing = pingData.data.filter(d => d.avg_latency !== null);
-                    if (validPing.length > 0) {
-                        const latestPing = validPing[validPing.length - 1];
-                        const avgLatency = validPing.reduce((a, b) => a + b.avg_latency, 0) / validPing.length;
-                        result.ping = {
-                            current: latestPing.avg_latency,
-                            average: avgLatency,
-                            min: Math.min(...validPing.map(d => d.min_latency)),
-                            max: Math.max(...validPing.map(d => d.max_latency)),
-                            data: pingData.data,
-                            tier: pingData.tier_info ? pingData.tier_info.label : '5-min averages'
-                        };
-                    }
-                }
-            } catch (e) { }
+            }
 
         } catch (error) {
             result.online = false;
