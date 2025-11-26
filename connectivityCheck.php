@@ -15,8 +15,10 @@ if ($config['networkAdapter'] === 'default') {
     /** @disregard P1010 */
     WriteSettingToFile('networkAdapter', $actualNetworkAdapter, WATCHERPLUGINNAME);
     logMessage("Auto-detected network adapter '$actualNetworkAdapter' from 'default' setting and saved to config");
+    $networkAdapterDisplay = "default (detected: $actualNetworkAdapter)";
 } else {
     $actualNetworkAdapter = $config['networkAdapter'];
+    $networkAdapterDisplay = $actualNetworkAdapter;
 }
 
 // Retention period for raw metrics (25 hours)
@@ -207,7 +209,7 @@ $lastRollupCheck = 0; // Track when rollup was last processed
 logMessage("=== Watcher Plugin Started ===");
 logMessage("Check Interval: {$config['checkInterval']} seconds");
 logMessage("Max Failures: {$config['maxFailures']}");
-logMessage("Network Adapter: {$config['networkAdapter']}" . ($config['networkAdapter'] === 'default' ? " (detected: $actualNetworkAdapter)" : ""));
+logMessage("Network Adapter: $networkAdapterDisplay");
 logMessage("Test Hosts: " . implode(', ', $config['testHosts']));
 
 while (true) {

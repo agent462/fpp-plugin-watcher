@@ -3,6 +3,12 @@ include_once "/opt/fpp/www/common.php";
 include_once __DIR__ . "/watcherCommon.php";
 
 /**
+ * Collectd hostname - hardcoded to avoid issues when user changes hostname after installing collectd.
+ * RRD files are stored under this hostname, so it must remain constant.
+ */
+define('COLLECTD_HOSTNAME', 'fpplocal');
+
+/**
  * Fetch ping metrics from the last N hours
  *
  * @param int $hoursBack Number of hours to fetch (default: 24)
@@ -26,17 +32,23 @@ function getPingMetrics($hoursBack = 24) {
     $file = fopen($metricsFile, 'r');
     if ($file) {
         while (($line = fgets($file)) !== false) {
-            // Extract JSON from log entry format: [timestamp] JSON
-            // The logMessage function prepends [timestamp] to each line
-            if (preg_match('/\[.*?\]\s+(.+)$/', $line, $matches)) {
-                $jsonData = trim($matches[1]);
-                $entry = json_decode($jsonData, true);
+            // Quick extraction of timestamp without full JSON parse
+            // Format: [log timestamp] {"timestamp":1234567890,...}
+            if (preg_match('/"timestamp"\s*:\s*(\d+)/', $line, $tsMatch)) {
+                $timestamp = (int)$tsMatch[1];
 
-                if ($entry && isset($entry['timestamp'])) {
-                    // Only include entries from the specified time range
-                    if ($entry['timestamp'] >= $cutoffTime) {
+                // Skip old entries without expensive json_decode
+                if ($timestamp < $cutoffTime) {
+                    continue;
+                }
+
+                // Only parse JSON for entries within time range
+                if (preg_match('/\[.*?\]\s+(.+)$/', $line, $matches)) {
+                    $entry = json_decode(trim($matches[1]), true);
+
+                    if ($entry) {
                         $metrics[] = [
-                            'timestamp' => $entry['timestamp'],
+                            'timestamp' => $timestamp,
                             'host' => $entry['host'],
                             'latency' => isset($entry['latency']) && $entry['latency'] !== null
                                 ? floatval($entry['latency'])
@@ -65,14 +77,12 @@ function getPingMetrics($hoursBack = 24) {
 
 /**
  * Get hostname for collectd RRD path
+ *
+ * @deprecated Use COLLECTD_HOSTNAME constant directly for better performance
+ * @return string The collectd hostname
  */
 function getCollectdHostname() {
-    /** Normally I delete commented code but I will leave this here.  Why hardcode the collectd hostname?
-     * If a user changes the hostname of their FPP system after installing collectd, the RRD files will be
-     * stored under the old hostname.  So we hardcode it to 'fpplocal' to avoid issues.
-     */
-    #return trim(shell_exec('hostname'));
-    return 'fpplocal';
+    return COLLECTD_HOSTNAME;
 }
 
 /**
@@ -85,8 +95,7 @@ function getCollectdHostname() {
  * @return array Result with success status and data
  */
 function getCollectdMetrics($category, $metric, $consolidationFunction = 'AVERAGE', $hoursBack = 24) {
-    $hostname = getCollectdHostname();
-    $rrdFile = "/var/lib/collectd/rrd/{$hostname}/{$category}/{$metric}.rrd";
+    $rrdFile = "/var/lib/collectd/rrd/" . COLLECTD_HOSTNAME . "/{$category}/{$metric}.rrd";
 
     if (!file_exists($rrdFile)) {
         return [
@@ -164,6 +173,121 @@ function getCollectdMetrics($category, $metric, $consolidationFunction = 'AVERAG
 }
 
 /**
+ * Fetch multiple RRD metrics in a single rrdtool xport command
+ * Much more efficient than calling getCollectdMetrics() in a loop
+ *
+ * @param array $rrdSources Array of ['name' => 'label', 'file' => '/path/to.rrd', 'ds' => 'value']
+ * @param string $consolidationFunction CF to use: AVERAGE, MIN, MAX, LAST (default: AVERAGE)
+ * @param int $hoursBack Number of hours to fetch (default: 24)
+ * @return array Result with success status and data keyed by source name
+ */
+function getBatchedCollectdMetrics($rrdSources, $consolidationFunction = 'AVERAGE', $hoursBack = 24) {
+    if (empty($rrdSources)) {
+        return [
+            'success' => false,
+            'error' => 'No RRD sources provided',
+            'data' => []
+        ];
+    }
+
+    // Filter to only existing files
+    $validSources = [];
+    foreach ($rrdSources as $source) {
+        if (file_exists($source['file'])) {
+            $validSources[] = $source;
+        }
+    }
+
+    if (empty($validSources)) {
+        return [
+            'success' => false,
+            'error' => 'No valid RRD files found',
+            'data' => []
+        ];
+    }
+
+    $endTime = time();
+    $startTime = $endTime - ($hoursBack * 3600);
+
+    // Build DEF and XPORT statements for rrdtool xport
+    $defs = [];
+    $xports = [];
+    foreach ($validSources as $idx => $source) {
+        $varName = "v{$idx}";
+        $ds = $source['ds'] ?? 'value';
+        $defs[] = sprintf(
+            'DEF:%s=%s:%s:%s',
+            $varName,
+            escapeshellarg($source['file']),
+            $ds,
+            $consolidationFunction
+        );
+        $xports[] = sprintf('XPORT:%s:%s', $varName, escapeshellarg($source['name']));
+    }
+
+    // Build single rrdtool xport command
+    $command = sprintf(
+        'rrdtool xport --json --start %d --end %d %s %s 2>&1',
+        $startTime,
+        $endTime,
+        implode(' ', $defs),
+        implode(' ', $xports)
+    );
+
+    $output = [];
+    $returnVar = 0;
+    exec($command, $output, $returnVar);
+
+    if ($returnVar !== 0) {
+        return [
+            'success' => false,
+            'error' => 'Failed to fetch RRD data: ' . implode("\n", $output),
+            'data' => []
+        ];
+    }
+
+    // Parse JSON output
+    $jsonOutput = implode('', $output);
+    $result = json_decode($jsonOutput, true);
+
+    if (!$result || !isset($result['meta']) || !isset($result['data'])) {
+        return [
+            'success' => false,
+            'error' => 'Failed to parse rrdtool xport output',
+            'data' => []
+        ];
+    }
+
+    // Build structured output: array of [timestamp => value] per source
+    $legends = $result['meta']['legend'] ?? [];
+    $startTs = $result['meta']['start'] ?? $startTime;
+    $step = $result['meta']['step'] ?? 10;
+    $rows = $result['data'] ?? [];
+
+    $metrics = [];
+    $timestamp = $startTs;
+
+    foreach ($rows as $row) {
+        $dataPoint = ['timestamp' => $timestamp];
+        foreach ($legends as $idx => $legend) {
+            $value = $row[$idx] ?? null;
+            // Handle null/NaN values
+            $dataPoint[$legend] = ($value === null || is_nan($value)) ? null : floatval($value);
+        }
+        $metrics[] = $dataPoint;
+        $timestamp += $step;
+    }
+
+    return [
+        'success' => true,
+        'count' => count($metrics),
+        'data' => $metrics,
+        'period' => $hoursBack . 'h',
+        'sources' => array_column($validSources, 'name')
+    ];
+}
+
+/**
  * Fetch free memory metrics from collectd
  *
  * @param int $hoursBack Number of hours to fetch (default: 24)
@@ -235,19 +359,18 @@ function getDiskFreeMetrics($hoursBack = 24) {
  * @return int Number of CPU cores
  */
 function getCPUCoreCount() {
-    $hostname = getCollectdHostname();
-    $cpuDirs = glob("/var/lib/collectd/rrd/{$hostname}/cpu-*", GLOB_ONLYDIR);
+    $cpuDirs = glob("/var/lib/collectd/rrd/" . COLLECTD_HOSTNAME . "/cpu-*", GLOB_ONLYDIR);
     return count($cpuDirs);
 }
 
 /**
  * Fetch averaged CPU usage metrics across all cores
+ * Uses batched RRD fetch for efficiency (single exec instead of N)
  *
  * @param int $hoursBack Number of hours to fetch (default: 24)
  * @return array Result with averaged CPU usage data
  */
 function getCPUAverageMetrics($hoursBack = 24) {
-    $hostname = getCollectdHostname();
     $cpuCount = getCPUCoreCount();
 
     if ($cpuCount === 0) {
@@ -258,43 +381,44 @@ function getCPUAverageMetrics($hoursBack = 24) {
         ];
     }
 
-    // Fetch idle time for all CPUs
-    $allCPUData = [];
+    // Build RRD sources for all CPU cores (single exec instead of N)
+    $basePath = "/var/lib/collectd/rrd/" . COLLECTD_HOSTNAME;
+    $rrdSources = [];
     for ($i = 0; $i < $cpuCount; $i++) {
-        $result = getCollectdMetrics("cpu-{$i}", 'cpu-idle', 'AVERAGE', $hoursBack);
-        if ($result['success'] && !empty($result['data'])) {
-            $allCPUData[$i] = $result['data'];
-        }
+        $rrdSources[] = [
+            'name' => "cpu{$i}",
+            'file' => "{$basePath}/cpu-{$i}/cpu-idle.rrd",
+            'ds' => 'value'
+        ];
     }
 
-    if (empty($allCPUData)) {
+    // Fetch all CPU data in one command
+    $result = getBatchedCollectdMetrics($rrdSources, 'AVERAGE', $hoursBack);
+
+    if (!$result['success']) {
         return [
             'success' => false,
-            'error' => 'No CPU data available',
+            'error' => $result['error'] ?? 'No CPU data available',
             'data' => []
         ];
     }
 
-    // Build a map of timestamps
-    $timestampMap = [];
-    foreach ($allCPUData as $cpuIndex => $cpuData) {
-        foreach ($cpuData as $entry) {
-            $timestamp = $entry['timestamp'];
-            if (!isset($timestampMap[$timestamp])) {
-                $timestampMap[$timestamp] = [];
-            }
-            $timestampMap[$timestamp][$cpuIndex] = $entry['value'];
-        }
-    }
-
-    // Calculate averages
+    // Calculate averages across all cores for each timestamp
     $formattedData = [];
-    foreach ($timestampMap as $timestamp => $cpuValues) {
-        // Filter out null values
-        $validValues = array_filter($cpuValues, function($v) { return $v !== null; });
+    foreach ($result['data'] as $entry) {
+        $timestamp = $entry['timestamp'];
+        $cpuValues = [];
 
-        if (!empty($validValues)) {
-            $avgIdle = array_sum($validValues) / count($validValues);
+        // Collect all CPU values for this timestamp
+        for ($i = 0; $i < $cpuCount; $i++) {
+            $key = "cpu{$i}";
+            if (isset($entry[$key]) && $entry[$key] !== null) {
+                $cpuValues[] = $entry[$key];
+            }
+        }
+
+        if (!empty($cpuValues)) {
+            $avgIdle = array_sum($cpuValues) / count($cpuValues);
             // Convert idle to usage (100 - idle = usage)
             $avgUsage = 100 - $avgIdle;
 
@@ -326,8 +450,7 @@ function getCPUAverageMetrics($hoursBack = 24) {
  * @return array List of interface names
  */
 function getNetworkInterfaces() {
-    $hostname = getCollectdHostname();
-    $interfaceDirs = glob("/var/lib/collectd/rrd/{$hostname}/interface-*", GLOB_ONLYDIR);
+    $interfaceDirs = glob("/var/lib/collectd/rrd/" . COLLECTD_HOSTNAME . "/interface-*", GLOB_ONLYDIR);
 
     $interfaces = [];
     foreach ($interfaceDirs as $dir) {
@@ -423,8 +546,7 @@ function getLoadAverageMetrics($hoursBack = 24) {
  * @return array List of thermal zone names
  */
 function getThermalZones() {
-    $hostname = getCollectdHostname();
-    $thermalDirs = glob("/var/lib/collectd/rrd/{$hostname}/thermal-*", GLOB_ONLYDIR);
+    $thermalDirs = glob("/var/lib/collectd/rrd/" . COLLECTD_HOSTNAME . "/thermal-*", GLOB_ONLYDIR);
 
     $zones = [];
     foreach ($thermalDirs as $dir) {
@@ -443,8 +565,7 @@ function getThermalZones() {
  * @return array List of wireless interface names
  */
 function getWirelessInterfaces() {
-    $hostname = getCollectdHostname();
-    $wirelessDirs = glob("/var/lib/collectd/rrd/{$hostname}/wireless-*", GLOB_ONLYDIR);
+    $wirelessDirs = glob("/var/lib/collectd/rrd/" . COLLECTD_HOSTNAME . "/wireless-*", GLOB_ONLYDIR);
 
     $interfaces = [];
     foreach ($wirelessDirs as $dir) {
@@ -459,6 +580,7 @@ function getWirelessInterfaces() {
 
 /**
  * Fetch thermal zone temperature metrics for all zones
+ * Uses batched RRD fetch for efficiency (single exec instead of N)
  *
  * @param int $hoursBack Number of hours to fetch (default: 24)
  * @return array Result with formatted temperature data for all zones
@@ -474,43 +596,39 @@ function getThermalMetrics($hoursBack = 24) {
         ];
     }
 
-    // Fetch temperature data for all zones
-    $allZoneData = [];
+    // Build RRD sources for all thermal zones (single exec instead of N)
+    $basePath = "/var/lib/collectd/rrd/" . COLLECTD_HOSTNAME;
+    $rrdSources = [];
     foreach ($zones as $zone) {
-        $result = getCollectdMetrics("thermal-{$zone}", 'temperature', 'AVERAGE', $hoursBack);
-        if ($result['success'] && !empty($result['data'])) {
-            $allZoneData[$zone] = $result['data'];
-        }
+        $rrdSources[] = [
+            'name' => $zone,
+            'file' => "{$basePath}/thermal-{$zone}/temperature.rrd",
+            'ds' => 'value'
+        ];
     }
 
-    if (empty($allZoneData)) {
+    // Fetch all thermal data in one command
+    $result = getBatchedCollectdMetrics($rrdSources, 'AVERAGE', $hoursBack);
+
+    if (!$result['success']) {
         return [
             'success' => false,
-            'error' => 'No thermal data available',
+            'error' => $result['error'] ?? 'No thermal data available',
             'data' => []
         ];
     }
 
-    // Build a map of timestamps with all zone temperatures
-    $timestampMap = [];
-    foreach ($allZoneData as $zone => $zoneData) {
-        foreach ($zoneData as $entry) {
-            $timestamp = $entry['timestamp'];
-            if (!isset($timestampMap[$timestamp])) {
-                $timestampMap[$timestamp] = ['timestamp' => $timestamp];
-            }
-            // Temperature is stored in the 'value' field
-            $timestampMap[$timestamp][$zone] = isset($entry['value']) && $entry['value'] !== null
-                ? round($entry['value'], 2)
+    // Format data with rounded temperatures
+    $formattedData = [];
+    foreach ($result['data'] as $entry) {
+        $dataPoint = ['timestamp' => $entry['timestamp']];
+        foreach ($zones as $zone) {
+            $dataPoint[$zone] = isset($entry[$zone]) && $entry[$zone] !== null
+                ? round($entry[$zone], 2)
                 : null;
         }
+        $formattedData[] = $dataPoint;
     }
-
-    // Convert to array and sort by timestamp
-    $formattedData = array_values($timestampMap);
-    usort($formattedData, function($a, $b) {
-        return $a['timestamp'] - $b['timestamp'];
-    });
 
     return [
         'success' => true,
@@ -524,6 +642,7 @@ function getThermalMetrics($hoursBack = 24) {
 /**
  * Fetch wireless metrics for all wireless interfaces
  * Includes signal quality, signal level, and noise level
+ * Uses batched RRD fetch for efficiency (single exec instead of interfaces × metrics)
  *
  * @param int $hoursBack Number of hours to fetch (default: 24)
  * @return array Result with formatted wireless data for all interfaces
@@ -539,54 +658,54 @@ function getWirelessMetrics($hoursBack = 24) {
         ];
     }
 
-    // Fetch metrics for all wireless interfaces
-    // Common wireless metrics: signal_quality, signal_power, signal_noise
-    $allInterfaceData = [];
-    $availableMetrics = [];
+    // Build RRD sources for all interfaces × metrics (single exec instead of N×M)
+    $basePath = "/var/lib/collectd/rrd/" . COLLECTD_HOSTNAME;
+    $metricTypes = ['signal_quality', 'signal_power', 'signal_noise'];
+    $rrdSources = [];
 
     foreach ($interfaces as $iface) {
-        // Try to fetch different wireless metrics from collectd
-        // Available RRD files: signal_noise.rrd, signal_power.rrd, signal_quality.rrd
-        $metrics = ['signal_quality', 'signal_power', 'signal_noise'];
-
-        foreach ($metrics as $metric) {
-            $result = getCollectdMetrics("wireless-{$iface}", $metric, 'AVERAGE', $hoursBack);
-            if ($result['success'] && !empty($result['data'])) {
-                $key = "{$iface}_{$metric}";
-                $allInterfaceData[$key] = $result['data'];
-                $availableMetrics[$iface][] = $metric;
-            }
+        foreach ($metricTypes as $metric) {
+            $rrdSources[] = [
+                'name' => "{$iface}_{$metric}",
+                'file' => "{$basePath}/wireless-{$iface}/{$metric}.rrd",
+                'ds' => 'value'
+            ];
         }
     }
 
-    if (empty($allInterfaceData)) {
+    // Fetch all wireless data in one command
+    $result = getBatchedCollectdMetrics($rrdSources, 'AVERAGE', $hoursBack);
+
+    if (!$result['success']) {
         return [
             'success' => false,
-            'error' => 'No wireless data available',
+            'error' => $result['error'] ?? 'No wireless data available',
             'data' => []
         ];
     }
 
-    // Build a map of timestamps with all interface metrics
-    $timestampMap = [];
-    foreach ($allInterfaceData as $key => $metricData) {
-        foreach ($metricData as $entry) {
-            $timestamp = $entry['timestamp'];
-            if (!isset($timestampMap[$timestamp])) {
-                $timestampMap[$timestamp] = ['timestamp' => $timestamp];
-            }
-            // Value is stored in the 'value' field
-            $timestampMap[$timestamp][$key] = isset($entry['value']) && $entry['value'] !== null
-                ? round($entry['value'], 2)
-                : null;
+    // Determine which metrics were actually found (from sources that existed)
+    $availableMetrics = [];
+    foreach ($result['sources'] as $source) {
+        // Parse "iface_metric" format
+        if (preg_match('/^(.+)_(signal_(?:quality|power|noise))$/', $source, $matches)) {
+            $iface = $matches[1];
+            $metric = $matches[2];
+            $availableMetrics[$iface][] = $metric;
         }
     }
 
-    // Convert to array and sort by timestamp
-    $formattedData = array_values($timestampMap);
-    usort($formattedData, function($a, $b) {
-        return $a['timestamp'] - $b['timestamp'];
-    });
+    // Format data with rounded values
+    $formattedData = [];
+    foreach ($result['data'] as $entry) {
+        $dataPoint = ['timestamp' => $entry['timestamp']];
+        foreach ($result['sources'] as $source) {
+            $dataPoint[$source] = isset($entry[$source]) && $entry[$source] !== null
+                ? round($entry[$source], 2)
+                : null;
+        }
+        $formattedData[] = $dataPoint;
+    }
 
     return [
         'success' => true,
