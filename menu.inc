@@ -11,6 +11,11 @@
 # entries to display additional menu items such as the 3 items under the
 # help menu in this example template.
 
+# Check if multi-sync metrics is enabled for conditional menu entry
+include_once __DIR__ . '/lib/config.php';
+$watcherConfig = readPluginConfig();
+$showMultiSyncMenu = !empty($watcherConfig['multiSyncMetricsEnabled']);
+
 $menuEntries = Array(
 	Array(
 		'text' => 'Watcher - Config',
@@ -43,6 +48,19 @@ $menuEntries = Array(
 		'wrap' => 1
 	)
 );
+
+// Add All Systems Metrics menu entry only if enabled
+if ($showMultiSyncMenu) {
+	// Insert before the Help entry (at index 4, pushing Help to index 5)
+	array_splice($menuEntries, 4, 0, [
+		Array(
+			'text' => 'Watcher - All Systems',
+			'type' => 'status',
+			'page' => 'allMetricsUI.php',
+			'wrap' => 1
+		)
+	]);
+}
 
 ##############################################################################
 # Display the menu entries for this plugin.

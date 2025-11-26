@@ -27,6 +27,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['save_settings'])) {
     $maxFailures = intval($_POST['maxFailures']);
     $networkAdapter = trim($_POST['networkAdapter']);
     $collectdEnabled = isset($_POST['collectdEnabled']) ? 'true' : 'false';
+    $multiSyncMetricsEnabled = isset($_POST['multiSyncMetricsEnabled']) ? 'true' : 'false';
 
     // If 'default' is selected, auto-detect and save the actual interface
     if ($networkAdapter === 'default') {
@@ -72,7 +73,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['save_settings'])) {
             'maxFailures' => $maxFailures,
             'networkAdapter' => $networkAdapter,
             'testHosts' => implode(',', $testHosts),
-            'collectdEnabled' => $collectdEnabled
+            'collectdEnabled' => $collectdEnabled,
+            'multiSyncMetricsEnabled' => $multiSyncMetricsEnabled
         ];
 
         foreach ($settingsToSave as $settingName => $settingValue) {
@@ -133,6 +135,23 @@ if ($gatewaySuggestion) {
 }
 $hostPlaceholder .= ')';
 $gatewayInputValue = ($gatewaySuggestion && !$gatewayAlreadyConfigured) ? $gatewaySuggestion : '';
+
+// Detect if this FPP instance is in player mode (for multisync metrics feature)
+$isPlayerMode = isPlayerMode();
+
+// Count remote systems for display
+$remoteSystemCount = 0;
+if ($isPlayerMode) {
+    include_once __DIR__ . '/lib/apiCall.php';
+    $multiSyncData = apiCall('GET', 'http://127.0.0.1/api/fppd/multiSyncSystems', [], true, 5);
+    if ($multiSyncData && isset($multiSyncData['systems']) && is_array($multiSyncData['systems'])) {
+        foreach ($multiSyncData['systems'] as $system) {
+            if (empty($system['local']) && isset($system['fppModeString']) && $system['fppModeString'] === 'remote') {
+                $remoteSystemCount++;
+            }
+        }
+    }
+}
 ?>
 
     <div class="watcherSettingsContainer">
@@ -288,12 +307,45 @@ $gatewayInputValue = ($gatewaySuggestion && !$gatewayAlreadyConfigured) ? $gatew
                             storage to keep historical data for these metrics.  On Linux we also run this process at a lower priority.  This ensures FPP
                             performance is not impacted while still collecting useful system metrics.
                             <p></p>
-                            These metrics are displayed in the. "Watcher - Metrics" dashboard. 
+                            These metrics are displayed in the. "Watcher - Metrics" dashboard.
                             Disabling this service will stop metric collection and reduce system overhead, but historical data will be preserved.
                         </div>
                     </div>
                 </div>
             </div>
+
+            <?php if ($isPlayerMode): ?>
+            <!-- Multi-Sync Metrics Settings (Player Mode Only) -->
+            <div class="settingsPanel" style="margin-top: 2rem;">
+                <div class="panelTitle">
+                    <i class="fas fa-network-wired"></i> Multi-Sync Metrics
+                </div>
+
+                <!-- Enable/Disable Multi-Sync Metrics -->
+                <div class="row settingRow">
+                    <div class="col-md-4 col-lg-3">
+                        <label class="settingLabel">
+                            <input type="checkbox" id="multiSyncMetricsEnabled" name="multiSyncMetricsEnabled" class="form-check-input" value="1"
+                                <?php echo (!empty($config['multiSyncMetricsEnabled'])) ? 'checked' : ''; ?>>
+                            Enable Multi-Sync Metrics Dashboard
+                        </label>
+                    </div>
+                    <div class="col-md-8">
+                        <div class="settingDescription">
+                            Enable a dashboard that aggregates system metrics from all remote FPP systems in your multi-sync setup.
+                            This allows you to monitor CPU, memory, disk, and other metrics for all connected remotes from a single page.
+                            <p></p>
+                            <strong>Note:</strong> Remote systems must also have the Watcher plugin installed with collectd enabled
+                            for their metrics to be collected.
+                            <p></p>
+                            <span style="display: inline-block; background: #e9ecef; border: 1px solid #adb5bd; border-radius: 4px; padding: 0.4em 0.8em; font-weight: 500;">
+                                <i class="fas fa-server" style="color: #495057;"></i> <?php echo $remoteSystemCount; ?> remote system(s) detected
+                            </span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <?php endif; ?>
 
             <!-- Form Actions -->
             <div class="formActions">

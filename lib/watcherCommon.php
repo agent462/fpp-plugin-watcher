@@ -1,10 +1,11 @@
 <?php
 include_once "/opt/fpp/www/common.php";
+include_once __DIR__ . "/apiCall.php";
 
 global $settings;
 
 define("WATCHERPLUGINNAME", 'fpp-plugin-watcher');
-define("WATCHERVERSION", 'v1.1.0');
+define("WATCHERVERSION", 'v1.2.0');
 
 define("WATCHERPLUGINDIR", $settings['pluginDirectory']."/".WATCHERPLUGINNAME."/");
 define("WATCHERCONFIGFILELOCATION", $settings['configDirectory']."/plugin.".WATCHERPLUGINNAME);
@@ -20,7 +21,8 @@ define("WATCHERDEFAULTSETTINGS",
         'networkAdapter' => 'default',
         'testHosts' => '8.8.8.8,1.1.1.1',
         'metricsRotationInterval' => 1800,
-        'collectdEnabled' => false)
+        'collectdEnabled' => false,
+        'multiSyncMetricsEnabled' => false)
         );
 
 // Ensure plugin-created files are owned by the FPP user/group for web access
@@ -64,8 +66,6 @@ function logMessage($message, $file = WATCHERLOGFILE) {
 
 // Function to fetch network interfaces from FPP API
 function fetchWatcherNetworkInterfaces() {
-    include_once __DIR__ . "/apiCall.php";
-
     $result = apiCall('GET', 'http://127.0.0.1/api/network/interface', [], true);
 
     if ($result === false || !is_array($result)) {
@@ -210,5 +210,17 @@ function detectGatewayForInterface($interface) {
 
     logMessage("Gateway detection: Found reachable gateway '$gateway' for interface '$interface'");
     return $gateway;
+}
+
+// Check if this FPP instance is running in player mode
+function isPlayerMode() {
+    $result = apiCall('GET', 'http://127.0.0.1/api/fppd/status', [], true, 5);
+
+    if ($result === false || !isset($result['mode_name'])) {
+        logMessage("isPlayerMode: Failed to determine mode from FPP status");
+        return false;
+    }
+
+    return $result['mode_name'] === 'player';
 }
 ?>

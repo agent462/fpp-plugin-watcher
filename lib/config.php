@@ -29,6 +29,7 @@ function prepareConfig($config) {
     // Normalize boolean flags (INI parsing returns strings)
     normalizeBoolean($config, 'connectivityCheckEnabled', false);
     normalizeBoolean($config, 'collectdEnabled', true);
+    normalizeBoolean($config, 'multiSyncMetricsEnabled', false);
 
     // Process testHosts into an array
     if (isset($config['testHosts'])) {
