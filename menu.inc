@@ -54,7 +54,7 @@ if ($showMultiSyncMenu) {
 	// Insert before the Help entry (at index 4, pushing Help to index 5)
 	array_splice($menuEntries, 4, 0, [
 		Array(
-			'text' => 'Watcher - All Systems',
+			'text' => 'Watcher - Remote Systems',
 			'type' => 'status',
 			'page' => 'allMetricsUI.php',
 			'wrap' => 1

@@ -554,7 +554,7 @@ if ($showDashboard) {
                 <div class="systemHeader">
                     <div>
                         <div class="systemName">${escapeHtml(metrics.hostname)}</div>
-                        <div class="systemInfo">${escapeHtml(metrics.address)} | ${escapeHtml(metrics.model)} | FPP ${escapeHtml(metrics.version)}</div>
+                        <div class="systemInfo"><a href="http://${escapeHtml(metrics.address)}" target="_blank" style="color: #007bff; text-decoration: none;">${escapeHtml(metrics.address)}</a> | ${escapeHtml(metrics.model)} | FPP ${escapeHtml(metrics.version)}</div>
                     </div>
                     <div class="systemStatus ${statusClass}">${statusText}</div>
                 </div>
