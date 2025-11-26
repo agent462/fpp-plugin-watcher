@@ -174,7 +174,7 @@ if ($showDashboard) {
 
 <div class="allSystemsContainer">
     <h2 style="margin-bottom: 1.5rem; color: #212529;">
-        <i class="fas fa-server"></i> All Systems Metrics Dashboard
+        <i class="fas fa-server"></i> All Remote Systems Metrics Dashboard
     </h2>
 
     <?php if (!$isEnabled): ?>
@@ -282,7 +282,10 @@ if ($showDashboard) {
             cpu: null,
             memory: null,
             disk: null,
-            load: null
+            load: null,
+            temperature: null,
+            wireless: null,
+            ping: null
         };
 
         try {
@@ -337,6 +340,89 @@ if ($showDashboard) {
                 }
             } catch (e) { }
 
+            // Fetch temperature metrics (thermal zones)
+            try {
+                const tempData = await fetchJson(`${baseUrl}/metrics/thermal?hours=${hours}`);
+                if (tempData.success && tempData.data && tempData.data.length > 0 && tempData.zones && tempData.zones.length > 0) {
+                    // Find a thermal_zone with actual temperature data (skip cooling_device, etc.)
+                    let zoneKey = null;
+                    let validTemp = [];
+
+                    // Prefer thermal_zone* over other zone types
+                    const thermalZones = tempData.zones.filter(z => z.startsWith('thermal_zone'));
+                    const zonesToTry = thermalZones.length > 0 ? thermalZones : tempData.zones;
+
+                    for (const zone of zonesToTry) {
+                        const filtered = tempData.data.filter(d => d[zone] !== null);
+                        if (filtered.length > 0) {
+                            zoneKey = zone;
+                            validTemp = filtered;
+                            break;
+                        }
+                    }
+
+                    if (zoneKey && validTemp.length > 0) {
+                        const latestTemp = validTemp[validTemp.length - 1][zoneKey];
+                        const avgTemp = validTemp.reduce((a, b) => a + b[zoneKey], 0) / validTemp.length;
+                        // Transform data to use 'temperature' as the key for chart rendering
+                        const chartData = tempData.data.map(d => ({
+                            timestamp: d.timestamp,
+                            temperature: d[zoneKey]
+                        }));
+                        result.temperature = { current: latestTemp, average: avgTemp, data: chartData, zone: zoneKey };
+                    }
+                }
+            } catch (e) { }
+
+            // Fetch wireless metrics
+            try {
+                const wirelessData = await fetchJson(`${baseUrl}/metrics/wireless?hours=${hours}`);
+                if (wirelessData.success && wirelessData.data && wirelessData.data.length > 0 && wirelessData.interfaces && wirelessData.interfaces.length > 0) {
+                    // Use the first wireless interface (usually wlan0)
+                    const iface = wirelessData.interfaces[0];
+                    const powerKey = `${iface}_signal_power`;
+                    const qualityKey = `${iface}_signal_quality`;
+                    const noiseKey = `${iface}_signal_noise`;
+
+                    const validWireless = wirelessData.data.filter(d => d[powerKey] !== null);
+                    if (validWireless.length > 0) {
+                        const latestWireless = validWireless[validWireless.length - 1];
+                        // Transform data to use 'signal_dbm' as the key for chart rendering
+                        const chartData = wirelessData.data.map(d => ({
+                            timestamp: d.timestamp,
+                            signal_dbm: d[powerKey]
+                        }));
+                        result.wireless = {
+                            signal: latestWireless[powerKey],
+                            noise: latestWireless[noiseKey],
+                            quality: latestWireless[qualityKey],
+                            data: chartData,
+                            interface: iface
+                        };
+                    }
+                }
+            } catch (e) { }
+
+            // Fetch ping latency metrics (rollup data)
+            try {
+                const pingData = await fetchJson(`${baseUrl}/metrics/ping/rollup?hours=${hours}`);
+                if (pingData.success && pingData.data && pingData.data.length > 0) {
+                    const validPing = pingData.data.filter(d => d.avg_latency !== null);
+                    if (validPing.length > 0) {
+                        const latestPing = validPing[validPing.length - 1];
+                        const avgLatency = validPing.reduce((a, b) => a + b.avg_latency, 0) / validPing.length;
+                        result.ping = {
+                            current: latestPing.avg_latency,
+                            average: avgLatency,
+                            min: Math.min(...validPing.map(d => d.min_latency)),
+                            max: Math.max(...validPing.map(d => d.max_latency)),
+                            data: pingData.data,
+                            tier: pingData.tier_info ? pingData.tier_info.label : '5-min averages'
+                        };
+                    }
+                }
+            } catch (e) { }
+
         } catch (error) {
             result.online = false;
             result.error = error.message || 'Failed to connect';
@@ -375,6 +461,27 @@ if ($showDashboard) {
             let loadValue = '--';
             if (metrics.load) loadValue = metrics.load.shortterm.toFixed(2);
 
+            let tempValue = '--', tempClass = '';
+            if (metrics.temperature) {
+                tempValue = metrics.temperature.current.toFixed(1) + '°C';
+                if (metrics.temperature.current > 80) tempClass = 'danger';
+                else if (metrics.temperature.current > 70) tempClass = 'warning';
+            }
+
+            let wirelessValue = '--', wirelessClass = '';
+            if (metrics.wireless && metrics.wireless.signal !== null) {
+                wirelessValue = metrics.wireless.signal.toFixed(0) + ' dBm';
+                if (metrics.wireless.signal < -80) wirelessClass = 'danger';
+                else if (metrics.wireless.signal < -70) wirelessClass = 'warning';
+            }
+
+            let pingValue = '--', pingClass = '';
+            if (metrics.ping && metrics.ping.current !== null) {
+                pingValue = metrics.ping.current.toFixed(1) + ' ms';
+                if (metrics.ping.current > 100) pingClass = 'danger';
+                else if (metrics.ping.current > 50) pingClass = 'warning';
+            }
+
             metricsHtml = `
                 <div class="metricsGrid">
                     <div class="metricItem">
@@ -393,6 +500,21 @@ if ($showDashboard) {
                         <div class="metricLabel">Load (1min)</div>
                         <div class="metricValue">${loadValue}</div>
                     </div>
+                    ${metrics.temperature ? `
+                    <div class="metricItem">
+                        <div class="metricLabel">Temperature</div>
+                        <div class="metricValue ${tempClass}">${tempValue}</div>
+                    </div>` : ''}
+                    ${metrics.wireless ? `
+                    <div class="metricItem">
+                        <div class="metricLabel">WiFi Signal</div>
+                        <div class="metricValue ${wirelessClass}">${wirelessValue}</div>
+                    </div>` : ''}
+                    ${metrics.ping ? `
+                    <div class="metricItem">
+                        <div class="metricLabel">Ping Latency</div>
+                        <div class="metricValue ${pingClass}">${pingValue}</div>
+                    </div>` : ''}
                 </div>
                 <div class="chartsContainer">
                     <div class="chartWrapper">
@@ -403,6 +525,21 @@ if ($showDashboard) {
                         <div class="chartTitle"><i class="fas fa-memory"></i> Free Memory</div>
                         <canvas id="memoryChart-${index}" height="150"></canvas>
                     </div>
+                    ${metrics.temperature ? `
+                    <div class="chartWrapper">
+                        <div class="chartTitle"><i class="fas fa-thermometer-half"></i> Temperature</div>
+                        <canvas id="tempChart-${index}" height="150"></canvas>
+                    </div>` : ''}
+                    ${metrics.wireless ? `
+                    <div class="chartWrapper">
+                        <div class="chartTitle"><i class="fas fa-wifi"></i> WiFi Signal</div>
+                        <canvas id="wirelessChart-${index}" height="150"></canvas>
+                    </div>` : ''}
+                    ${metrics.ping ? `
+                    <div class="chartWrapper">
+                        <div class="chartTitle"><i class="fas fa-network-wired"></i> Ping Latency</div>
+                        <canvas id="pingChart-${index}" height="150"></canvas>
+                    </div>` : ''}
                 </div>
             `;
         } else {
@@ -450,9 +587,15 @@ if ($showDashboard) {
         // Determine unit and formatting based on metric type
         const isPercent = valueKey === 'cpu_usage';
         const isMB = valueKey === 'free_mb';
+        const isTemp = valueKey === 'temperature';
+        const isSignal = valueKey === 'signal_dbm';
+        const isLatency = valueKey === 'avg_latency';
         const formatValue = (val) => {
             if (isPercent) return val.toFixed(1) + '%';
             if (isMB) return val.toFixed(0) + ' MB';
+            if (isTemp) return val.toFixed(1) + '°C';
+            if (isSignal) return val.toFixed(0) + ' dBm';
+            if (isLatency) return val.toFixed(1) + ' ms';
             return val.toFixed(2);
         };
 
@@ -495,7 +638,22 @@ if ($showDashboard) {
                     }
                 },
                 scales: {
-                    x: { type: 'time', display: false },
+                    x: {
+                        type: 'time',
+                        display: true,
+                        grid: { display: false },
+                        ticks: {
+                            maxTicksLimit: 6,
+                            font: { size: 10 },
+                            color: '#6c757d'
+                        },
+                        time: {
+                            displayFormats: {
+                                hour: 'h:mm a',
+                                day: 'MMM d'
+                            }
+                        }
+                    },
                     y: { beginAtZero: isPercent, display: true, grid: { display: false } }
                 }
             }
@@ -562,6 +720,15 @@ if ($showDashboard) {
                 }
                 if (metrics.memory && metrics.memory.data) {
                     renderMiniChart(`memoryChart-${index}`, metrics.memory.data, 'Memory MB', 'rgb(102, 126, 234)', 'free_mb');
+                }
+                if (metrics.temperature && metrics.temperature.data) {
+                    renderMiniChart(`tempChart-${index}`, metrics.temperature.data, 'Temp °C', 'rgb(255, 159, 64)', 'temperature');
+                }
+                if (metrics.wireless && metrics.wireless.data) {
+                    renderMiniChart(`wirelessChart-${index}`, metrics.wireless.data, 'Signal dBm', 'rgb(75, 192, 192)', 'signal_dbm');
+                }
+                if (metrics.ping && metrics.ping.data) {
+                    renderMiniChart(`pingChart-${index}`, metrics.ping.data, 'Latency ms', 'rgb(153, 102, 255)', 'avg_latency');
                 }
             }
         });
