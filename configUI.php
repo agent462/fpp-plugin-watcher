@@ -29,6 +29,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['save_settings'])) {
     $collectdEnabled = isset($_POST['collectdEnabled']) ? 'true' : 'false';
     $multiSyncMetricsEnabled = isset($_POST['multiSyncMetricsEnabled']) ? 'true' : 'false';
     $multiSyncPingEnabled = isset($_POST['multiSyncPingEnabled']) ? 'true' : 'false';
+    $multiSyncPingInterval = intval($_POST['multiSyncPingInterval'] ?? 60);
     $falconMonitorEnabled = isset($_POST['falconMonitorEnabled']) ? 'true' : 'false';
 
     // If 'default' is selected, auto-detect and save the actual interface
@@ -62,6 +63,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['save_settings'])) {
     if (empty($testHosts)) {
         $errors[] = "At least one test host must be specified";
     }
+    if ($multiSyncPingInterval < 10 || $multiSyncPingInterval > 300) {
+        $errors[] = "Multi-sync ping interval must be between 10 and 300 seconds";
+    }
 
     if (empty($errors)) {
         // Check if collectdEnabled changed
@@ -78,6 +82,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['save_settings'])) {
             'collectdEnabled' => $collectdEnabled,
             'multiSyncMetricsEnabled' => $multiSyncMetricsEnabled,
             'multiSyncPingEnabled' => $multiSyncPingEnabled,
+            'multiSyncPingInterval' => $multiSyncPingInterval,
             'falconMonitorEnabled' => $falconMonitorEnabled
         ];
 
@@ -364,8 +369,22 @@ if ($isPlayerMode) {
                             This tracks network latency and availability between this player and all remote FPP systems,
                             providing historical ping metrics and charts similar to the connectivity check.
                             <p></p>
-                            <strong>Note:</strong> Pings are sent every 60 seconds to each remote system.
-                            This does not require the Watcher plugin on remote systems.
+                            <strong>Note:</strong> This does not require the Watcher plugin on remote systems.
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Multi-Sync Ping Interval (sub-setting) -->
+                <div class="row settingRow" style="margin-left: 2rem; padding-left: 1rem; border-left: 3px solid #dee2e6;">
+                    <div class="col-md-4 col-lg-3">
+                        <label class="settingLabel" for="multiSyncPingInterval">Ping Interval (seconds)</label>
+                    </div>
+                    <div class="col-md-8">
+                        <input type="number" id="multiSyncPingInterval" name="multiSyncPingInterval" class="form-control"
+                            min="10" max="300" value="<?php echo htmlspecialchars($config['multiSyncPingInterval'] ?? WATCHERDEFAULTSETTINGS['multiSyncPingInterval']); ?>">
+                        <div class="settingDescription">
+                            How frequently to ping each remote multi-sync system (10-300 seconds).
+                            Lower values provide more granular monitoring but increase network traffic.
                         </div>
                     </div>
                 </div>

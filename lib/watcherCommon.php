@@ -4,12 +4,9 @@ include_once __DIR__ . "/apiCall.php";
 
 global $settings;
 
+$_watcherPluginInfo = @json_decode(file_get_contents(__DIR__ . '/../pluginInfo.json'), true); // Parse version from pluginInfo.json
 define("WATCHERPLUGINNAME", 'fpp-plugin-watcher');
-
-// Parse version from pluginInfo.json
-$_watcherPluginInfo = @json_decode(file_get_contents(__DIR__ . '/../pluginInfo.json'), true);
 define("WATCHERVERSION", 'v' . ($_watcherPluginInfo['version'] ?? '0.0.0'));
-
 define("WATCHERPLUGINDIR", $settings['pluginDirectory']."/".WATCHERPLUGINNAME."/");
 define("WATCHERCONFIGFILELOCATION", $settings['configDirectory']."/plugin.".WATCHERPLUGINNAME);
 define("WATCHERLOGFILE", $settings['logDirectory']."/".WATCHERPLUGINNAME.".log");
@@ -28,6 +25,7 @@ define("WATCHERDEFAULTSETTINGS",
         'collectdEnabled' => true,
         'multiSyncMetricsEnabled' => false,
         'multiSyncPingEnabled' => false,
+        'multiSyncPingInterval' => 60,
         'falconMonitorEnabled' => false)
         );
 

@@ -96,10 +96,13 @@ $defaultAdapter = $configuredAdapter;
             <canvas id="memoryChart" style="max-height: 400px;"></canvas>
         </div>
 
-        <!-- Disk Free Chart -->
+        <!-- Disk Status + Chart -->
         <div class="chartCard">
             <div class="chartTitle">
                 <span><i class="fas fa-hdd"></i> Disk Free Space (Root)</span>
+            </div>
+            <div id="diskStatusBar" class="systemStatusBar" style="display: none; background: #f8f9fa; padding: 1rem; border-radius: 6px; margin-bottom: 1.5rem; border: 1px solid #e9ecef;">
+                <!-- Disk status will be populated here -->
             </div>
             <canvas id="diskChart" style="max-height: 400px;"></canvas>
         </div>
@@ -120,10 +123,13 @@ $defaultAdapter = $configuredAdapter;
             <canvas id="networkChart" style="max-height: 400px;"></canvas>
         </div>
 
-        <!-- Thermal Zones Chart -->
+        <!-- Temperature Status + Chart -->
         <div class="chartCard" id="thermalCard" style="display: none;">
             <div class="chartTitle">
                 <span><i class="fas fa-thermometer-half"></i> Temperature (Thermal Zones)</span>
+            </div>
+            <div id="temperatureStatusBar" class="systemStatusBar" style="display: none; background: #f8f9fa; padding: 1rem; border-radius: 6px; margin-bottom: 1.5rem; border: 1px solid #e9ecef;">
+                <!-- Temperature status will be populated here -->
             </div>
             <canvas id="thermalChart" style="max-height: 400px;"></canvas>
         </div>
@@ -273,6 +279,155 @@ $defaultAdapter = $configuredAdapter;
                 options
             });
         }
+    }
+
+    let useFahrenheit = false;
+
+    // Fetch system status for real-time temperature and disk info
+    async function loadSystemStatus() {
+        try {
+            // Check for cached temperature preference
+            const cachedTempSetting = localStorage.getItem('temperatureInF');
+            if (cachedTempSetting !== null) {
+                useFahrenheit = (cachedTempSetting === "true" || cachedTempSetting === true);
+            } else {
+                try {
+                    const tempSettingResponse = await fetch('/api/settings/temperatureInF');
+                    const tempSettingData = await tempSettingResponse.json();
+                    useFahrenheit = (tempSettingData.value === "1" || tempSettingData.value === 1);
+                    localStorage.setItem('temperatureInF', useFahrenheit);
+                } catch (e) {
+                    useFahrenheit = false;
+                }
+            }
+
+            const response = await fetch('/api/system/status');
+            const status = await response.json();
+
+            updateTemperatureStatus(status);
+            updateDiskStatus(status);
+        } catch (error) {
+            console.error('Error loading system status:', error);
+        }
+    }
+
+    function formatTemperature(celsius) {
+        if (useFahrenheit) {
+            const fahrenheit = (celsius * 9/5) + 32;
+            return `${fahrenheit.toFixed(1)}°F`;
+        }
+        return `${celsius.toFixed(1)}°C`;
+    }
+
+    function getTempStatus(tempCelsius) {
+        if (tempCelsius < 40) return { text: 'Cool', color: '#38ef7d', icon: '❄️' };
+        if (tempCelsius < 60) return { text: 'Normal', color: '#28a745', icon: '✅' };
+        if (tempCelsius < 80) return { text: 'Warm', color: '#ffc107', icon: '⚠️' };
+        return { text: 'Hot', color: '#f5576c', icon: '🔥' };
+    }
+
+    function updateTemperatureStatus(status) {
+        const container = document.getElementById('temperatureStatusBar');
+        if (!status.sensors || status.sensors.length === 0) {
+            container.style.display = 'none';
+            return;
+        }
+
+        const tempSensors = status.sensors.filter(s => s.valueType === 'Temperature');
+        if (tempSensors.length === 0) {
+            container.style.display = 'none';
+            return;
+        }
+
+        let html = '';
+        const minTemp = formatTemperature(0);
+        const maxTemp = formatTemperature(100);
+
+        tempSensors.forEach((sensor, index) => {
+            const tempCelsius = parseFloat(sensor.value) || 0;
+            const tempStatus = getTempStatus(tempCelsius);
+            const maxTempCelsius = 100;
+            const tempPercent = Math.min((tempCelsius / maxTempCelsius) * 100, 100);
+            const label = sensor.label.replace(':', '').trim();
+            const isLast = index === tempSensors.length - 1;
+            const displayTemp = formatTemperature(tempCelsius);
+
+            html += `
+                <div style="${isLast ? '' : 'margin-bottom: 1.5rem;'}">
+                    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.5rem;">
+                        <div style="display: flex; align-items: center; gap: 0.5rem;">
+                            <i class="fas fa-thermometer-half" style="color: ${tempStatus.color};"></i>
+                            <strong>${label}</strong>
+                        </div>
+                        <span style="font-size: 1.5rem; font-weight: bold; color: ${tempStatus.color};">
+                            ${displayTemp}
+                        </span>
+                    </div>
+                    <div class="progressBar" style="background-color: #e9ecef; height: 24px; border-radius: 4px; overflow: hidden;">
+                        <div style="width: ${tempPercent}%; height: 100%; background: ${tempStatus.color}; display: flex; align-items: center; justify-content: center; color: white; font-size: 0.875rem; font-weight: 500;">
+                            ${displayTemp}
+                        </div>
+                    </div>
+                    <div style="display: flex; justify-content: space-between; margin-top: 0.5rem; font-size: 0.75rem; color: #6c757d;">
+                        <span>${minTemp}</span>
+                        <span>Status: ${tempStatus.icon} ${tempStatus.text}</span>
+                        <span>${maxTemp}</span>
+                    </div>
+                </div>
+            `;
+        });
+
+        container.innerHTML = html;
+        container.style.display = 'block';
+    }
+
+    function formatBytes(bytes) {
+        if (bytes === 0) return '0 Bytes';
+        const k = 1024;
+        const sizes = ['Bytes', 'KB', 'MB', 'GB', 'TB'];
+        const i = Math.floor(Math.log(bytes) / Math.log(k));
+        return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
+    }
+
+    function updateDiskStatus(status) {
+        const container = document.getElementById('diskStatusBar');
+        if (!status.advancedView?.Utilization?.Disk?.Root) {
+            container.style.display = 'none';
+            return;
+        }
+
+        const diskInfo = status.advancedView.Utilization.Disk.Root;
+        const freeBytes = diskInfo.Free || 0;
+        const totalBytes = diskInfo.Total || 1;
+        const usedBytes = totalBytes - freeBytes;
+        const usedPercent = (usedBytes / totalBytes) * 100;
+
+        let progressColor = '#38ef7d';
+        if (usedPercent > 90) {
+            progressColor = '#f5576c';
+        } else if (usedPercent > 75) {
+            progressColor = '#ffc107';
+        }
+
+        const html = `
+            <div>
+                <div style="display: flex; justify-content: space-between; margin-bottom: 0.5rem;">
+                    <strong>Root Filesystem</strong>
+                    <span style="font-weight: 500;">${formatBytes(usedBytes)} / ${formatBytes(totalBytes)}</span>
+                </div>
+                <div class="progressBar" style="background-color: #e9ecef; height: 24px; border-radius: 4px; overflow: hidden;">
+                    <div style="width: ${usedPercent}%; height: 100%; background: ${progressColor}; display: flex; align-items: center; justify-content: center; color: white; font-size: 0.875rem; font-weight: 500;">
+                        ${usedPercent.toFixed(1)}% Used
+                    </div>
+                </div>
+                <div style="margin-top: 0.5rem; font-size: 0.875rem; color: #6c757d;">
+                    <i class="fas fa-check-circle" style="color: #28a745;"></i> Available: ${formatBytes(freeBytes)}
+                </div>
+            </div>
+        `;
+
+        container.innerHTML = html;
+        container.style.display = 'block';
     }
 
     const METRIC_DEFINITIONS = [
@@ -734,6 +889,7 @@ $defaultAdapter = $configuredAdapter;
             }
 
             await loadInterfaces();
+            await loadSystemStatus();
             await runMetricUpdates();
 
             document.getElementById('loadingIndicator').style.display = 'none';

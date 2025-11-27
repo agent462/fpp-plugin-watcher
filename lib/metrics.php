@@ -76,16 +76,6 @@ function getPingMetrics($hoursBack = 24) {
 }
 
 /**
- * Get hostname for collectd RRD path
- *
- * @deprecated Use COLLECTD_HOSTNAME constant directly for better performance
- * @return string The collectd hostname
- */
-function getCollectdHostname() {
-    return COLLECTD_HOSTNAME;
-}
-
-/**
  * Fetch collectd RRD metrics for a specific metric type
  *
  * @param string $category Category path (e.g., 'memory', 'cpu-0', 'interface-eth0')

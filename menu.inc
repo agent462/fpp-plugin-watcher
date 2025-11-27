@@ -26,12 +26,6 @@ $menuEntries = Array(
 		'wrap' => 1
 	),
 	Array(
-		'text' => 'Watcher - System Info',
-		'type' => 'status',
-		'page' => 'displayUI.php',
-		'wrap' => 1
-	),
-	Array(
 		'text' => 'Watcher - Metrics',
 		'type' => 'status',
 		'page' => 'metricsUI.php',
