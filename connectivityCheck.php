@@ -5,6 +5,7 @@ include_once __DIR__ ."/lib/watcherCommon.php";
 include_once __DIR__ ."/lib/resetNetworkAdapter.php";
 include_once __DIR__ ."/lib/config.php"; //Check for Config file and bootstrap if needed
 include_once __DIR__ ."/lib/pingMetricsRollup.php"; //Rollup and rotation management
+include_once __DIR__ ."/lib/multiSyncPingMetrics.php"; //Multi-sync ping metrics
 
 $config = readPluginConfig(); // Load and prepare configuration
 
@@ -206,11 +207,21 @@ $lastPingStats = [];
 $lastRotationCheck = 0; // Track when rotation was last checked
 $lastRollupCheck = 0; // Track when rollup was last processed
 
+// Multi-sync ping tracking
+$lastMultiSyncCheck = 0; // Track when multi-sync systems were last pinged
+$lastMultiSyncRotationCheck = 0; // Track when multi-sync metrics rotation was last checked
+$lastMultiSyncRollupCheck = 0; // Track when multi-sync rollup was last processed
+$multiSyncCheckInterval = 60; // Ping multi-sync hosts every 60 seconds
+$cachedRemoteSystems = null; // Cache remote systems list
+$lastRemoteSystemsFetch = 0; // Track when remote systems were last fetched
+$remoteSystemsCacheInterval = 300; // Refresh remote systems list every 5 minutes
+
 logMessage("=== Watcher Plugin Started ===");
 logMessage("Check Interval: {$config['checkInterval']} seconds");
 logMessage("Max Failures: {$config['maxFailures']}");
 logMessage("Network Adapter: $networkAdapterDisplay");
 logMessage("Test Hosts: " . implode(', ', $config['testHosts']));
+logMessage("Multi-Sync Ping Monitoring: " . ($config['multiSyncPingEnabled'] ? 'Enabled' : 'Disabled'));
 
 while (true) {
     $currentTime = time(); // Single timestamp for this iteration
@@ -234,6 +245,38 @@ while (true) {
         if (($currentTime - $lastRollupCheck) >= $rollupInterval) {
             processAllRollups();
             $lastRollupCheck = $currentTime;
+        }
+
+        // Multi-sync host pinging (only if enabled and in player mode)
+        if ($config['multiSyncPingEnabled'] && isPlayerMode()) {
+            // Refresh remote systems list periodically
+            if ($cachedRemoteSystems === null || ($currentTime - $lastRemoteSystemsFetch) >= $remoteSystemsCacheInterval) {
+                $cachedRemoteSystems = getMultiSyncRemoteSystems();
+                $lastRemoteSystemsFetch = $currentTime;
+                if (!empty($cachedRemoteSystems)) {
+                    logMessage("Multi-sync: Found " . count($cachedRemoteSystems) . " remote systems to monitor");
+                }
+            }
+
+            // Ping multi-sync hosts at the configured interval
+            if (!empty($cachedRemoteSystems) && ($currentTime - $lastMultiSyncCheck) >= $multiSyncCheckInterval) {
+                $pingResults = pingMultiSyncSystems($cachedRemoteSystems, $actualNetworkAdapter);
+                $successCount = count(array_filter($pingResults, fn($r) => $r['success']));
+                $lastMultiSyncCheck = $currentTime;
+            }
+
+            // Rotate multi-sync metrics file periodically
+            $multiSyncRotationInterval = $config['metricsRotationInterval'] ?? 1800;
+            if (($currentTime - $lastMultiSyncRotationCheck) >= $multiSyncRotationInterval) {
+                rotateMultiSyncMetricsFile();
+                $lastMultiSyncRotationCheck = $currentTime;
+            }
+
+            // Process multi-sync rollups every 60 seconds
+            if (($currentTime - $lastMultiSyncRollupCheck) >= $rollupInterval) {
+                processAllMultiSyncRollups();
+                $lastMultiSyncRollupCheck = $currentTime;
+            }
         }
     } else {
         $failureCount++;

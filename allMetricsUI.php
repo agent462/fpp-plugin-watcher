@@ -1,43 +1,24 @@
 <?php
 // Load configuration to check if multi-sync metrics is enabled
 include_once __DIR__ . '/lib/config.php';
-include_once __DIR__ . '/lib/apiCall.php';
+include_once __DIR__ . '/lib/watcherCommon.php';
 $config = readPluginConfig();
+
+// Fetch local system status from FPP API
+$localSystem = apiCall('GET', 'http://127.0.0.1/api/fppd/status', [], true, 5);
+if ($localSystem === false) {
+    $localSystem = [];
+}
 
 // Check conditions
 $isEnabled = !empty($config['multiSyncMetricsEnabled']);
-$isPlayerMode = isPlayerMode();
+$isPlayerMode = ($localSystem['mode_name'] ?? '') === 'player';
 $showDashboard = $isEnabled && $isPlayerMode;
 
 // Fetch remote systems list only if dashboard should be shown
 $remoteSystems = [];
 if ($showDashboard) {
-    $multiSyncData = apiCall('GET', 'http://127.0.0.1/api/fppd/multiSyncSystems', [], true, 5);
-    if ($multiSyncData && isset($multiSyncData['systems']) && is_array($multiSyncData['systems'])) {
-        $systemsByHostname = [];
-        foreach ($multiSyncData['systems'] as $system) {
-            // Skip local systems
-            if (!empty($system['local'])) continue;
-
-            $hostname = $system['hostname'] ?? '';
-            if (empty($hostname)) continue;
-
-            // Dedupe by hostname, preferring entries with UUID
-            if (!isset($systemsByHostname[$hostname])) {
-                $systemsByHostname[$hostname] = $system;
-            } elseif (!empty($system['uuid']) && empty($systemsByHostname[$hostname]['uuid'])) {
-                // Replace with this one if it has UUID and current doesn't
-                $systemsByHostname[$hostname] = $system;
-            }
-        }
-
-        $remoteSystems = array_values($systemsByHostname);
-
-        // Sort by IP address numerically
-        usort($remoteSystems, function($a, $b) {
-            return ip2long($a['address'] ?? '0.0.0.0') - ip2long($b['address'] ?? '0.0.0.0');
-        });
-    }
+    $remoteSystems = getMultiSyncRemoteSystems();
 }
 ?>
 

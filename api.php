@@ -1,9 +1,10 @@
 <?php
 include_once __DIR__ . '/lib/watcherCommon.php';
-include_once __DIR__ . '/lib/metrics.php';
-include_once __DIR__ . '/lib/pingMetricsRollup.php';
-include_once WATCHERPLUGINDIR . 'lib/falconController.php';
-include_once WATCHERPLUGINDIR . 'lib/config.php';
+include_once WATCHERPLUGINDIR . '/lib/metrics.php';
+include_once WATCHERPLUGINDIR . '/lib/pingMetricsRollup.php';
+include_once WATCHERPLUGINDIR . '/lib/multiSyncPingMetrics.php';
+include_once WATCHERPLUGINDIR . '/lib/falconController.php';
+include_once WATCHERPLUGINDIR . '/lib/config.php';
 /**
  * Returns the API endpoints for the fpp-plugin-watcher plugin
  */
@@ -75,6 +76,31 @@ function getEndpointsfpppluginwatcher() {
         'method' => 'GET',
         'endpoint' => 'metrics/ping/rollup/:tier',
         'callback' => 'fpppluginWatcherPingRollupTier');
+    array_push($result, $ep);
+
+    // Multi-sync ping metrics endpoints
+    $ep = array(
+        'method' => 'GET',
+        'endpoint' => 'metrics/multisync/ping/raw',
+        'callback' => 'fpppluginWatcherMultiSyncPingRaw');
+    array_push($result, $ep);
+
+    $ep = array(
+        'method' => 'GET',
+        'endpoint' => 'metrics/multisync/ping/rollup',
+        'callback' => 'fpppluginWatcherMultiSyncPingRollup');
+    array_push($result, $ep);
+
+    $ep = array(
+        'method' => 'GET',
+        'endpoint' => 'metrics/multisync/ping/rollup/tiers',
+        'callback' => 'fpppluginWatcherMultiSyncPingRollupTiers');
+    array_push($result, $ep);
+
+    $ep = array(
+        'method' => 'GET',
+        'endpoint' => 'metrics/multisync/hosts',
+        'callback' => 'fpppluginWatcherMultiSyncHosts');
     array_push($result, $ep);
 
     $ep = array(
@@ -250,6 +276,53 @@ function fpppluginwatcherPingRollupTier() {
     $startTime = $endTime - ($hoursBack * 3600);
 
     $result = readRollupData($tier, $startTime, $endTime);
+    /** @disregard P1010 */
+    return json($result);
+}
+
+// GET /api/plugin/fpp-plugin-watcher/metrics/multisync/ping/raw
+// Returns raw multi-sync ping metrics
+function fpppluginWatcherMultiSyncPingRaw() {
+    $hoursBack = isset($_GET['hours']) ? intval($_GET['hours']) : 24;
+    $hostname = isset($_GET['hostname']) ? $_GET['hostname'] : null;
+    $result = getRawMultiSyncPingMetrics($hoursBack, $hostname);
+    /** @disregard P1010 */
+    return json($result);
+}
+
+// GET /api/plugin/fpp-plugin-watcher/metrics/multisync/ping/rollup
+// Returns multi-sync ping metrics rollup with automatic tier selection
+function fpppluginWatcherMultiSyncPingRollup() {
+    $hoursBack = isset($_GET['hours']) ? intval($_GET['hours']) : 24;
+    $hostname = isset($_GET['hostname']) ? $_GET['hostname'] : null;
+
+    $result = getMultiSyncPingMetrics($hoursBack, $hostname);
+    /** @disregard P1010 */
+    return json($result);
+}
+
+// GET /api/plugin/fpp-plugin-watcher/metrics/multisync/ping/rollup/tiers
+// Returns information about available multi-sync rollup tiers
+function fpppluginWatcherMultiSyncPingRollupTiers() {
+    $tiers = getMultiSyncRollupTiersInfo();
+    $result = [
+        'success' => true,
+        'tiers' => $tiers
+    ];
+    /** @disregard P1010 */
+    return json($result);
+}
+
+// GET /api/plugin/fpp-plugin-watcher/metrics/multisync/hosts
+// Returns list of unique hostnames from multi-sync metrics
+function fpppluginWatcherMultiSyncHosts() {
+    $hosts = getMultiSyncHostsList();
+    $result = [
+        'success' => true,
+        'count' => count($hosts),
+        'hosts' => $hosts
+    ];
+
     /** @disregard P1010 */
     return json($result);
 }

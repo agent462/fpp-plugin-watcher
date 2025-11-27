@@ -5,12 +5,16 @@ include_once __DIR__ . "/apiCall.php";
 global $settings;
 
 define("WATCHERPLUGINNAME", 'fpp-plugin-watcher');
-define("WATCHERVERSION", 'v1.2.0');
+
+// Parse version from pluginInfo.json
+$_watcherPluginInfo = @json_decode(file_get_contents(__DIR__ . '/../pluginInfo.json'), true);
+define("WATCHERVERSION", 'v' . ($_watcherPluginInfo['version'] ?? '0.0.0'));
 
 define("WATCHERPLUGINDIR", $settings['pluginDirectory']."/".WATCHERPLUGINNAME."/");
 define("WATCHERCONFIGFILELOCATION", $settings['configDirectory']."/plugin.".WATCHERPLUGINNAME);
 define("WATCHERLOGFILE", $settings['logDirectory']."/".WATCHERPLUGINNAME.".log");
 define("WATCHERPINGMETRICSFILE", $settings['logDirectory']."/".WATCHERPLUGINNAME."-ping-metrics.log");
+define("WATCHERMULTISYNCPINGMETRICSFILE", $settings['logDirectory']."/".WATCHERPLUGINNAME."-multisync-ping-metrics.log");
 define("WATCHERFPPUSER", 'fpp');
 define("WATCHERFPPGROUP", 'fpp');
 define("WATCHERDEFAULTSETTINGS",
@@ -22,7 +26,8 @@ define("WATCHERDEFAULTSETTINGS",
         'testHosts' => '8.8.8.8,1.1.1.1',
         'metricsRotationInterval' => 1800,
         'collectdEnabled' => true,
-        'multiSyncMetricsEnabled' => false)
+        'multiSyncMetricsEnabled' => false,
+        'multiSyncPingEnabled' => false)
         );
 
 // Ensure plugin-created files are owned by the FPP user/group for web access
@@ -222,5 +227,49 @@ function isPlayerMode() {
     }
 
     return $result['mode_name'] === 'player';
+}
+
+/**
+ * Fetch remote systems from multi-sync configuration
+ * Returns an array of remote systems with hostname, address, model, version
+ * Filters out local systems and deduplicates by hostname
+ */
+function getMultiSyncRemoteSystems() {
+    $multiSyncData = apiCall('GET', 'http://127.0.0.1/api/fppd/multiSyncSystems', [], true, 5);
+
+    if (!$multiSyncData || !isset($multiSyncData['systems']) || !is_array($multiSyncData['systems'])) {
+        return [];
+    }
+
+    $systemsByHostname = [];
+
+    foreach ($multiSyncData['systems'] as $system) {
+        // Skip local systems
+        if (!empty($system['local'])) {
+            continue;
+        }
+
+        $hostname = $system['hostname'] ?? '';
+        if (empty($hostname)) {
+            continue;
+        }
+
+        // Dedupe by hostname, preferring entries with UUID
+        if (!isset($systemsByHostname[$hostname])) {
+            $systemsByHostname[$hostname] = $system;
+        } elseif (!empty($system['uuid']) && empty($systemsByHostname[$hostname]['uuid'])) {
+            // Replace with this one if it has UUID and current doesn't
+            $systemsByHostname[$hostname] = $system;
+        }
+    }
+
+    $remoteSystems = array_values($systemsByHostname);
+
+    // Sort by IP address numerically
+    usort($remoteSystems, function($a, $b) {
+        return ip2long($a['address'] ?? '0.0.0.0') - ip2long($b['address'] ?? '0.0.0.0');
+    });
+
+    return $remoteSystems;
 }
 ?>

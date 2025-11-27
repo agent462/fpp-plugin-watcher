@@ -15,6 +15,7 @@
 include_once __DIR__ . '/lib/config.php';
 $watcherConfig = readPluginConfig();
 $showMultiSyncMenu = !empty($watcherConfig['multiSyncMetricsEnabled']);
+$showMultiSyncPingMenu = !empty($watcherConfig['multiSyncPingEnabled']);
 $showFalconMonitorMenu = !empty($watcherConfig['falconMonitorEnabled']);
 
 $menuEntries = Array(
@@ -63,7 +64,7 @@ if ($showFalconMonitorMenu) {
 	]);
 }
 
-// Add All Systems Metrics menu entry only if enabled
+// Add Remote Systems menu entry only if enabled
 if ($showMultiSyncMenu) {
 	// Find the Help entry index (it may have shifted due to Falcon Monitor)
 	$helpIndex = count($menuEntries) - 1;
@@ -72,6 +73,20 @@ if ($showMultiSyncMenu) {
 			'text' => 'Watcher - Remote Systems',
 			'type' => 'status',
 			'page' => 'allMetricsUI.php',
+			'wrap' => 1
+		)
+	]);
+}
+
+// Add Multi-Sync Ping menu entry only if enabled
+if ($showMultiSyncPingMenu) {
+	// Find the Help entry index (it may have shifted due to previous entries)
+	$helpIndex = count($menuEntries) - 1;
+	array_splice($menuEntries, $helpIndex, 0, [
+		Array(
+			'text' => 'Watcher - Multi-Sync Ping',
+			'type' => 'status',
+			'page' => 'multiSyncPingUI.php',
 			'wrap' => 1
 		)
 	]);

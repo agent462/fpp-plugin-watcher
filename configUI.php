@@ -28,6 +28,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['save_settings'])) {
     $networkAdapter = trim($_POST['networkAdapter']);
     $collectdEnabled = isset($_POST['collectdEnabled']) ? 'true' : 'false';
     $multiSyncMetricsEnabled = isset($_POST['multiSyncMetricsEnabled']) ? 'true' : 'false';
+    $multiSyncPingEnabled = isset($_POST['multiSyncPingEnabled']) ? 'true' : 'false';
     $falconMonitorEnabled = isset($_POST['falconMonitorEnabled']) ? 'true' : 'false';
 
     // If 'default' is selected, auto-detect and save the actual interface
@@ -76,6 +77,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['save_settings'])) {
             'testHosts' => implode(',', $testHosts),
             'collectdEnabled' => $collectdEnabled,
             'multiSyncMetricsEnabled' => $multiSyncMetricsEnabled,
+            'multiSyncPingEnabled' => $multiSyncPingEnabled,
             'falconMonitorEnabled' => $falconMonitorEnabled
         ];
 
@@ -343,6 +345,27 @@ if ($isPlayerMode) {
                             <span style="display: inline-block; background: #e9ecef; border: 1px solid #adb5bd; border-radius: 4px; padding: 0.4em 0.8em; font-weight: 500;">
                                 <i class="fas fa-server" style="color: #495057;"></i> <?php echo $remoteSystemCount; ?> remote system(s) detected
                             </span>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Enable/Disable Multi-Sync Ping Monitoring -->
+                <div class="row settingRow">
+                    <div class="col-md-4 col-lg-3">
+                        <label class="settingLabel">
+                            <input type="checkbox" id="multiSyncPingEnabled" name="multiSyncPingEnabled" class="form-check-input" value="1"
+                                <?php echo (!empty($config['multiSyncPingEnabled'])) ? 'checked' : ''; ?>>
+                            Enable Multi-Sync Ping Monitoring
+                        </label>
+                    </div>
+                    <div class="col-md-8">
+                        <div class="settingDescription">
+                            Enable continuous ping monitoring of all remote multi-sync systems.
+                            This tracks network latency and availability between this player and all remote FPP systems,
+                            providing historical ping metrics and charts similar to the connectivity check.
+                            <p></p>
+                            <strong>Note:</strong> Pings are sent every 60 seconds to each remote system.
+                            This does not require the Watcher plugin on remote systems.
                         </div>
                     </div>
                 </div>
