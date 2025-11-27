@@ -15,7 +15,8 @@ if ($showDashboard) {
     $multiSyncData = apiCall('GET', 'http://127.0.0.1/api/fppd/multiSyncSystems', [], true, 5);
     if ($multiSyncData && isset($multiSyncData['systems']) && is_array($multiSyncData['systems'])) {
         foreach ($multiSyncData['systems'] as $system) {
-            if (empty($system['local'])) {
+            // Skip local systems and those without a UUID (duplicate interfaces/IPs)
+            if (empty($system['local']) && !empty($system['uuid'])) {
                 $remoteSystems[] = $system;
             }
         }
