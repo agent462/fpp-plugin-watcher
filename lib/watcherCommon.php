@@ -27,7 +27,8 @@ define("WATCHERDEFAULTSETTINGS",
         'metricsRotationInterval' => 1800,
         'collectdEnabled' => true,
         'multiSyncMetricsEnabled' => false,
-        'multiSyncPingEnabled' => false)
+        'multiSyncPingEnabled' => false,
+        'falconMonitorEnabled' => false)
         );
 
 // Ensure plugin-created files are owned by the FPP user/group for web access
