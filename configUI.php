@@ -317,19 +317,19 @@ if ($isPlayerMode) {
             </div>
 
             <?php if ($isPlayerMode): ?>
-            <!-- Multi-Sync Metrics Settings (Player Mode Only) -->
+            <!-- Remote Metrics Settings (Player Mode Only) -->
             <div class="settingsPanel" style="margin-top: 2rem;">
                 <div class="panelTitle">
-                    <i class="fas fa-network-wired"></i> Multi-Sync Metrics
+                    <i class="fas fa-network-wired"></i> Remote Metrics
                 </div>
 
-                <!-- Enable/Disable Multi-Sync Metrics -->
+                <!-- Enable/Disable Remote Metrics -->
                 <div class="row settingRow">
                     <div class="col-md-4 col-lg-3">
                         <label class="settingLabel">
                             <input type="checkbox" id="multiSyncMetricsEnabled" name="multiSyncMetricsEnabled" class="form-check-input" value="1"
                                 <?php echo (!empty($config['multiSyncMetricsEnabled'])) ? 'checked' : ''; ?>>
-                            Enable Multi-Sync Metrics Dashboard
+                            Enable Remote Metrics Dashboard
                         </label>
                     </div>
                     <div class="col-md-8">

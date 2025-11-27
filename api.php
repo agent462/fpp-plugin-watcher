@@ -128,6 +128,12 @@ function getEndpointsfpppluginwatcher() {
 
     $ep = array(
         'method' => 'POST',
+        'endpoint' => 'falcon/test',
+        'callback' => 'fpppluginWatcherFalconTest');
+    array_push($result, $ep);
+
+    $ep = array(
+        'method' => 'POST',
         'endpoint' => 'falcon/reboot',
         'callback' => 'fpppluginWatcherFalconReboot');
     array_push($result, $ep);
@@ -430,6 +436,72 @@ function fpppluginwatcherFalconConfigGet() {
         'success' => true,
         'hosts' => $config['falconControllers'] ?? ''
     ]);
+}
+
+// POST /api/plugin/fpp-plugin-watcher/falcon/test
+// Enable or disable test mode on a Falcon controller
+function fpppluginwatcherFalconTest() {
+    // Ensure FalconController class is loaded
+    if (!class_exists('FalconController')) {
+        require_once WATCHERPLUGINDIR . 'lib/falconController.php';
+    }
+
+    $input = json_decode(file_get_contents('php://input'), true);
+
+    if (!isset($input['host'])) {
+        /** @disregard P1010 */
+        return json([
+            'success' => false,
+            'error' => 'Missing host parameter'
+        ]);
+    }
+
+    $host = trim($input['host']);
+    $enable = isset($input['enable']) ? (bool)$input['enable'] : true;
+    $testMode = isset($input['testMode']) ? intval($input['testMode']) : 5;
+
+    try {
+        $controller = new FalconController($host, 80, 5);
+
+        if (!$controller->isReachable()) {
+            /** @disregard P1010 */
+            return json([
+                'success' => false,
+                'error' => 'Controller not reachable'
+            ]);
+        }
+
+        if ($enable) {
+            $result = $controller->enableTest($testMode);
+            $action = 'enabled';
+        } else {
+            $result = $controller->disableTest();
+            $action = 'disabled';
+        }
+
+        if ($result) {
+            /** @disregard P1010 */
+            return json([
+                'success' => true,
+                'message' => "Test mode $action",
+                'host' => $host,
+                'testEnabled' => $enable,
+                'testMode' => $enable ? $testMode : null
+            ]);
+        } else {
+            /** @disregard P1010 */
+            return json([
+                'success' => false,
+                'error' => $controller->getLastError() ?: 'Failed to change test mode'
+            ]);
+        }
+    } catch (Exception $e) {
+        /** @disregard P1010 */
+        return json([
+            'success' => false,
+            'error' => $e->getMessage()
+        ]);
+    }
 }
 
 // POST /api/plugin/fpp-plugin-watcher/falcon/reboot
