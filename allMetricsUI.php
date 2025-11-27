@@ -14,9 +14,12 @@ $remoteSystems = [];
 if ($showDashboard) {
     $multiSyncData = apiCall('GET', 'http://127.0.0.1/api/fppd/multiSyncSystems', [], true, 5);
     if ($multiSyncData && isset($multiSyncData['systems']) && is_array($multiSyncData['systems'])) {
+        $seenHostnames = [];
         foreach ($multiSyncData['systems'] as $system) {
-            // Skip local systems and those without a UUID (duplicate interfaces/IPs)
-            if (empty($system['local']) && !empty($system['uuid'])) {
+            // Skip local systems and dedupe by hostname
+            $hostname = $system['hostname'] ?? '';
+            if (empty($system['local']) && !empty($hostname) && !isset($seenHostnames[$hostname])) {
+                $seenHostnames[$hostname] = true;
                 $remoteSystems[] = $system;
             }
         }
@@ -504,34 +507,34 @@ if ($showDashboard) {
 
             metricsHtml = `
                 <div class="metricsGrid">
-                    <div class="metricItem">
+                    <div class="metricItem" data-metric="cpu">
                         <div class="metricLabel">CPU Usage</div>
                         <div class="metricValue ${cpuClass}">${cpuValue}</div>
                     </div>
-                    <div class="metricItem">
+                    <div class="metricItem" data-metric="memory">
                         <div class="metricLabel">Free Memory</div>
                         <div class="metricValue ${memClass}">${memValue}</div>
                     </div>
-                    <div class="metricItem">
+                    <div class="metricItem" data-metric="disk">
                         <div class="metricLabel">Free Disk</div>
                         <div class="metricValue ${diskClass}">${diskValue}</div>
                     </div>
-                    <div class="metricItem">
+                    <div class="metricItem" data-metric="load">
                         <div class="metricLabel">Load (1min)</div>
                         <div class="metricValue">${loadValue}</div>
                     </div>
                     ${metrics.temperature ? `
-                    <div class="metricItem">
+                    <div class="metricItem" data-metric="temp">
                         <div class="metricLabel">Temperature</div>
                         <div class="metricValue ${tempClass}">${tempValue}</div>
                     </div>` : ''}
                     ${metrics.wireless ? `
-                    <div class="metricItem">
+                    <div class="metricItem" data-metric="wireless">
                         <div class="metricLabel">WiFi Signal</div>
                         <div class="metricValue ${wirelessClass}">${wirelessValue}</div>
                     </div>` : ''}
                     ${metrics.ping ? `
-                    <div class="metricItem">
+                    <div class="metricItem" data-metric="ping">
                         <div class="metricLabel">Ping Latency</div>
                         <div class="metricValue ${pingClass}">${pingValue}</div>
                     </div>` : ''}
@@ -591,6 +594,98 @@ if ($showDashboard) {
         const div = document.createElement('div');
         div.textContent = text;
         return div.innerHTML;
+    }
+
+    function updateMetricValue(card, metricName, value, className) {
+        const el = card.querySelector(`[data-metric="${metricName}"] .metricValue`);
+        if (el) {
+            el.textContent = value;
+            el.className = 'metricValue' + (className ? ' ' + className : '');
+        }
+    }
+
+    function updateSystemCard(card, metrics, index) {
+        // Update status badge
+        const statusEl = card.querySelector('.systemStatus');
+        if (statusEl) {
+            statusEl.className = `systemStatus ${metrics.online ? 'online' : 'offline'}`;
+            statusEl.textContent = metrics.online ? 'Online' : 'Offline';
+        }
+
+        if (!metrics.online) return;
+
+        // Update CPU
+        let cpuClass = '', cpuValue = '--';
+        if (metrics.cpu) {
+            cpuValue = metrics.cpu.current.toFixed(1) + '%';
+            if (metrics.cpu.current > 80) cpuClass = 'danger';
+            else if (metrics.cpu.current > 60) cpuClass = 'warning';
+        }
+        updateMetricValue(card, 'cpu', cpuValue, cpuClass);
+
+        // Update Memory
+        let memClass = '', memValue = '--';
+        if (metrics.memory) {
+            memValue = metrics.memory.current.toFixed(0) + ' MB';
+            if (metrics.memory.current < 100) memClass = 'danger';
+            else if (metrics.memory.current < 250) memClass = 'warning';
+        }
+        updateMetricValue(card, 'memory', memValue, memClass);
+
+        // Update Disk
+        let diskClass = '', diskValue = '--';
+        if (metrics.disk) {
+            diskValue = metrics.disk.current.toFixed(1) + ' GB';
+            if (metrics.disk.current < 1) diskClass = 'danger';
+            else if (metrics.disk.current < 2) diskClass = 'warning';
+        }
+        updateMetricValue(card, 'disk', diskValue, diskClass);
+
+        // Update Load
+        let loadValue = '--';
+        if (metrics.load) loadValue = metrics.load.shortterm.toFixed(2);
+        updateMetricValue(card, 'load', loadValue, '');
+
+        // Update Temperature
+        if (metrics.temperature) {
+            let tempClass = '', tempValue = metrics.temperature.current.toFixed(1) + '°C';
+            if (metrics.temperature.current > 80) tempClass = 'danger';
+            else if (metrics.temperature.current > 70) tempClass = 'warning';
+            updateMetricValue(card, 'temp', tempValue, tempClass);
+        }
+
+        // Update Wireless
+        if (metrics.wireless && metrics.wireless.signal !== null) {
+            let wirelessClass = '', wirelessValue = metrics.wireless.signal.toFixed(0) + ' dBm';
+            if (metrics.wireless.signal < -80) wirelessClass = 'danger';
+            else if (metrics.wireless.signal < -70) wirelessClass = 'warning';
+            updateMetricValue(card, 'wireless', wirelessValue, wirelessClass);
+        }
+
+        // Update Ping
+        if (metrics.ping && metrics.ping.current !== null) {
+            let pingClass = '', pingValue = metrics.ping.current.toFixed(1) + ' ms';
+            if (metrics.ping.current > 100) pingClass = 'danger';
+            else if (metrics.ping.current > 50) pingClass = 'warning';
+            updateMetricValue(card, 'ping', pingValue, pingClass);
+        }
+
+        // Update charts (they update in place if they exist)
+        if (metrics.cpu && metrics.cpu.data) {
+            renderMiniChart(`cpuChart-${index}`, metrics.cpu.data, 'CPU %', 'rgb(245, 87, 108)', 'cpu_usage');
+        }
+        if (metrics.memory && metrics.memory.data) {
+            renderMiniChart(`memoryChart-${index}`, metrics.memory.data, 'Memory MB', 'rgb(102, 126, 234)', 'free_mb');
+        }
+        if (metrics.temperature && metrics.temperature.data) {
+            renderMiniChart(`tempChart-${index}`, metrics.temperature.data, 'Temp °C', 'rgb(255, 159, 64)', 'temperature');
+        }
+        if (metrics.wireless && metrics.wireless.data) {
+            renderMiniChart(`wirelessChart-${index}`, metrics.wireless.data, 'Signal dBm', 'rgb(75, 192, 192)', 'signal_dbm');
+        }
+        if (metrics.ping && metrics.ping.data) {
+            renderMiniChart(`pingChart-${index}`, metrics.ping.data, 'Latency ms', 'rgb(153, 102, 255)', 'avg_latency');
+        }
     }
 
     function renderMiniChart(canvasId, data, label, color, valueKey) {
@@ -737,18 +832,22 @@ if ($showDashboard) {
             return;
         }
 
-        // Destroy existing charts before rebuilding DOM
-        destroyAllCharts();
-        systemMetrics = {};
+        // Check if this is initial load (no existing data)
+        const isInitialLoad = Object.keys(systemMetrics).length === 0;
 
-        // Render loading placeholder cards for all systems immediately
-        let html = '';
-        systems.forEach((system, index) => {
-            html += renderLoadingCard(system, index);
-        });
-        container.innerHTML = html;
+        if (isInitialLoad) {
+            // Initial load: destroy charts and show loading cards
+            destroyAllCharts();
+            systemMetrics = {};
 
-        // Show the content immediately with loading cards
+            let html = '';
+            systems.forEach((system, index) => {
+                html += renderLoadingCard(system, index);
+            });
+            container.innerHTML = html;
+        }
+
+        // Show the content
         document.getElementById('loadingIndicator').style.display = 'none';
         document.getElementById('metricsContent').style.display = 'block';
 
@@ -758,28 +857,33 @@ if ($showDashboard) {
                 const metrics = await fetchSystemMetrics(system);
                 systemMetrics[index] = metrics;
 
-                // Update just this system's card
                 const cardElement = container.querySelector(`[data-system="${index}"]`);
                 if (cardElement) {
-                    cardElement.outerHTML = renderSystemCard(metrics, index);
+                    if (isInitialLoad) {
+                        // Initial load: replace loading card with full card
+                        cardElement.outerHTML = renderSystemCard(metrics, index);
 
-                    // Render charts for this system if online
-                    if (metrics.online) {
-                        if (metrics.cpu && metrics.cpu.data) {
-                            renderMiniChart(`cpuChart-${index}`, metrics.cpu.data, 'CPU %', 'rgb(245, 87, 108)', 'cpu_usage');
+                        // Create charts for this system if online
+                        if (metrics.online) {
+                            if (metrics.cpu && metrics.cpu.data) {
+                                renderMiniChart(`cpuChart-${index}`, metrics.cpu.data, 'CPU %', 'rgb(245, 87, 108)', 'cpu_usage');
+                            }
+                            if (metrics.memory && metrics.memory.data) {
+                                renderMiniChart(`memoryChart-${index}`, metrics.memory.data, 'Memory MB', 'rgb(102, 126, 234)', 'free_mb');
+                            }
+                            if (metrics.temperature && metrics.temperature.data) {
+                                renderMiniChart(`tempChart-${index}`, metrics.temperature.data, 'Temp °C', 'rgb(255, 159, 64)', 'temperature');
+                            }
+                            if (metrics.wireless && metrics.wireless.data) {
+                                renderMiniChart(`wirelessChart-${index}`, metrics.wireless.data, 'Signal dBm', 'rgb(75, 192, 192)', 'signal_dbm');
+                            }
+                            if (metrics.ping && metrics.ping.data) {
+                                renderMiniChart(`pingChart-${index}`, metrics.ping.data, 'Latency ms', 'rgb(153, 102, 255)', 'avg_latency');
+                            }
                         }
-                        if (metrics.memory && metrics.memory.data) {
-                            renderMiniChart(`memoryChart-${index}`, metrics.memory.data, 'Memory MB', 'rgb(102, 126, 234)', 'free_mb');
-                        }
-                        if (metrics.temperature && metrics.temperature.data) {
-                            renderMiniChart(`tempChart-${index}`, metrics.temperature.data, 'Temp °C', 'rgb(255, 159, 64)', 'temperature');
-                        }
-                        if (metrics.wireless && metrics.wireless.data) {
-                            renderMiniChart(`wirelessChart-${index}`, metrics.wireless.data, 'Signal dBm', 'rgb(75, 192, 192)', 'signal_dbm');
-                        }
-                        if (metrics.ping && metrics.ping.data) {
-                            renderMiniChart(`pingChart-${index}`, metrics.ping.data, 'Latency ms', 'rgb(153, 102, 255)', 'avg_latency');
-                        }
+                    } else {
+                        // Refresh: update card values and charts in place
+                        updateSystemCard(cardElement, metrics, index);
                     }
                 }
 
