@@ -895,6 +895,103 @@ class FalconController
         ];
     }
 
+    // ==================== STATIC UTILITY METHODS ====================
+
+    /**
+     * Validate if a string is a valid host (IP address or hostname)
+     *
+     * @param string $host Host to validate
+     * @return bool True if valid
+     */
+    public static function isValidHost($host)
+    {
+        // Valid if it's an IP address
+        if (filter_var($host, FILTER_VALIDATE_IP)) {
+            return true;
+        }
+
+        // Valid if it matches hostname pattern
+        if (preg_match('/^[a-zA-Z0-9]([a-zA-Z0-9\-]{0,61}[a-zA-Z0-9])?(\.[a-zA-Z0-9]([a-zA-Z0-9\-]{0,61}[a-zA-Z0-9])?)*$/', $host)) {
+            return true;
+        }
+
+        return false;
+    }
+
+    /**
+     * Validate if a string is a valid subnet format (e.g., "192.168.1")
+     *
+     * @param string $subnet Subnet to validate
+     * @return bool True if valid
+     */
+    public static function isValidSubnet($subnet)
+    {
+        return (bool)preg_match('/^\d{1,3}\.\d{1,3}\.\d{1,3}$/', $subnet);
+    }
+
+    /**
+     * Get status for multiple controllers from a comma-separated hosts string
+     *
+     * @param string $hostsString Comma-separated list of hosts
+     * @param int $timeout Connection timeout per host (default 3)
+     * @return array Array with 'controllers', 'count', and 'online' keys
+     */
+    public static function getMultiStatus($hostsString, $timeout = 3)
+    {
+        if (empty($hostsString)) {
+            return [
+                'controllers' => [],
+                'count' => 0,
+                'online' => 0
+            ];
+        }
+
+        // Parse comma-separated hosts
+        $hosts = array_filter(array_map('trim', explode(',', $hostsString)));
+        $controllers = [];
+
+        foreach ($hosts as $host) {
+            $controllerData = [
+                'host' => $host,
+                'online' => false,
+                'status' => null,
+                'error' => null
+            ];
+
+            try {
+                $controller = new self($host, 80, $timeout);
+
+                if ($controller->isReachable()) {
+                    $status = $controller->getStatus();
+                    if ($status !== false) {
+                        $controllerData['online'] = true;
+                        $controllerData['status'] = $status;
+
+                        // Get test mode status
+                        $testStatus = $controller->getTestStatus();
+                        if ($testStatus !== false) {
+                            $controllerData['testMode'] = $testStatus;
+                        }
+                    } else {
+                        $controllerData['error'] = $controller->getLastError() ?: 'Failed to get status';
+                    }
+                } else {
+                    $controllerData['error'] = $controller->getLastError() ?: 'Controller not reachable';
+                }
+            } catch (Exception $e) {
+                $controllerData['error'] = $e->getMessage();
+            }
+
+            $controllers[] = $controllerData;
+        }
+
+        return [
+            'controllers' => $controllers,
+            'count' => count($controllers),
+            'online' => count(array_filter($controllers, fn($c) => $c['online']))
+        ];
+    }
+
     /**
      * Static method to discover Falcon controllers on a subnet
      *

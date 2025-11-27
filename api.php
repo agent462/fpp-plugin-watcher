@@ -318,11 +318,6 @@ function fpppluginwatcherMetricsAll() {
 // GET /api/plugin/fpp-plugin-watcher/falcon/status
 // Returns status of all configured Falcon controllers (or single if host param provided)
 function fpppluginwatcherFalconStatus() {
-    // Ensure FalconController class is loaded
-    if (!class_exists('FalconController')) {
-        require_once WATCHERPLUGINDIR . 'lib/falconController.php';
-    }
-
     $config = readPluginConfig();
     $hostsString = isset($_GET['host']) ? $_GET['host'] : ($config['falconControllers'] ?? '');
 
@@ -335,52 +330,11 @@ function fpppluginwatcherFalconStatus() {
         ]);
     }
 
-    // Parse comma-separated hosts
-    $hosts = array_filter(array_map('trim', explode(',', $hostsString)));
-    $controllers = [];
-
-    foreach ($hosts as $host) {
-        $controllerData = [
-            'host' => $host,
-            'online' => false,
-            'status' => null,
-            'error' => null
-        ];
-
-        try {
-            $controller = new FalconController($host, 80, 3);
-
-            if ($controller->isReachable()) {
-                $status = $controller->getStatus();
-                if ($status !== false) {
-                    $controllerData['online'] = true;
-                    $controllerData['status'] = $status;
-
-                    // Get test mode status
-                    $testStatus = $controller->getTestStatus();
-                    if ($testStatus !== false) {
-                        $controllerData['testMode'] = $testStatus;
-                    }
-                } else {
-                    $controllerData['error'] = $controller->getLastError() ?: 'Failed to get status';
-                }
-            } else {
-                $controllerData['error'] = $controller->getLastError() ?: 'Controller not reachable';
-            }
-        } catch (Exception $e) {
-            $controllerData['error'] = $e->getMessage();
-        }
-
-        $controllers[] = $controllerData;
-    }
+    $result = FalconController::getMultiStatus($hostsString);
+    $result['success'] = true;
 
     /** @disregard P1010 */
-    return json([
-        'success' => true,
-        'controllers' => $controllers,
-        'count' => count($controllers),
-        'online' => count(array_filter($controllers, fn($c) => $c['online']))
-    ]);
+    return json($result);
 }
 
 // POST /api/plugin/fpp-plugin-watcher/falcon/config
@@ -398,13 +352,11 @@ function fpppluginwatcherFalconConfigSave() {
 
     $hosts = trim($input['hosts']);
 
-    // Validate hosts - should be comma-separated IP addresses or hostnames
+    // Validate hosts
     if (!empty($hosts)) {
         $hostList = array_map('trim', explode(',', $hosts));
         foreach ($hostList as $host) {
-            // Basic validation - allow IP addresses and hostnames
-            if (!filter_var($host, FILTER_VALIDATE_IP) &&
-                !preg_match('/^[a-zA-Z0-9]([a-zA-Z0-9\-]{0,61}[a-zA-Z0-9])?(\.[a-zA-Z0-9]([a-zA-Z0-9\-]{0,61}[a-zA-Z0-9])?)*$/', $host)) {
+            if (!FalconController::isValidHost($host)) {
                 /** @disregard P1010 */
                 return json([
                     'success' => false,
@@ -441,11 +393,6 @@ function fpppluginwatcherFalconConfigGet() {
 // POST /api/plugin/fpp-plugin-watcher/falcon/test
 // Enable or disable test mode on a Falcon controller
 function fpppluginwatcherFalconTest() {
-    // Ensure FalconController class is loaded
-    if (!class_exists('FalconController')) {
-        require_once WATCHERPLUGINDIR . 'lib/falconController.php';
-    }
-
     $input = json_decode(file_get_contents('php://input'), true);
 
     if (!isset($input['host'])) {
@@ -507,11 +454,6 @@ function fpppluginwatcherFalconTest() {
 // POST /api/plugin/fpp-plugin-watcher/falcon/reboot
 // Reboot a Falcon controller
 function fpppluginwatcherFalconReboot() {
-    // Ensure FalconController class is loaded
-    if (!class_exists('FalconController')) {
-        require_once WATCHERPLUGINDIR . 'lib/falconController.php';
-    }
-
     $input = json_decode(file_get_contents('php://input'), true);
 
     if (!isset($input['host'])) {
@@ -563,10 +505,6 @@ function fpppluginwatcherFalconReboot() {
 // GET /api/plugin/fpp-plugin-watcher/falcon/discover
 // Discover Falcon controllers on a subnet
 function fpppluginwatcherFalconDiscover() {
-    if (!class_exists('FalconController')) {
-        require_once WATCHERPLUGINDIR . 'lib/falconController.php';
-    }
-
     // Get subnet from query param or auto-detect from FPP
     $subnet = isset($_GET['subnet']) ? trim($_GET['subnet']) : null;
 
@@ -599,7 +537,7 @@ function fpppluginwatcherFalconDiscover() {
     }
 
     // Validate subnet format (should be like 192.168.1)
-    if (!preg_match('/^\d{1,3}\.\d{1,3}\.\d{1,3}$/', $subnet)) {
+    if (!FalconController::isValidSubnet($subnet)) {
         /** @disregard P1010 */
         return json([
             'success' => false,
