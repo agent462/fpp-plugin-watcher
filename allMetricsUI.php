@@ -20,6 +20,10 @@ if ($showDashboard) {
                 $remoteSystems[] = $system;
             }
         }
+        // Sort by IP address numerically
+        usort($remoteSystems, function($a, $b) {
+            return ip2long($a['address'] ?? '0.0.0.0') - ip2long($b['address'] ?? '0.0.0.0');
+        });
     }
 }
 ?>
