@@ -2,6 +2,8 @@
 include_once __DIR__ . '/lib/watcherCommon.php';
 include_once __DIR__ . '/lib/metrics.php';
 include_once __DIR__ . '/lib/pingMetricsRollup.php';
+include_once WATCHERPLUGINDIR . 'lib/falconController.php';
+include_once WATCHERPLUGINDIR . 'lib/config.php';
 /**
  * Returns the API endpoints for the fpp-plugin-watcher plugin
  */
@@ -103,6 +105,25 @@ function getEndpointsfpppluginwatcher() {
         'method' => 'GET',
         'endpoint' => 'metrics/all',
         'callback' => 'fpppluginWatcherMetricsAll');
+    array_push($result, $ep);
+
+    // Falcon Controller endpoints
+    $ep = array(
+        'method' => 'GET',
+        'endpoint' => 'falcon/status',
+        'callback' => 'fpppluginWatcherFalconStatus');
+    array_push($result, $ep);
+
+    $ep = array(
+        'method' => 'POST',
+        'endpoint' => 'falcon/config',
+        'callback' => 'fpppluginWatcherFalconConfigSave');
+    array_push($result, $ep);
+
+    $ep = array(
+        'method' => 'GET',
+        'endpoint' => 'falcon/config',
+        'callback' => 'fpppluginWatcherFalconConfigGet');
     array_push($result, $ep);
 
     return $result;
@@ -274,5 +295,122 @@ function fpppluginwatcherMetricsAll() {
 
     /** @disregard P1010 */
     return json($result);
+}
+
+// GET /api/plugin/fpp-plugin-watcher/falcon/status
+// Returns status of all configured Falcon controllers (or single if host param provided)
+function fpppluginwatcherFalconStatus() {
+    // Ensure FalconController class is loaded
+    if (!class_exists('FalconController')) {
+        require_once WATCHERPLUGINDIR . 'lib/falconController.php';
+    }
+
+    $config = readPluginConfig();
+    $hostsString = isset($_GET['host']) ? $_GET['host'] : ($config['falconControllers'] ?? '');
+
+    if (empty($hostsString)) {
+        /** @disregard P1010 */
+        return json([
+            'success' => true,
+            'controllers' => [],
+            'message' => 'No Falcon controllers configured'
+        ]);
+    }
+
+    // Parse comma-separated hosts
+    $hosts = array_filter(array_map('trim', explode(',', $hostsString)));
+    $controllers = [];
+
+    foreach ($hosts as $host) {
+        $controllerData = [
+            'host' => $host,
+            'online' => false,
+            'status' => null,
+            'error' => null
+        ];
+
+        try {
+            $controller = new FalconController($host, 80, 3);
+
+            if ($controller->isReachable()) {
+                $status = $controller->getStatus();
+                if ($status !== false) {
+                    $controllerData['online'] = true;
+                    $controllerData['status'] = $status;
+                } else {
+                    $controllerData['error'] = $controller->getLastError() ?: 'Failed to get status';
+                }
+            } else {
+                $controllerData['error'] = $controller->getLastError() ?: 'Controller not reachable';
+            }
+        } catch (Exception $e) {
+            $controllerData['error'] = $e->getMessage();
+        }
+
+        $controllers[] = $controllerData;
+    }
+
+    /** @disregard P1010 */
+    return json([
+        'success' => true,
+        'controllers' => $controllers,
+        'count' => count($controllers),
+        'online' => count(array_filter($controllers, fn($c) => $c['online']))
+    ]);
+}
+
+// POST /api/plugin/fpp-plugin-watcher/falcon/config
+// Save Falcon controller configuration
+function fpppluginwatcherFalconConfigSave() {
+    $input = json_decode(file_get_contents('php://input'), true);
+
+    if (!isset($input['hosts'])) {
+        /** @disregard P1010 */
+        return json([
+            'success' => false,
+            'error' => 'Missing hosts parameter'
+        ]);
+    }
+
+    $hosts = trim($input['hosts']);
+
+    // Validate hosts - should be comma-separated IP addresses or hostnames
+    if (!empty($hosts)) {
+        $hostList = array_map('trim', explode(',', $hosts));
+        foreach ($hostList as $host) {
+            // Basic validation - allow IP addresses and hostnames
+            if (!filter_var($host, FILTER_VALIDATE_IP) &&
+                !preg_match('/^[a-zA-Z0-9]([a-zA-Z0-9\-]{0,61}[a-zA-Z0-9])?(\.[a-zA-Z0-9]([a-zA-Z0-9\-]{0,61}[a-zA-Z0-9])?)*$/', $host)) {
+                /** @disregard P1010 */
+                return json([
+                    'success' => false,
+                    'error' => "Invalid host: $host"
+                ]);
+            }
+        }
+    }
+
+    // Save to config
+    /** @disregard P1010 */
+    WriteSettingToFile('falconControllers', $hosts, WATCHERPLUGINNAME);
+
+    /** @disregard P1010 */
+    return json([
+        'success' => true,
+        'message' => 'Configuration saved',
+        'hosts' => $hosts
+    ]);
+}
+
+// GET /api/plugin/fpp-plugin-watcher/falcon/config
+// Get Falcon controller configuration
+function fpppluginwatcherFalconConfigGet() {
+    $config = readPluginConfig();
+
+    /** @disregard P1010 */
+    return json([
+        'success' => true,
+        'hosts' => $config['falconControllers'] ?? ''
+    ]);
 }
 ?>

@@ -28,6 +28,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['save_settings'])) {
     $networkAdapter = trim($_POST['networkAdapter']);
     $collectdEnabled = isset($_POST['collectdEnabled']) ? 'true' : 'false';
     $multiSyncMetricsEnabled = isset($_POST['multiSyncMetricsEnabled']) ? 'true' : 'false';
+    $falconMonitorEnabled = isset($_POST['falconMonitorEnabled']) ? 'true' : 'false';
 
     // If 'default' is selected, auto-detect and save the actual interface
     if ($networkAdapter === 'default') {
@@ -74,7 +75,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['save_settings'])) {
             'networkAdapter' => $networkAdapter,
             'testHosts' => implode(',', $testHosts),
             'collectdEnabled' => $collectdEnabled,
-            'multiSyncMetricsEnabled' => $multiSyncMetricsEnabled
+            'multiSyncMetricsEnabled' => $multiSyncMetricsEnabled,
+            'falconMonitorEnabled' => $falconMonitorEnabled
         ];
 
         foreach ($settingsToSave as $settingName => $settingValue) {
@@ -346,6 +348,37 @@ if ($isPlayerMode) {
                 </div>
             </div>
             <?php endif; ?>
+
+            <!-- Falcon Controller Monitor Settings -->
+            <div class="settingsPanel" style="margin-top: 2rem;">
+                <div class="panelTitle">
+                    <i class="fas fa-broadcast-tower"></i> Falcon Controller Monitor
+                </div>
+
+                <!-- Enable/Disable Falcon Monitor -->
+                <div class="row settingRow">
+                    <div class="col-md-4 col-lg-3">
+                        <label class="settingLabel">
+                            <input type="checkbox" id="falconMonitorEnabled" name="falconMonitorEnabled" class="form-check-input" value="1"
+                                <?php echo (!empty($config['falconMonitorEnabled'])) ? 'checked' : ''; ?>>
+                            Enable Falcon Monitor Dashboard
+                        </label>
+                    </div>
+                    <div class="col-md-8">
+                        <div class="settingDescription">
+                            Enable a dashboard for monitoring Falcon pixel controllers on your network.
+                            Displays real-time status including temperatures, voltages, pixel counts, and firmware versions.
+                            <p></p>
+                            <span style="display: inline-block; background: #e7f3ff; border: 1px solid #b3d7ff; border-radius: 4px; padding: 0.4em 0.8em; font-weight: 500; margin: 0.25em 0;">
+                                <i class="fas fa-microchip" style="color: #0066cc;"></i> <strong>Supported Controllers:</strong> F4V2, F16V2, F4V3, F16V3, F48
+                            </span>
+                            <p></p>
+                            <strong>Note:</strong> Configure controller IP addresses in the Falcon Monitor dashboard once enabled.
+                            Controllers must be network-accessible from this FPP instance.
+                        </div>
+                    </div>
+                </div>
+            </div>
 
             <!-- Form Actions -->
             <div class="formActions">
