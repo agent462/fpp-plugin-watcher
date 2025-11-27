@@ -826,6 +826,27 @@ if ($showDashboard) {
         });
     }
 
+    // Limit concurrent fetches to avoid browser connection pool exhaustion
+    async function asyncPool(concurrency, items, iteratorFn) {
+        const results = [];
+        const executing = new Set();
+
+        for (const [index, item] of items.entries()) {
+            const promise = Promise.resolve().then(() => iteratorFn(item, index));
+            results.push(promise);
+            executing.add(promise);
+
+            const cleanup = () => executing.delete(promise);
+            promise.then(cleanup, cleanup);
+
+            if (executing.size >= concurrency) {
+                await Promise.race(executing);
+            }
+        }
+
+        return Promise.all(results);
+    }
+
     async function refreshAllSystems() {
         if (isRefreshing) return;
         isRefreshing = true;
@@ -861,8 +882,8 @@ if ($showDashboard) {
         document.getElementById('loadingIndicator').style.display = 'none';
         document.getElementById('metricsContent').style.display = 'block';
 
-        // Fetch each system independently and update as results come in
-        const fetchPromises = systems.map(async (system, index) => {
+        // Fetch systems with limited concurrency (6 at a time) to avoid browser connection limits
+        await asyncPool(6, systems, async (system, index) => {
             try {
                 const metrics = await fetchSystemMetrics(system);
                 systemMetrics[index] = metrics;
@@ -904,8 +925,6 @@ if ($showDashboard) {
             }
         });
 
-        // Wait for all to complete before allowing another refresh
-        await Promise.all(fetchPromises);
         isRefreshing = false;
     }
 
