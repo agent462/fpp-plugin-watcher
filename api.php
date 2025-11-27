@@ -126,6 +126,18 @@ function getEndpointsfpppluginwatcher() {
         'callback' => 'fpppluginWatcherFalconConfigGet');
     array_push($result, $ep);
 
+    $ep = array(
+        'method' => 'POST',
+        'endpoint' => 'falcon/reboot',
+        'callback' => 'fpppluginWatcherFalconReboot');
+    array_push($result, $ep);
+
+    $ep = array(
+        'method' => 'GET',
+        'endpoint' => 'falcon/discover',
+        'callback' => 'fpppluginWatcherFalconDiscover');
+    array_push($result, $ep);
+
     return $result;
 }
 
@@ -337,6 +349,12 @@ function fpppluginwatcherFalconStatus() {
                 if ($status !== false) {
                     $controllerData['online'] = true;
                     $controllerData['status'] = $status;
+
+                    // Get test mode status
+                    $testStatus = $controller->getTestStatus();
+                    if ($testStatus !== false) {
+                        $controllerData['testMode'] = $testStatus;
+                    }
                 } else {
                     $controllerData['error'] = $controller->getLastError() ?: 'Failed to get status';
                 }
@@ -412,5 +430,138 @@ function fpppluginwatcherFalconConfigGet() {
         'success' => true,
         'hosts' => $config['falconControllers'] ?? ''
     ]);
+}
+
+// POST /api/plugin/fpp-plugin-watcher/falcon/reboot
+// Reboot a Falcon controller
+function fpppluginwatcherFalconReboot() {
+    // Ensure FalconController class is loaded
+    if (!class_exists('FalconController')) {
+        require_once WATCHERPLUGINDIR . 'lib/falconController.php';
+    }
+
+    $input = json_decode(file_get_contents('php://input'), true);
+
+    if (!isset($input['host'])) {
+        /** @disregard P1010 */
+        return json([
+            'success' => false,
+            'error' => 'Missing host parameter'
+        ]);
+    }
+
+    $host = trim($input['host']);
+
+    try {
+        $controller = new FalconController($host, 80, 5);
+
+        if (!$controller->isReachable()) {
+            /** @disregard P1010 */
+            return json([
+                'success' => false,
+                'error' => 'Controller not reachable'
+            ]);
+        }
+
+        $result = $controller->reboot();
+
+        if ($result) {
+            /** @disregard P1010 */
+            return json([
+                'success' => true,
+                'message' => 'Reboot command sent',
+                'host' => $host
+            ]);
+        } else {
+            /** @disregard P1010 */
+            return json([
+                'success' => false,
+                'error' => $controller->getLastError() ?: 'Failed to send reboot command'
+            ]);
+        }
+    } catch (Exception $e) {
+        /** @disregard P1010 */
+        return json([
+            'success' => false,
+            'error' => $e->getMessage()
+        ]);
+    }
+}
+
+// GET /api/plugin/fpp-plugin-watcher/falcon/discover
+// Discover Falcon controllers on a subnet
+function fpppluginwatcherFalconDiscover() {
+    if (!class_exists('FalconController')) {
+        require_once WATCHERPLUGINDIR . 'lib/falconController.php';
+    }
+
+    // Get subnet from query param or auto-detect from FPP
+    $subnet = isset($_GET['subnet']) ? trim($_GET['subnet']) : null;
+
+    if (empty($subnet)) {
+        // Try to auto-detect from FPP's network settings
+        $interfaces = @file_get_contents('http://127.0.0.1/api/network/interface');
+        if ($interfaces) {
+            $ifData = json_decode($interfaces, true);
+            if ($ifData && is_array($ifData)) {
+                foreach ($ifData as $iface) {
+                    if (!empty($iface['IP']) && $iface['IP'] !== '127.0.0.1') {
+                        // Extract subnet from IP (e.g., 192.168.1.100 -> 192.168.1)
+                        $parts = explode('.', $iface['IP']);
+                        if (count($parts) === 4) {
+                            $subnet = $parts[0] . '.' . $parts[1] . '.' . $parts[2];
+                            break;
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    if (empty($subnet)) {
+        /** @disregard P1010 */
+        return json([
+            'success' => false,
+            'error' => 'Could not determine subnet. Please provide subnet parameter (e.g., ?subnet=192.168.1)'
+        ]);
+    }
+
+    // Validate subnet format (should be like 192.168.1)
+    if (!preg_match('/^\d{1,3}\.\d{1,3}\.\d{1,3}$/', $subnet)) {
+        /** @disregard P1010 */
+        return json([
+            'success' => false,
+            'error' => 'Invalid subnet format. Expected format: 192.168.1'
+        ]);
+    }
+
+    // Get optional range parameters
+    $startIp = isset($_GET['start']) ? intval($_GET['start']) : 1;
+    $endIp = isset($_GET['end']) ? intval($_GET['end']) : 254;
+    $timeout = isset($_GET['timeout']) ? intval($_GET['timeout']) : 1;
+
+    // Clamp values
+    $startIp = max(1, min(254, $startIp));
+    $endIp = max($startIp, min(254, $endIp));
+    $timeout = max(1, min(5, $timeout));
+
+    try {
+        $discovered = FalconController::discover($subnet, $startIp, $endIp, $timeout);
+
+        /** @disregard P1010 */
+        return json([
+            'success' => true,
+            'subnet' => $subnet,
+            'range' => ['start' => $startIp, 'end' => $endIp],
+            'count' => count($discovered),
+            'controllers' => $discovered
+        ]);
+    } catch (Exception $e) {
+        /** @disregard P1010 */
+        return json([
+            'success' => false,
+            'error' => $e->getMessage()
+        ]);
+    }
 }
 ?>

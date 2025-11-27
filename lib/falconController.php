@@ -600,15 +600,36 @@ class FalconController
     /**
      * Enable test mode
      *
-     * @param int $testMode Test mode (1-10, see controller docs)
+     * @param int $testMode Test mode (0-7: 0=RGBW, 1=Red Ramp, 2=Green Ramp, 3=Blue Ramp, 4=White Ramp, 5=Color Wash, 6=White, 7=Chase)
+     * @param bool $allPorts Enable test on all ports (default true)
      * @return bool Success
      */
-    public function enableTest($testMode = 5)
+    public function enableTest($testMode = 5, $allPorts = true)
     {
         $data = [
             't' => 1,        // Enable test
-            'tm' => $testMode,
+            'm' => $testMode, // Test mode pattern
         ];
+
+        if ($allPorts) {
+            // Get string configuration to find all ports
+            $strings = $this->getStrings();
+            if ($strings !== false && !empty($strings['strings'])) {
+                // Enable each string port (e{index}=1)
+                foreach ($strings['strings'] as $index => $string) {
+                    $data['e' . $index] = 1;
+                }
+            }
+
+            // Get serial outputs configuration
+            $serial = $this->getSerialOutputs();
+            if ($serial !== false && !empty($serial['outputs'])) {
+                // Enable each serial port (s{port}=1)
+                foreach ($serial['outputs'] as $index => $output) {
+                    $data['s' . $index] = 1;
+                }
+            }
+        }
 
         $response = $this->httpPost('/test.htm', $data);
         return $response !== false;
@@ -623,7 +644,24 @@ class FalconController
     {
         $data = [
             't' => 0,        // Disable test
+            'm' => 0,        // Reset mode
         ];
+
+        // Get string configuration to disable all ports
+        $strings = $this->getStrings();
+        if ($strings !== false && !empty($strings['strings'])) {
+            foreach ($strings['strings'] as $index => $string) {
+                $data['e' . $index] = 0;
+            }
+        }
+
+        // Get serial outputs configuration
+        $serial = $this->getSerialOutputs();
+        if ($serial !== false && !empty($serial['outputs'])) {
+            foreach ($serial['outputs'] as $index => $output) {
+                $data['s' . $index] = 0;
+            }
+        }
 
         $response = $this->httpPost('/test.htm', $data);
         return $response !== false;
@@ -645,119 +683,6 @@ class FalconController
             'enabled' => $strings['test_enabled'] === 1,
             'mode' => $strings['test_mode'],
         ];
-    }
-
-    // ==================== PLAYER CONTROL (Standalone Mode) ====================
-
-    /**
-     * Get player status (for standalone/master/remote modes)
-     *
-     * @return array|false Player status or false on error
-     */
-    public function getPlayerStatus()
-    {
-        $response = $this->httpGet('/playerstatus.xml');
-        if ($response === false) {
-            return false;
-        }
-
-        $xml = $this->parseXml($response);
-        if ($xml === false) {
-            return false;
-        }
-
-        // Player status format varies - return raw parsed data
-        return [
-            'xml' => $xml,
-            'raw' => $response,
-        ];
-    }
-
-    /**
-     * Get available playlists
-     *
-     * @return array|false Playlists or false on error
-     */
-    public function getPlaylists()
-    {
-        $response = $this->httpGet('/playlists.xml');
-        if ($response === false) {
-            return false;
-        }
-
-        $xml = $this->parseXml($response);
-        if ($xml === false) {
-            return false;
-        }
-
-        $playlists = [];
-        if ($xml->pl) {
-            foreach ($xml->pl as $pl) {
-                $playlists[] = [
-                    'index' => (int)$pl['i'],
-                    'name' => (string)$pl['n'],
-                ];
-            }
-        }
-
-        return $playlists;
-    }
-
-    /**
-     * Send a command to the controller
-     *
-     * @param string $command Command name
-     * @param array $params Command parameters
-     * @return bool Success
-     */
-    public function sendCommand($command, $params = [])
-    {
-        $data = array_merge(['c' => $command], $params);
-        $response = $this->httpPost('/command.htm', $data);
-        return $response !== false;
-    }
-
-    /**
-     * Play a playlist entry
-     *
-     * @param int $entryIndex Entry index to play
-     * @return bool Success
-     */
-    public function playEntry($entryIndex)
-    {
-        return $this->sendCommand('p', ['i' => $entryIndex]);
-    }
-
-    /**
-     * Stop playback immediately
-     *
-     * @return bool Success
-     */
-    public function stopNow()
-    {
-        return $this->sendCommand('s');
-    }
-
-    /**
-     * Stop playback gracefully (finish current item)
-     *
-     * @return bool Success
-     */
-    public function stopGracefully()
-    {
-        return $this->sendCommand('g');
-    }
-
-    /**
-     * Set volume
-     *
-     * @param int $volume Volume level (0-100)
-     * @return bool Success
-     */
-    public function setVolume($volume)
-    {
-        $volume = max(0, min(100, $volume));
-        return $this->sendCommand('v', ['v' => $volume]);
     }
 
     // ==================== NETWORK CONFIGURATION ====================
@@ -807,14 +732,90 @@ class FalconController
     // ==================== UTILITY METHODS ====================
 
     /**
+     * Send a command to the controller
+     *
+     * @param string $command Command name
+     * @param array $params Command parameters
+     * @return bool Success
+     */
+    public function sendCommand($command, $params = [])
+    {
+        $data = array_merge(['c' => $command], $params);
+        $response = $this->httpPost('/command.htm', $data);
+        return $response !== false;
+    }
+
+    /**
      * Reboot the controller
-     * Note: Not all firmware versions support this
+     * Uses config.htm "Save and Reboot" with current network settings
      *
      * @return bool Success
      */
     public function reboot()
     {
-        return $this->sendCommand('r');
+        // Get current network config from config.htm
+        $configHtml = $this->httpGet('/config.htm');
+        if ($configHtml === false) {
+            $this->lastError = "Failed to get config page";
+            return false;
+        }
+
+        // Extract current network values from hidden fields and form inputs
+        $data = [];
+
+        // Extract values from the form - we need to preserve current settings
+        $patterns = [
+            'mac' => '/name="mac"\s+value="([^"]*)"/',
+            'host' => '/name="host"\s+value="([^"]*)"/',
+            'ip' => '/name="ip"\s+value="([^"]*)"/',
+            'gw' => '/name="gw"\s+value="([^"]*)"/',
+            'sub' => '/name="sub"\s+value="([^"]*)"/',
+            'dns1' => '/name="dns1"\s+value="([^"]*)"/',
+            'dns2' => '/name="dns2"\s+value="([^"]*)"/',
+        ];
+
+        foreach ($patterns as $name => $pattern) {
+            if (preg_match($pattern, $configHtml, $m)) {
+                $data[$name] = trim($m[1]);
+            }
+        }
+
+        // Check if DHCP is enabled (checkbox has 'checked' attribute)
+        if (preg_match('/name="dhcp"[^>]*checked/', $configHtml)) {
+            $data['dhcp'] = '1';
+        }
+
+        // Verify we got the essential fields
+        if (empty($data['ip']) || empty($data['mac'])) {
+            $this->lastError = "Failed to parse network config";
+            return false;
+        }
+
+        // POST to config.htm triggers "Save and Reboot"
+        // Use custom POST that accepts 302 redirect as success (controller redirects after save)
+        $url = $this->getBaseUrl() . '/config.htm';
+        $postData = http_build_query($data);
+
+        $ch = curl_init();
+        curl_setopt_array($ch, [
+            CURLOPT_URL => $url,
+            CURLOPT_RETURNTRANSFER => true,
+            CURLOPT_TIMEOUT => $this->timeout,
+            CURLOPT_CONNECTTIMEOUT => $this->timeout,
+            CURLOPT_POST => true,
+            CURLOPT_POSTFIELDS => $postData,
+            CURLOPT_HTTPHEADER => [
+                'Content-Type: application/x-www-form-urlencoded',
+            ],
+            CURLOPT_FOLLOWLOCATION => false,  // Don't follow redirect
+        ]);
+
+        curl_exec($ch);
+        $httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+        curl_close($ch);
+
+        // 200, 302 (redirect after save), or 303 are all success
+        return ($httpCode >= 200 && $httpCode < 400);
     }
 
     /**
@@ -850,9 +851,9 @@ class FalconController
         }
 
         return [
-            'board' => $status['temperature1'],
-            'cpu' => $status['temperature2'],
-            'aux' => $status['temperature3'],
+            'cpu' => $status['temperature1'],
+            'temp1' => $status['temperature2'],
+            'temp2' => $status['temperature3'],
         ];
     }
 
@@ -913,7 +914,12 @@ class FalconController
 
             if ($controller->isReachable()) {
                 $status = $controller->getStatus();
-                if ($status !== false) {
+                // Only include devices where we can confirm model and firmware
+                // This filters out non-Falcon devices that happen to respond on port 80
+                if ($status !== false &&
+                    !empty($status['model']) &&
+                    !empty($status['firmware_version']) &&
+                    strpos($status['model'], 'Unknown') === false) {
                     $discovered[] = [
                         'ip' => $ip,
                         'name' => $status['name'],

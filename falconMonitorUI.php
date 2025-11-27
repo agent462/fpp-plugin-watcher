@@ -332,6 +332,25 @@ $falconHosts = !empty($watcherConfig['falconControllers']) ? $watcherConfig['fal
     border-top: 1px solid #e9ecef;
 }
 
+.testModeBtn {
+    transition: all 0.2s ease;
+}
+
+.testModeBtn.active {
+    background-color: #ffc107;
+    border-color: #ffc107;
+    color: #212529;
+}
+
+.testModeBtn.active:hover {
+    background-color: #e0a800;
+    border-color: #d39e00;
+}
+
+.testModeBtn i.fa-spin {
+    animation: spin 1s linear infinite;
+}
+
 .noControllersPanel {
     text-align: center;
     padding: 3rem;
@@ -455,6 +474,9 @@ $falconHosts = !empty($watcherConfig['falconControllers']) ? $watcherConfig['fal
                 <button class="btn btn-primary" onclick="saveConfiguration()">
                     <i class="fas fa-save"></i> Save
                 </button>
+                <button class="btn btn-success" onclick="discoverControllers()">
+                    <i class="fas fa-search"></i> Discover
+                </button>
                 <button class="btn btn-secondary" onclick="toggleConfig()">
                     <i class="fas fa-times"></i> Close
                 </button>
@@ -462,6 +484,19 @@ $falconHosts = !empty($watcherConfig['falconControllers']) ? $watcherConfig['fal
             <div style="margin-top: 0.75rem; padding: 0.6rem 1rem; background: #e7f3ff; border: 1px solid #b3d7ff; border-radius: 4px;">
                 <i class="fas fa-microchip" style="color: #0066cc;"></i>
                 <strong>Supported Controllers:</strong> F4V2, F16V2, F4V3, F16V3, F48
+            </div>
+
+            <!-- Discovery Results -->
+            <div id="discoveryResults" style="display: none; margin-top: 1rem;">
+                <div style="padding: 0.75rem; background: #f8f9fa; border: 1px solid #dee2e6; border-radius: 4px;">
+                    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.75rem;">
+                        <strong><i class="fas fa-broadcast-tower"></i> Discovered Controllers</strong>
+                        <button class="btn btn-sm btn-outline-secondary" onclick="hideDiscoveryResults()">
+                            <i class="fas fa-times"></i>
+                        </button>
+                    </div>
+                    <div id="discoveryList"></div>
+                </div>
             </div>
         </div>
     </div>
@@ -739,10 +774,18 @@ $falconHosts = !empty($watcherConfig['falconControllers']) ? $watcherConfig['fal
 
             <div class="cardFooter">
                 <a href="http://${escapeHtml(controller.host)}/" target="_blank" class="btn btn-sm btn-outline-primary">
-                    <i class="fas fa-external-link-alt"></i> Open Web UI
+                    <i class="fas fa-external-link-alt"></i> Web UI
                 </a>
+                <button class="btn btn-sm btn-outline-warning testModeBtn ${controller.testMode?.enabled ? 'active' : ''}"
+                        onclick="toggleTestMode(${index})"
+                        title="${controller.testMode?.enabled ? 'Test mode is ON - Click to disable' : 'Click to enable test mode'}">
+                    <i class="fas fa-lightbulb"></i> Test
+                </button>
+                <button class="btn btn-sm btn-outline-danger" onclick="rebootController(${index})" title="Reboot controller">
+                    <i class="fas fa-power-off"></i>
+                </button>
                 <button class="btn btn-sm btn-outline-secondary" onclick="refreshController(${index})">
-                    <i class="fas fa-sync-alt"></i> Refresh
+                    <i class="fas fa-sync-alt"></i>
                 </button>
             </div>
         `;
@@ -771,9 +814,9 @@ $falconHosts = !empty($watcherConfig['falconControllers']) ? $watcherConfig['fal
             temps.push({ label, celsius, color, percent });
         };
 
-        addTemp('Board', status.temperature1);
-        addTemp('CPU', status.temperature2);
-        addTemp('Aux', status.temperature3);
+        addTemp('CPU', status.temperature1);
+        addTemp('Temp1', status.temperature2);
+        addTemp('Temp2', status.temperature3);
 
         return temps;
     }
@@ -852,6 +895,122 @@ $falconHosts = !empty($watcherConfig['falconControllers']) ? $watcherConfig['fal
         }
     }
 
+    // Toggle test mode on a controller
+    async function toggleTestMode(index) {
+        const controller = controllers[index];
+        if (!controller || !controller.online) return;
+
+        const card = document.getElementById('controller-' + index);
+        const testBtn = card?.querySelector('.testModeBtn');
+        const icon = testBtn?.querySelector('i');
+
+        // Show loading state
+        if (icon) {
+            icon.className = 'fas fa-spinner fa-spin';
+        }
+        if (testBtn) {
+            testBtn.disabled = true;
+        }
+
+        const currentlyEnabled = controller.testMode?.enabled || false;
+
+        try {
+            const response = await fetch('/api/plugin/fpp-plugin-watcher/falcon/test', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    host: controller.host,
+                    enable: !currentlyEnabled,
+                    testMode: 5  // Default test pattern
+                })
+            });
+
+            const data = await response.json();
+
+            if (data.success) {
+                // Update local state
+                if (!controller.testMode) {
+                    controller.testMode = { enabled: false, mode: 0 };
+                }
+                controller.testMode.enabled = data.testEnabled;
+
+                // Update button state
+                if (testBtn) {
+                    testBtn.classList.toggle('active', data.testEnabled);
+                    testBtn.title = data.testEnabled
+                        ? 'Test mode is ON - Click to disable'
+                        : 'Click to enable test mode';
+                }
+            } else {
+                alert('Failed to toggle test mode: ' + (data.error || 'Unknown error'));
+            }
+        } catch (error) {
+            console.error('Error toggling test mode:', error);
+            alert('Error toggling test mode');
+        } finally {
+            // Restore button state
+            if (icon) {
+                icon.className = 'fas fa-lightbulb';
+            }
+            if (testBtn) {
+                testBtn.disabled = false;
+            }
+        }
+    }
+
+    // Reboot a controller
+    async function rebootController(index) {
+        const controller = controllers[index];
+        if (!controller || !controller.online) return;
+
+        // Confirm reboot
+        if (!confirm(`Are you sure you want to reboot ${controller.status?.name || controller.host}?`)) {
+            return;
+        }
+
+        const card = document.getElementById('controller-' + index);
+        const rebootBtn = card?.querySelector('.btn-outline-danger');
+        const icon = rebootBtn?.querySelector('i');
+
+        // Show loading state
+        if (icon) {
+            icon.className = 'fas fa-spinner fa-spin';
+        }
+        if (rebootBtn) {
+            rebootBtn.disabled = true;
+        }
+
+        try {
+            const response = await fetch('/api/plugin/fpp-plugin-watcher/falcon/reboot', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ host: controller.host })
+            });
+
+            const data = await response.json();
+
+            if (data.success) {
+                // Mark as offline temporarily
+                controller.online = false;
+                const newCard = createControllerCard(controller, index);
+                card.replaceWith(newCard);
+            } else {
+                alert('Failed to reboot: ' + (data.error || 'Unknown error'));
+            }
+        } catch (error) {
+            console.error('Error rebooting controller:', error);
+            alert('Error sending reboot command');
+        } finally {
+            // Restore button state
+            if (icon) {
+                icon.className = 'fas fa-power-off';
+            }
+            if (rebootBtn) {
+                rebootBtn.disabled = false;
+            }
+        }
+    }
+
     // Escape HTML
     function escapeHtml(text) {
         if (text === null || text === undefined) return '';
@@ -863,5 +1022,126 @@ $falconHosts = !empty($watcherConfig['falconControllers']) ? $watcherConfig['fal
             "'": '&#039;'
         };
         return String(text).replace(/[&<>"']/g, m => map[m]);
+    }
+
+    // Discover Falcon controllers on network
+    async function discoverControllers() {
+        const discoverBtn = document.querySelector('button[onclick="discoverControllers()"]');
+        const icon = discoverBtn?.querySelector('i');
+        const resultsDiv = document.getElementById('discoveryResults');
+        const listDiv = document.getElementById('discoveryList');
+
+        // Show loading state
+        if (icon) {
+            icon.className = 'fas fa-spinner fa-spin';
+        }
+        if (discoverBtn) {
+            discoverBtn.disabled = true;
+        }
+
+        listDiv.innerHTML = '<div style="text-align: center; padding: 1rem;"><i class="fas fa-spinner fa-spin"></i> Scanning network for Falcon controllers...<br><small style="color: #6c757d;">This may take a few minutes</small></div>';
+        resultsDiv.style.display = 'block';
+
+        // Get subnet from current page hostname
+        let subnet = '';
+        const hostname = window.location.hostname;
+        const ipMatch = hostname.match(/^(\d{1,3}\.\d{1,3}\.\d{1,3})\.\d{1,3}$/);
+        if (ipMatch) {
+            subnet = ipMatch[1];
+        }
+
+        try {
+            const url = '/api/plugin/fpp-plugin-watcher/falcon/discover' + (subnet ? '?subnet=' + subnet : '');
+            const response = await fetch(url);
+            const data = await response.json();
+
+            if (data.success) {
+                if (data.controllers && data.controllers.length > 0) {
+                    listDiv.innerHTML = `
+                        <div style="margin-bottom: 0.5rem; color: #6c757d; font-size: 0.875rem;">
+                            Found ${data.count} controller(s) on subnet ${escapeHtml(data.subnet)}
+                        </div>
+                        <div style="display: flex; flex-direction: column; gap: 0.5rem;">
+                            ${data.controllers.map(c => `
+                                <div style="display: flex; justify-content: space-between; align-items: center; padding: 0.5rem; background: white; border: 1px solid #dee2e6; border-radius: 4px;">
+                                    <div>
+                                        <strong>${escapeHtml(c.name || c.ip)}</strong>
+                                        ${c.model ? `<span style="color: #6c757d; font-size: 0.875rem;">(${escapeHtml(c.model)})</span>` : ''}
+                                        <br>
+                                        <small style="color: #6c757d;">${escapeHtml(c.ip)}${c.firmware ? ` - FW: ${escapeHtml(c.firmware)}` : ''}</small>
+                                    </div>
+                                    <button class="btn btn-sm btn-outline-primary" onclick="addDiscoveredController('${escapeHtml(c.ip)}')">
+                                        <i class="fas fa-plus"></i> Add
+                                    </button>
+                                </div>
+                            `).join('')}
+                        </div>
+                        <div style="margin-top: 0.75rem;">
+                            <button class="btn btn-sm btn-primary" onclick="addAllDiscoveredControllers()">
+                                <i class="fas fa-plus-circle"></i> Add All
+                            </button>
+                        </div>
+                    `;
+                } else {
+                    listDiv.innerHTML = `
+                        <div style="text-align: center; padding: 1rem; color: #6c757d;">
+                            <i class="fas fa-info-circle"></i> No Falcon controllers found on subnet ${escapeHtml(data.subnet)}
+                        </div>
+                    `;
+                }
+            } else {
+                listDiv.innerHTML = `
+                    <div style="text-align: center; padding: 1rem; color: #dc3545;">
+                        <i class="fas fa-exclamation-triangle"></i> ${escapeHtml(data.error || 'Discovery failed')}
+                    </div>
+                `;
+            }
+        } catch (error) {
+            console.error('Error discovering controllers:', error);
+            listDiv.innerHTML = `
+                <div style="text-align: center; padding: 1rem; color: #dc3545;">
+                    <i class="fas fa-exclamation-triangle"></i> Error during discovery
+                </div>
+            `;
+        } finally {
+            if (icon) {
+                icon.className = 'fas fa-search';
+            }
+            if (discoverBtn) {
+                discoverBtn.disabled = false;
+            }
+        }
+    }
+
+    // Store discovered controllers for adding
+    let discoveredControllers = [];
+
+    // Add a single discovered controller
+    function addDiscoveredController(ip) {
+        const hostsInput = document.getElementById('falconHosts');
+        const currentHosts = hostsInput.value.split(',').map(h => h.trim()).filter(h => h);
+
+        if (!currentHosts.includes(ip)) {
+            currentHosts.push(ip);
+            hostsInput.value = currentHosts.join(', ');
+        }
+    }
+
+    // Add all discovered controllers
+    function addAllDiscoveredControllers() {
+        const listDiv = document.getElementById('discoveryList');
+        const addButtons = listDiv.querySelectorAll('button[onclick^="addDiscoveredController"]');
+
+        addButtons.forEach(btn => {
+            const match = btn.getAttribute('onclick').match(/addDiscoveredController\('([^']+)'\)/);
+            if (match) {
+                addDiscoveredController(match[1]);
+            }
+        });
+    }
+
+    // Hide discovery results
+    function hideDiscoveryResults() {
+        document.getElementById('discoveryResults').style.display = 'none';
     }
 </script>
