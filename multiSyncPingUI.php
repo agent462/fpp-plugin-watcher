@@ -514,8 +514,13 @@ $showDashboard = $isEnabled && $isPlayerMode;
                 const successClass = stat.successRate >= 99 ? 'success' :
                     stat.successRate >= 90 ? 'warning' : 'danger';
 
+                // Map latency class to border color
+                const borderColor = latencyClass === 'danger' ? '#dc3545' :
+                    latencyClass === 'warning' ? '#ffc107' :
+                    latencyClass === 'success' ? '#28a745' : '#6c757d';
+
                 return `
-                    <div class="hostStatCard" style="border-left-color: ${stat.color.border};">
+                    <div class="hostStatCard" style="border-left-color: ${borderColor};">
                         <div class="hostname">${escapeHtml(stat.hostname)}</div>
                         <div class="address">${escapeHtml(stat.address)}</div>
                         <div class="stats-row">
