@@ -429,6 +429,24 @@ if ($showDashboard) {
         return result;
     }
 
+    function renderLoadingCard(system, index) {
+        return `
+            <div class="systemCard" data-system="${index}">
+                <div class="systemHeader">
+                    <div>
+                        <div class="systemName">${escapeHtml(system.hostname)}</div>
+                        <div class="systemInfo"><a href="http://${escapeHtml(system.address)}" target="_blank" style="color: #007bff; text-decoration: none;">${escapeHtml(system.address)}</a> | ${escapeHtml(system.model || system.type || 'Unknown')} | FPP ${escapeHtml(system.version || '')}</div>
+                    </div>
+                    <div class="systemStatus" style="background: #e9ecef; color: #6c757d;">Loading...</div>
+                </div>
+                <div class="noDataMessage">
+                    <i class="fas fa-spinner fa-spin fa-2x"></i>
+                    <p>Fetching metrics...</p>
+                </div>
+            </div>
+        `;
+    }
+
     function renderSystemCard(metrics, index) {
         const statusClass = metrics.online ? 'online' : 'offline';
         const statusText = metrics.online ? 'Online' : 'Offline';
@@ -715,47 +733,61 @@ if ($showDashboard) {
             return;
         }
 
-        // Fetch metrics from all systems in parallel
-        const results = await Promise.all(systems.map((system, index) => fetchSystemMetrics(system)));
-
         // Destroy existing charts before rebuilding DOM
         destroyAllCharts();
-
-        // Store and render results
         systemMetrics = {};
-        let html = '';
-        results.forEach((metrics, index) => {
-            systemMetrics[index] = metrics;
-            html += renderSystemCard(metrics, index);
-        });
 
+        // Render loading placeholder cards for all systems immediately
+        let html = '';
+        systems.forEach((system, index) => {
+            html += renderLoadingCard(system, index);
+        });
         container.innerHTML = html;
 
-        // Render charts for online systems
-        results.forEach((metrics, index) => {
-            if (metrics.online) {
-                if (metrics.cpu && metrics.cpu.data) {
-                    renderMiniChart(`cpuChart-${index}`, metrics.cpu.data, 'CPU %', 'rgb(245, 87, 108)', 'cpu_usage');
+        // Show the content immediately with loading cards
+        document.getElementById('loadingIndicator').style.display = 'none';
+        document.getElementById('metricsContent').style.display = 'block';
+
+        // Fetch each system independently and update as results come in
+        const fetchPromises = systems.map(async (system, index) => {
+            try {
+                const metrics = await fetchSystemMetrics(system);
+                systemMetrics[index] = metrics;
+
+                // Update just this system's card
+                const cardElement = container.querySelector(`[data-system="${index}"]`);
+                if (cardElement) {
+                    cardElement.outerHTML = renderSystemCard(metrics, index);
+
+                    // Render charts for this system if online
+                    if (metrics.online) {
+                        if (metrics.cpu && metrics.cpu.data) {
+                            renderMiniChart(`cpuChart-${index}`, metrics.cpu.data, 'CPU %', 'rgb(245, 87, 108)', 'cpu_usage');
+                        }
+                        if (metrics.memory && metrics.memory.data) {
+                            renderMiniChart(`memoryChart-${index}`, metrics.memory.data, 'Memory MB', 'rgb(102, 126, 234)', 'free_mb');
+                        }
+                        if (metrics.temperature && metrics.temperature.data) {
+                            renderMiniChart(`tempChart-${index}`, metrics.temperature.data, 'Temp °C', 'rgb(255, 159, 64)', 'temperature');
+                        }
+                        if (metrics.wireless && metrics.wireless.data) {
+                            renderMiniChart(`wirelessChart-${index}`, metrics.wireless.data, 'Signal dBm', 'rgb(75, 192, 192)', 'signal_dbm');
+                        }
+                        if (metrics.ping && metrics.ping.data) {
+                            renderMiniChart(`pingChart-${index}`, metrics.ping.data, 'Latency ms', 'rgb(153, 102, 255)', 'avg_latency');
+                        }
+                    }
                 }
-                if (metrics.memory && metrics.memory.data) {
-                    renderMiniChart(`memoryChart-${index}`, metrics.memory.data, 'Memory MB', 'rgb(102, 126, 234)', 'free_mb');
-                }
-                if (metrics.temperature && metrics.temperature.data) {
-                    renderMiniChart(`tempChart-${index}`, metrics.temperature.data, 'Temp °C', 'rgb(255, 159, 64)', 'temperature');
-                }
-                if (metrics.wireless && metrics.wireless.data) {
-                    renderMiniChart(`wirelessChart-${index}`, metrics.wireless.data, 'Signal dBm', 'rgb(75, 192, 192)', 'signal_dbm');
-                }
-                if (metrics.ping && metrics.ping.data) {
-                    renderMiniChart(`pingChart-${index}`, metrics.ping.data, 'Latency ms', 'rgb(153, 102, 255)', 'avg_latency');
-                }
+
+                // Update summary cards progressively
+                updateSummaryCards();
+            } catch (error) {
+                console.error(`Failed to fetch metrics for ${system.hostname}:`, error);
             }
         });
 
-        updateSummaryCards();
-
-        document.getElementById('loadingIndicator').style.display = 'none';
-        document.getElementById('metricsContent').style.display = 'block';
+        // Wait for all to complete before allowing another refresh
+        await Promise.all(fetchPromises);
         isRefreshing = false;
     }
 
