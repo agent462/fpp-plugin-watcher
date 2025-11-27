@@ -30,6 +30,8 @@ function prepareConfig($config) {
     normalizeBoolean($config, 'connectivityCheckEnabled', false);
     normalizeBoolean($config, 'collectdEnabled', true);
     normalizeBoolean($config, 'multiSyncMetricsEnabled', false);
+    normalizeBoolean($config, 'multiSyncPingEnabled', false);
+    normalizeBoolean($config, 'falconMonitorEnabled', false);
 
     // Process testHosts into an array
     if (isset($config['testHosts'])) {
