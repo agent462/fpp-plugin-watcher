@@ -690,22 +690,22 @@ if ($showDashboard) {
         refreshBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Refreshing...';
         refreshBtn.disabled = true;
 
+        // Hide loading, show content immediately so cards can update as they load
+        document.getElementById('loadingIndicator').style.display = 'none';
+        document.getElementById('controlContent').style.display = 'block';
+
         try {
-            // Fetch all statuses in parallel
-            const promises = remoteAddresses.map(addr => fetchRemoteStatus(addr));
-            const results = await Promise.all(promises);
+            // Fetch all statuses in parallel, updating each card as it completes
+            const promises = remoteAddresses.map(addr =>
+                fetchRemoteStatus(addr).then(result => {
+                    updateCardUI(result.address, result);
+                    return result;
+                })
+            );
+            await Promise.all(promises);
 
-            // Update UI for each result
-            results.forEach(result => {
-                updateCardUI(result.address, result);
-            });
-
-            // Update last update time
+            // Update last update time after all complete
             document.getElementById('lastUpdateTime').textContent = new Date().toLocaleTimeString();
-
-            // Hide loading, show content
-            document.getElementById('loadingIndicator').style.display = 'none';
-            document.getElementById('controlContent').style.display = 'block';
 
         } catch (error) {
             console.error('Error refreshing status:', error);
