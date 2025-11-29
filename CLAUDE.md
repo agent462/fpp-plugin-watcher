@@ -64,6 +64,8 @@ sudo systemctl restart fppd
 
 ## Key Patterns
 
+Keep api.php as simple shell logic as you can.  Helper functions should go in the lib files.
+
 ### FPP Plugin Conventions
 - Include `/opt/fpp/www/common.php` for FPP functions (`json()`, `WriteSettingToFile()`, etc.)
 - Use `/** @disregard P1010 */` comment to suppress IDE warnings for FPP globals

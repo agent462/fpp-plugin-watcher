@@ -195,6 +195,19 @@ function getEndpointsfpppluginwatcher() {
         'callback' => 'fpppluginWatcherRemoteReboot');
     array_push($result, $ep);
 
+    // Plugin update endpoints
+    $ep = array(
+        'method' => 'GET',
+        'endpoint' => 'update/check',
+        'callback' => 'fpppluginWatcherUpdateCheck');
+    array_push($result, $ep);
+
+    $ep = array(
+        'method' => 'POST',
+        'endpoint' => 'update/upgrade',
+        'callback' => 'fpppluginWatcherUpdateUpgrade');
+    array_push($result, $ep);
+
     return $result;
 }
 
@@ -851,6 +864,85 @@ function fpppluginWatcherRemoteReboot() {
         'success' => true,
         'host' => $host,
         'message' => 'Reboot command sent'
+    ]);
+}
+
+// GET /api/plugin/fpp-plugin-watcher/update/check
+// Check GitHub for latest plugin version
+function fpppluginWatcherUpdateCheck() {
+    $githubUrl = 'https://raw.githubusercontent.com/agent462/fpp-plugin-watcher/main/pluginInfo.json';
+
+    // Get local version (strip 'v' prefix for comparison)
+    $localVersion = ltrim(WATCHERVERSION, 'v');
+
+    // Fetch remote version from GitHub
+    $ch = curl_init();
+    curl_setopt($ch, CURLOPT_URL, $githubUrl);
+    curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
+    curl_setopt($ch, CURLOPT_TIMEOUT, 10);
+    curl_setopt($ch, CURLOPT_FOLLOWLOCATION, true);
+    curl_setopt($ch, CURLOPT_USERAGENT, 'FPP-Plugin-Watcher');
+
+    $response = curl_exec($ch);
+    $httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+    $error = curl_error($ch);
+    curl_close($ch);
+
+    if ($response === false || $httpCode !== 200) {
+        /** @disregard P1010 */
+        return json([
+            'success' => false,
+            'error' => $error ?: "Failed to fetch from GitHub (HTTP $httpCode)",
+            'localVersion' => $localVersion
+        ]);
+    }
+
+    $remoteInfo = json_decode($response, true);
+    if (!$remoteInfo || !isset($remoteInfo['version'])) {
+        /** @disregard P1010 */
+        return json([
+            'success' => false,
+            'error' => 'Invalid response from GitHub',
+            'localVersion' => $localVersion
+        ]);
+    }
+
+    $remoteVersion = $remoteInfo['version'];
+
+    // Compare versions using version_compare
+    $comparison = version_compare($remoteVersion, $localVersion);
+    $updateAvailable = $comparison > 0;
+
+    /** @disregard P1010 */
+    return json([
+        'success' => true,
+        'localVersion' => $localVersion,
+        'remoteVersion' => $remoteVersion,
+        'updateAvailable' => $updateAvailable,
+        'repoName' => $remoteInfo['repoName'] ?? WATCHERPLUGINNAME
+    ]);
+}
+
+// POST /api/plugin/fpp-plugin-watcher/update/upgrade
+// Trigger plugin upgrade via FPP API
+function fpppluginWatcherUpdateUpgrade() {
+    $upgradeUrl = 'http://127.0.0.1/api/plugin/' . WATCHERPLUGINNAME . '/upgrade';
+
+    $result = apiCall('POST', $upgradeUrl, [], true, 120);
+
+    if ($result === false) {
+        /** @disregard P1010 */
+        return json([
+            'success' => false,
+            'error' => 'Failed to trigger plugin upgrade'
+        ]);
+    }
+
+    /** @disregard P1010 */
+    return json([
+        'success' => true,
+        'message' => 'Plugin upgrade initiated',
+        'result' => $result
     ]);
 }
 ?>
