@@ -177,6 +177,13 @@ if ($showDashboard) {
                             <span class="infoValue" id="watcher-<?php echo htmlspecialchars($system['address']); ?>">--</span>
                         </div>
                     </div>
+                    <div class="actionRow">
+                        <span class="actionLabel"><i class="fas fa-vial"></i> Test Mode</span>
+                        <label class="toggleSwitch">
+                            <input type="checkbox" id="testmode-<?php echo htmlspecialchars($system['address']); ?>" onchange="toggleTestMode('<?php echo htmlspecialchars($system['address']); ?>', this.checked)" disabled>
+                            <span class="toggleSlider"></span>
+                        </label>
+                    </div>
                     <div class="update-banner update-banner--fpp" id="fpp-update-container-<?php echo htmlspecialchars($system['address']); ?>">
                         <div class="banner-info">
                             <div>
@@ -194,22 +201,13 @@ if ($showDashboard) {
                         </div>
                         <div id="upgrades-list-<?php echo htmlspecialchars($system['address']); ?>"></div>
                     </div>
-                    <div class="controlActions">
-                        <div class="actionRow">
-                            <span class="actionLabel"><i class="fas fa-vial"></i> Test Mode</span>
-                            <label class="toggleSwitch">
-                                <input type="checkbox" id="testmode-<?php echo htmlspecialchars($system['address']); ?>" onchange="toggleTestMode('<?php echo htmlspecialchars($system['address']); ?>', this.checked)" disabled>
-                                <span class="toggleSlider"></span>
-                            </label>
-                        </div>
-                        <div class="actionButtons">
-                            <button class="actionBtn restart" onclick="restartFppd('<?php echo htmlspecialchars($system['address']); ?>')" id="restart-btn-<?php echo htmlspecialchars($system['address']); ?>" disabled>
-                                <i class="fas fa-redo"></i> Restart FPPD
-                            </button>
-                            <button class="actionBtn reboot" onclick="confirmReboot('<?php echo htmlspecialchars($system['address']); ?>', '<?php echo htmlspecialchars($system['hostname']); ?>')" id="reboot-btn-<?php echo htmlspecialchars($system['address']); ?>" disabled>
-                                <i class="fas fa-power-off"></i> Reboot
-                            </button>
-                        </div>
+                    <div class="actionButtons">
+                        <button class="actionBtn restart" onclick="restartFppd('<?php echo htmlspecialchars($system['address']); ?>')" id="restart-btn-<?php echo htmlspecialchars($system['address']); ?>" disabled>
+                            <i class="fas fa-redo"></i> Restart FPPD
+                        </button>
+                        <button class="actionBtn reboot" onclick="confirmReboot('<?php echo htmlspecialchars($system['address']); ?>', '<?php echo htmlspecialchars($system['hostname']); ?>')" id="reboot-btn-<?php echo htmlspecialchars($system['address']); ?>" disabled>
+                            <i class="fas fa-power-off"></i> Reboot
+                        </button>
                     </div>
                 </div>
             </div>

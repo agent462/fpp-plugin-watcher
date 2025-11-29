@@ -731,12 +731,17 @@
 
 .update-banner {
     display: none;
-    margin: -0.25rem -1.25rem 0.75rem -1.25rem;
+    margin: 0.75rem -1.25rem;
     padding: 0.5rem 0.75rem;
 }
 
 .update-banner.visible {
     display: block;
+}
+
+/** When followed by another visible banner, remove gap between them */
+.update-banner.visible + .update-banner.visible {
+    margin-top: -0.75rem;
 }
 
 /** Blue-purple gradient for FPP core updates */
