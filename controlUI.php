@@ -509,17 +509,21 @@ if ($showDashboard) {
         display: flex;
         justify-content: flex-end;
         gap: 0.75rem;
+        padding-top: 0.5rem;
     }
     .progressModal .btn {
-        padding: 0.5rem 1rem;
+        padding: 0.5rem 1.25rem;
         border-radius: 6px;
         font-size: 0.9rem;
         cursor: pointer;
         border: none;
+        flex-shrink: 0;
     }
     .progressModal .btn-close {
         background: #6c757d;
         color: #fff;
+        white-space: nowrap;
+        min-width: 80px;
     }
     .progressModal .btn-close:disabled {
         opacity: 0.7;
