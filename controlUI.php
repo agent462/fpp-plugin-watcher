@@ -398,6 +398,133 @@ if ($showDashboard) {
         background: #dc3545;
         color: #fff;
     }
+    .upgradeAllBtn {
+        display: none;
+        background: linear-gradient(135deg, #28a745 0%, #20c997 100%);
+        color: #fff;
+        border: none;
+        padding: 0.5rem 1rem;
+        border-radius: 6px;
+        font-size: 0.85rem;
+        font-weight: 600;
+        cursor: pointer;
+        transition: all 0.2s ease;
+        margin-right: 0.75rem;
+    }
+    .upgradeAllBtn:hover:not(:disabled) {
+        transform: translateY(-1px);
+        box-shadow: 0 2px 8px rgba(40, 167, 69, 0.3);
+    }
+    .upgradeAllBtn:disabled {
+        opacity: 0.7;
+        cursor: not-allowed;
+    }
+    .upgradeAllBtn.visible {
+        display: inline-flex;
+        align-items: center;
+        gap: 0.4rem;
+    }
+    .upgradeAllBtn .badge {
+        background: rgba(255,255,255,0.3);
+        padding: 0.1rem 0.4rem;
+        border-radius: 10px;
+        font-size: 0.75rem;
+    }
+    .progressModal {
+        position: fixed;
+        top: 0;
+        left: 0;
+        right: 0;
+        bottom: 0;
+        background: rgba(0,0,0,0.6);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        z-index: 10000;
+    }
+    .progressModal .modalContent {
+        background: #fff;
+        border-radius: 12px;
+        padding: 1.5rem;
+        max-width: 500px;
+        width: 90%;
+        box-shadow: 0 4px 24px rgba(0,0,0,0.3);
+    }
+    .progressModal h4 {
+        margin: 0 0 1rem 0;
+        color: #212529;
+        display: flex;
+        align-items: center;
+        gap: 0.5rem;
+    }
+    .progressModal h4 i {
+        color: #28a745;
+    }
+    .progressModal .progressInfo {
+        margin-bottom: 1rem;
+        font-size: 0.9rem;
+        color: #6c757d;
+    }
+    .progressModal .hostList {
+        max-height: 300px;
+        overflow-y: auto;
+        margin-bottom: 1rem;
+        border: 1px solid #e9ecef;
+        border-radius: 8px;
+    }
+    .progressModal .hostItem {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        padding: 0.6rem 0.75rem;
+        border-bottom: 1px solid #e9ecef;
+        font-size: 0.85rem;
+    }
+    .progressModal .hostItem:last-child {
+        border-bottom: none;
+    }
+    .progressModal .hostItem .hostName {
+        font-weight: 500;
+        color: #212529;
+    }
+    .progressModal .hostItem .hostStatus {
+        display: flex;
+        align-items: center;
+        gap: 0.4rem;
+        font-size: 0.8rem;
+    }
+    .progressModal .hostItem .hostStatus.pending {
+        color: #6c757d;
+    }
+    .progressModal .hostItem .hostStatus.in-progress {
+        color: #007bff;
+    }
+    .progressModal .hostItem .hostStatus.success {
+        color: #28a745;
+    }
+    .progressModal .hostItem .hostStatus.error {
+        color: #dc3545;
+    }
+    .progressModal .modalButtons {
+        display: flex;
+        justify-content: flex-end;
+        gap: 0.75rem;
+    }
+    .progressModal .btn {
+        padding: 0.5rem 1rem;
+        border-radius: 6px;
+        font-size: 0.9rem;
+        cursor: pointer;
+        border: none;
+    }
+    .progressModal .btn-close {
+        background: #6c757d;
+        color: #fff;
+    }
+    .progressModal .btn-close:disabled {
+        opacity: 0.7;
+        cursor: not-allowed;
+    }
 </style>
 
 <div class="metricsContainer">
@@ -428,9 +555,14 @@ if ($showDashboard) {
         <span class="lastUpdate">
             <i class="fas fa-clock"></i> Last updated: <span id="lastUpdateTime">--</span>
         </span>
-        <button class="buttons btn-outline-primary" onclick="refreshAllStatus()" id="refreshBtn">
-            <i class="fas fa-sync-alt"></i> Refresh All
-        </button>
+        <div>
+            <button class="upgradeAllBtn" id="upgradeAllBtn" onclick="showUpgradeAllModal()">
+                <i class="fas fa-arrow-circle-up"></i> Upgrade All Watcher <span class="badge" id="upgradeAllCount">0</span>
+            </button>
+            <button class="buttons btn-outline-primary" onclick="refreshAllStatus()" id="refreshBtn">
+                <i class="fas fa-sync-alt"></i> Refresh All
+            </button>
+        </div>
     </div>
 
     <div id="loadingIndicator" class="loadingSpinner">
@@ -513,14 +645,29 @@ if ($showDashboard) {
         </div>
     </div>
 
+    <div id="upgradeAllModal" class="progressModal" style="display: none;">
+        <div class="modalContent">
+            <h4><i class="fas fa-arrow-circle-up"></i> Upgrading Watcher</h4>
+            <div class="progressInfo" id="upgradeProgressInfo">Preparing to upgrade...</div>
+            <div class="hostList" id="upgradeHostList">
+                <!-- Host items populated by JavaScript -->
+            </div>
+            <div class="modalButtons">
+                <button class="btn btn-close" id="upgradeModalCloseBtn" onclick="closeUpgradeAllModal()" disabled>Close</button>
+            </div>
+        </div>
+    </div>
+
     <?php endif; ?>
 </div>
 
 <?php if ($showDashboard && !empty($remoteSystems)): ?>
 <script>
     const remoteAddresses = <?php echo json_encode(array_column($remoteSystems, 'address')); ?>;
+    const remoteHostnames = <?php echo json_encode(array_combine(array_column($remoteSystems, 'address'), array_column($remoteSystems, 'hostname'))); ?>;
     let isRefreshing = false;
     let pendingReboot = null;
+    let hostsWithWatcherUpdates = new Map(); // Map of address -> {hostname, installedVersion, latestVersion}
 
     // Fetch status for a single remote via local proxy
     async function fetchRemoteStatus(address) {
@@ -650,6 +797,20 @@ if ($showDashboard) {
 
         // Check for plugin updates
         const pluginUpdates = data.pluginUpdates || [];
+
+        // Track Watcher updates for "Upgrade All" feature
+        const watcherUpdate = pluginUpdates.find(p => p.repoName === 'fpp-plugin-watcher');
+        if (watcherUpdate) {
+            hostsWithWatcherUpdates.set(address, {
+                hostname: remoteHostnames[address] || address,
+                installedVersion: watcherUpdate.installedVersion,
+                latestVersion: watcherUpdate.latestVersion
+            });
+        } else {
+            hostsWithWatcherUpdates.delete(address);
+        }
+        updateUpgradeAllButton();
+
         if (pluginUpdates.length > 0) {
             // Build upgrade items HTML
             let upgradesHtml = '';
@@ -965,6 +1126,108 @@ if ($showDashboard) {
             btn.disabled = false;
             alert(`Upgrade failed: ${error.message}`);
         }
+    }
+
+    // Update the "Upgrade All" button visibility and count
+    function updateUpgradeAllButton() {
+        const btn = document.getElementById('upgradeAllBtn');
+        const countBadge = document.getElementById('upgradeAllCount');
+        const count = hostsWithWatcherUpdates.size;
+
+        if (count >= 2) {
+            btn.classList.add('visible');
+            countBadge.textContent = count;
+        } else {
+            btn.classList.remove('visible');
+        }
+    }
+
+    // Show the upgrade all modal and start the upgrade process
+    async function showUpgradeAllModal() {
+        if (hostsWithWatcherUpdates.size < 2) return;
+
+        const modal = document.getElementById('upgradeAllModal');
+        const hostList = document.getElementById('upgradeHostList');
+        const progressInfo = document.getElementById('upgradeProgressInfo');
+        const closeBtn = document.getElementById('upgradeModalCloseBtn');
+
+        // Build host list HTML
+        let hostListHtml = '';
+        hostsWithWatcherUpdates.forEach((info, address) => {
+            hostListHtml += `
+                <div class="hostItem" id="upgrade-host-${address.replace(/\./g, '-')}">
+                    <div class="hostName">${info.hostname} (${address})</div>
+                    <div class="hostStatus pending" id="upgrade-status-${address.replace(/\./g, '-')}">
+                        <i class="fas fa-clock"></i> Pending
+                    </div>
+                </div>
+            `;
+        });
+        hostList.innerHTML = hostListHtml;
+
+        // Show modal
+        modal.style.display = 'flex';
+        closeBtn.disabled = true;
+
+        // Get array of hosts to upgrade
+        const hostsToUpgrade = Array.from(hostsWithWatcherUpdates.keys());
+        let completed = 0;
+        let failed = 0;
+
+        progressInfo.textContent = `Upgrading 0 of ${hostsToUpgrade.length} hosts...`;
+
+        // Upgrade each host sequentially
+        for (const address of hostsToUpgrade) {
+            const statusEl = document.getElementById(`upgrade-status-${address.replace(/\./g, '-')}`);
+
+            // Mark as in progress
+            statusEl.className = 'hostStatus in-progress';
+            statusEl.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Upgrading...';
+
+            try {
+                const response = await fetch('/api/plugin/fpp-plugin-watcher/remote/upgrade', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ host: address, plugin: 'fpp-plugin-watcher' })
+                });
+
+                const data = await response.json();
+
+                if (!data.success) {
+                    throw new Error(data.error || 'Upgrade failed');
+                }
+
+                // Mark as success
+                statusEl.className = 'hostStatus success';
+                statusEl.innerHTML = '<i class="fas fa-check"></i> Done';
+                completed++;
+
+            } catch (error) {
+                console.error(`Error upgrading Watcher on ${address}:`, error);
+                statusEl.className = 'hostStatus error';
+                statusEl.innerHTML = `<i class="fas fa-times"></i> Failed`;
+                failed++;
+            }
+
+            progressInfo.textContent = `Upgraded ${completed + failed} of ${hostsToUpgrade.length} hosts...`;
+        }
+
+        // Done - update progress info and enable close button
+        if (failed === 0) {
+            progressInfo.textContent = `Successfully upgraded ${completed} hosts!`;
+        } else {
+            progressInfo.textContent = `Completed: ${completed} succeeded, ${failed} failed`;
+        }
+        closeBtn.disabled = false;
+    }
+
+    // Close the upgrade all modal
+    function closeUpgradeAllModal() {
+        const modal = document.getElementById('upgradeAllModal');
+        modal.style.display = 'none';
+
+        // Refresh all statuses to update the cards
+        refreshAllStatus();
     }
 
     // Auto-refresh every 30 seconds
