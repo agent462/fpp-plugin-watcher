@@ -44,8 +44,15 @@ function prepareConfig($config) {
     return $config;
 }
 
-// Read plugin configuration file
-function readPluginConfig() {
+// Read plugin configuration file (cached per request)
+function readPluginConfig($forceReload = false) {
+    static $cachedConfig = null;
+
+    // Return cached config if available (unless forced reload)
+    if ($cachedConfig !== null && !$forceReload) {
+        return $cachedConfig;
+    }
+
     global $settings;
     $configFile = WATCHERCONFIGFILELOCATION;
 
@@ -56,7 +63,7 @@ function readPluginConfig() {
 
     ensureFppOwnership($configFile);
 
-    logMessage("Loading existing Watcher config file: ".WATCHERCONFIGFILELOCATION);
+    logMessage("Loading Watcher config file: ".WATCHERCONFIGFILELOCATION);
     $fd = fopen($configFile, 'r');
     if ($fd === false) {
         logMessage("ERROR: Failed to open config file: " . WATCHERCONFIGFILELOCATION);
@@ -68,6 +75,7 @@ function readPluginConfig() {
     flock($fd, LOCK_UN);
     fclose($fd);
 
-    return prepareConfig($config);
+    $cachedConfig = prepareConfig($config);
+    return $cachedConfig;
 }
 ?>
