@@ -524,6 +524,10 @@ if ($showDashboard) {
         color: #fff;
         white-space: nowrap;
         min-width: 80px;
+        text-align: center;
+        display: flex;
+        align-items: center;
+        justify-content: center;
     }
     .progressModal .btn-close:disabled {
         opacity: 0.7;
