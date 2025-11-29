@@ -37,7 +37,14 @@ sudo systemctl restart fppd
 
 ### File Structure
 - **api.php**: REST API endpoint definitions and handlers. All endpoints registered via `getEndpointsfpppluginwatcher()`
-- **\*UI.php files**: Web interface pages (configUI, metricsUI, connectivityUI, falconMonitorUI, allMetricsUI, multiSyncPingUI)
+- **UI files**: Web interface pages:
+  - **configUI.php**: Plugin configuration page
+  - **localMetricsUI.php**: Local system metrics (CPU, memory, disk, thermal, wireless)
+  - **connectivityUI.php**: Ping connectivity monitoring
+  - **falconMonitorUI.php**: Falcon hardware controller status
+  - **remoteMetricsUI.php**: Multi-sync remote host system metrics
+  - **remotePingUI.php**: Multi-sync remote host ping statistics
+  - **remoteControlUI.php**: Remote FPP system control panel
 - **menu.inc**: Dynamic FPP menu registration based on enabled features
 - **connectivityCheck.php**: Background daemon for network monitoring loop (runs via postStart.sh)
 

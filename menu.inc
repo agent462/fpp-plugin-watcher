@@ -14,6 +14,8 @@
 # Check config for conditional menu entries
 include_once __DIR__ . '/lib/config.php';
 $watcherConfig = readPluginConfig();
+$showLocalMetricsMenu = !empty($watcherConfig['collectdEnabled']);
+$showConnectivityMenu = !empty($watcherConfig['connectivityCheckEnabled']);
 $showMultiSyncMenu = !empty($watcherConfig['multiSyncMetricsEnabled']);
 $showMultiSyncPingMenu = !empty($watcherConfig['multiSyncPingEnabled']);
 $showFalconMonitorMenu = !empty($watcherConfig['falconMonitorEnabled']);
@@ -27,18 +29,6 @@ $menuEntries = Array(
 		'wrap' => 1
 	),
 	Array(
-		'text' => 'Watcher - Metrics',
-		'type' => 'status',
-		'page' => 'metricsUI.php',
-		'wrap' => 1
-	),
-	Array(
-		'text' => 'Watcher - Connectivity',
-		'type' => 'status',
-		'page' => 'connectivityUI.php',
-		'wrap' => 1
-	),
-	Array(
 		'text' => 'Watcher - Home',
 		'type' => 'help',
 		'page' => 'https://github.com/agent462/fpp-plugin-watcher',
@@ -46,10 +36,36 @@ $menuEntries = Array(
 	)
 );
 
+// Add Local Metrics menu entry only if collectd is enabled
+if ($showLocalMetricsMenu) {
+	$helpIndex = count($menuEntries) - 1;
+	array_splice($menuEntries, $helpIndex, 0, [
+		Array(
+			'text' => 'Watcher - Local Metrics',
+			'type' => 'status',
+			'page' => 'localMetricsUI.php',
+			'wrap' => 1
+		)
+	]);
+}
+
+// Add Connectivity menu entry only if connectivity check is enabled
+if ($showConnectivityMenu) {
+	$helpIndex = count($menuEntries) - 1;
+	array_splice($menuEntries, $helpIndex, 0, [
+		Array(
+			'text' => 'Watcher - Connectivity',
+			'type' => 'status',
+			'page' => 'connectivityUI.php',
+			'wrap' => 1
+		)
+	]);
+}
+
 // Add Falcon Monitor menu entry only if enabled
 if ($showFalconMonitorMenu) {
-	// Insert before the Help entry (at index 4)
-	array_splice($menuEntries, 4, 0, [
+	$helpIndex = count($menuEntries) - 1;
+	array_splice($menuEntries, $helpIndex, 0, [
 		Array(
 			'text' => 'Watcher - Falcon Monitor',
 			'type' => 'status',
@@ -65,9 +81,9 @@ if ($showMultiSyncMenu) {
 	$helpIndex = count($menuEntries) - 1;
 	array_splice($menuEntries, $helpIndex, 0, [
 		Array(
-			'text' => 'Watcher - Remote Systems',
+			'text' => 'Watcher - Remote Metrics',
 			'type' => 'status',
-			'page' => 'allMetricsUI.php',
+			'page' => 'remoteMetricsUI.php',
 			'wrap' => 1
 		)
 	]);
@@ -79,9 +95,9 @@ if ($showMultiSyncPingMenu) {
 	$helpIndex = count($menuEntries) - 1;
 	array_splice($menuEntries, $helpIndex, 0, [
 		Array(
-			'text' => 'Watcher - Multi-Sync Ping',
+			'text' => 'Watcher - Remote Ping',
 			'type' => 'status',
-			'page' => 'multiSyncPingUI.php',
+			'page' => 'remotePingUI.php',
 			'wrap' => 1
 		)
 	]);
@@ -95,7 +111,7 @@ if ($showControlUIMenu) {
 		Array(
 			'text' => 'Watcher - Remote Control',
 			'type' => 'status',
-			'page' => 'controlUI.php',
+			'page' => 'remoteControlUI.php',
 			'wrap' => 1
 		)
 	]);
