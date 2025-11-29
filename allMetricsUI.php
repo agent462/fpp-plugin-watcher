@@ -276,6 +276,7 @@ if ($showDashboard) {
             address: address,
             model: system.model || system.type || 'Unknown',
             version: system.version || '',
+            watcherVersion: null,
             online: false,
             error: null,
             cpu: null,
@@ -288,8 +289,11 @@ if ($showDashboard) {
         };
 
         try {
-            // Fetch all metrics in a single request for better performance
-            const allData = await fetchJson(`${baseUrl}/metrics/all?hours=${hours}`);
+            // Fetch all metrics and version in parallel for better performance
+            const [allData, versionData] = await Promise.all([
+                fetchJson(`${baseUrl}/metrics/all?hours=${hours}`),
+                fetchJson(`${baseUrl}/version`).catch(() => null)
+            ]);
 
             if (!allData.success) {
                 result.online = false;
@@ -298,6 +302,11 @@ if ($showDashboard) {
             }
 
             result.online = true;
+
+            // Extract watcher version if available
+            if (versionData && versionData.version) {
+                result.watcherVersion = versionData.version;
+            }
 
             // Process CPU metrics
             const cpuData = allData.cpu;
@@ -566,12 +575,13 @@ if ($showDashboard) {
             `;
         }
 
+        const watcherInfo = metrics.watcherVersion ? ` | Watcher ${escapeHtml(metrics.watcherVersion)}` : '';
         return `
             <div class="systemCard" data-system="${index}">
                 <div class="systemHeader">
                     <div>
                         <div class="systemName">${escapeHtml(metrics.hostname)}</div>
-                        <div class="systemInfo"><a href="http://${escapeHtml(metrics.address)}" target="_blank" style="color: #007bff; text-decoration: none;">${escapeHtml(metrics.address)}</a> | ${escapeHtml(metrics.model)} | FPP ${escapeHtml(metrics.version)}</div>
+                        <div class="systemInfo"><a href="http://${escapeHtml(metrics.address)}" target="_blank" style="color: #007bff; text-decoration: none;">${escapeHtml(metrics.address)}</a> | ${escapeHtml(metrics.model)} | FPP ${escapeHtml(metrics.version)}${watcherInfo}</div>
                     </div>
                     <div class="systemStatus ${statusClass}">${statusText}</div>
                 </div>

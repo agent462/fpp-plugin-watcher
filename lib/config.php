@@ -32,6 +32,7 @@ function prepareConfig($config) {
     normalizeBoolean($config, 'multiSyncMetricsEnabled', false);
     normalizeBoolean($config, 'multiSyncPingEnabled', false);
     normalizeBoolean($config, 'falconMonitorEnabled', false);
+    normalizeBoolean($config, 'controlUIEnabled', true);
 
     // Process testHosts into an array
     if (isset($config['testHosts'])) {
@@ -41,31 +42,6 @@ function prepareConfig($config) {
     }
 
     return $config;
-}
-
-// Manage collectd service (enable or disable)
-function manageCollectdService($enable) {
-    $action = $enable ? 'enable' : 'disable';
-    $logAction = $enable ? 'Enabling' : 'Disabling';
-
-    logMessage("$logAction collectd service...");
-
-    // Use systemctl to enable/disable and start/stop the service
-    // --now flag makes systemctl start/stop the service immediately
-    $command = "sudo systemctl --now $action collectd.service 2>&1";
-    $output = [];
-    $returnCode = 0;
-
-    exec($command, $output, $returnCode);
-
-    if ($returnCode === 0) {
-        logMessage("Successfully {$action}d collectd service");
-        return true;
-    } else {
-        $errorMsg = implode("\n", $output);
-        logMessage("ERROR: Failed to $action collectd service. Return code: $returnCode. Output: $errorMsg");
-        return false;
-    }
 }
 
 // Read plugin configuration file

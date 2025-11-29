@@ -26,7 +26,8 @@ define("WATCHERDEFAULTSETTINGS",
         'multiSyncMetricsEnabled' => false,
         'multiSyncPingEnabled' => false,
         'multiSyncPingInterval' => 60,
-        'falconMonitorEnabled' => false)
+        'falconMonitorEnabled' => false,
+        'controlUIEnabled' => true)
         );
 
 // Ensure plugin-created files are owned by the FPP user/group for web access

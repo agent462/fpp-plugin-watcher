@@ -31,6 +31,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['save_settings'])) {
     $multiSyncPingEnabled = isset($_POST['multiSyncPingEnabled']) ? 'true' : 'false';
     $multiSyncPingInterval = intval($_POST['multiSyncPingInterval'] ?? 60);
     $falconMonitorEnabled = isset($_POST['falconMonitorEnabled']) ? 'true' : 'false';
+    $controlUIEnabled = isset($_POST['controlUIEnabled']) ? 'true' : 'false';
 
     // If 'default' is selected, auto-detect and save the actual interface
     if ($networkAdapter === 'default') {
@@ -68,11 +69,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['save_settings'])) {
     }
 
     if (empty($errors)) {
-        // Check if collectdEnabled changed
-        $currentConfig = readPluginConfig();
-        $collectdChanged = ($currentConfig['collectdEnabled'] != ($collectdEnabled === 'true'));
-
         // Save settings using FPP's WriteSettingToFile
+        // Note: collectd service will be enabled/disabled on FPP restart via postStart.sh
         $settingsToSave = [
             'connectivityCheckEnabled' => $connectivityCheckEnabled,
             'checkInterval' => $checkInterval,
@@ -83,7 +81,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['save_settings'])) {
             'multiSyncMetricsEnabled' => $multiSyncMetricsEnabled,
             'multiSyncPingEnabled' => $multiSyncPingEnabled,
             'multiSyncPingInterval' => $multiSyncPingInterval,
-            'falconMonitorEnabled' => $falconMonitorEnabled
+            'falconMonitorEnabled' => $falconMonitorEnabled,
+            'controlUIEnabled' => $controlUIEnabled
         ];
 
         foreach ($settingsToSave as $settingName => $settingValue) {
@@ -91,24 +90,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['save_settings'])) {
             WriteSettingToFile($settingName, $settingValue, WATCHERPLUGINNAME);
         }
 
-        // Manage collectd service if setting changed
-        if ($collectdChanged) {
-            $collectdSuccess = manageCollectdService($collectdEnabled === 'true');
-            if (!$collectdSuccess) {
-                $statusMessage = 'Settings saved, but failed to ' . ($collectdEnabled === 'true' ? 'enable' : 'disable') . ' collectd service. Check logs for details.';
-                $statusType = 'error';
-            }
-        }
+        // Set FPP restart flag to notify that fppd restart is needed
+        /** @disregard P1010 */
+        WriteSettingToFile('restartFlag', 1);
 
-        // Set success message if not already set by collectd error
-        if (empty($statusMessage)) {
-            // Set FPP restart flag to notify that fppd restart is needed
-            /** @disregard P1010 */
-            WriteSettingToFile('restartFlag', 1);
-
-            $statusMessage = 'Settings saved successfully!';
-            $statusType = 'success';
-        }
+        $statusMessage = 'Settings saved successfully!';
+        $statusType = 'success';
 
         // Reload config
         $config = readPluginConfig();
@@ -327,7 +314,7 @@ if ($isPlayerMode) {
             <!-- Remote Metrics Settings (Player Mode Only) -->
             <div class="settingsPanel" style="margin-top: 2rem;">
                 <div class="panelTitle">
-                    <i class="fas fa-network-wired"></i> Remote Metrics
+                    <i class="fas fa-network-wired"></i> Player Mode Options
                 </div>
 
                 <!-- Enable/Disable Remote Metrics -->
@@ -388,6 +375,27 @@ if ($isPlayerMode) {
                         </div>
                     </div>
                 </div>
+
+                <!-- Enable/Disable Remote Control UI -->
+                <div class="row settingRow">
+                    <div class="col-md-4 col-lg-3">
+                        <label class="settingLabel">
+                            <input type="checkbox" id="controlUIEnabled" name="controlUIEnabled" class="form-check-input" value="1"
+                                <?php echo (!empty($config['controlUIEnabled'])) ? 'checked' : ''; ?>>
+                            Enable Remote Control Dashboard
+                        </label>
+                    </div>
+                    <div class="col-md-8">
+                        <div class="settingDescription">
+                            Enable a dashboard to control remote FPP systems in your multi-sync setup.
+                            Provides quick actions like toggling test mode, restarting FPPD, rebooting devices,
+                            and viewing system information for all connected remotes from a single page.
+                            <p></p>
+                            <strong>Note:</strong> Remote systems must be accessible over the network.
+                            Control actions are sent directly to each remote FPP instance.
+                        </div>
+                    </div>
+                </div>
             </div>
             <?php endif; ?>
 
@@ -409,7 +417,8 @@ if ($isPlayerMode) {
                     <div class="col-md-8">
                         <div class="settingDescription">
                             Enable a dashboard for monitoring Falcon pixel controllers on your network.
-                            Displays real-time status including temperatures, voltages, pixel counts, and firmware versions.
+                            Displays real-time status including temperatures, voltages, pixel counts, and firmware versions. 
+                            <p></p>Allows triggering test mode and rebooting the controllers directly from the dashboard.
                             <p></p>
                             <span style="display: inline-block; background: #e7f3ff; border: 1px solid #b3d7ff; border-radius: 4px; padding: 0.4em 0.8em; font-weight: 500; margin: 0.25em 0;">
                                 <i class="fas fa-microchip" style="color: #0066cc;"></i> <strong>Supported Controllers:</strong> F4V2, F16V2, F4V3, F16V3, F48

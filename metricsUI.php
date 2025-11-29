@@ -27,12 +27,7 @@ $defaultAdapter = $configuredAdapter;
         <i class="fas fa-chart-area"></i> System Metrics Dashboard
     </h2>
 
-    <div id="loadingIndicator" class="loadingSpinner">
-        <i class="fas fa-spinner"></i>
-        <p>Loading metrics data...</p>
-    </div>
-
-    <div id="metricsContent" style="display: none;">
+    <div id="metricsContent">
         <!-- Time Range Selector -->
         <div class="chartControls" style="margin-bottom: 1.5rem;">
             <div class="controlGroup">
@@ -53,7 +48,11 @@ $defaultAdapter = $configuredAdapter;
         </div>
 
         <!-- CPU Usage Chart -->
-        <div class="chartCard">
+        <div class="chartCard" id="cpuCard">
+            <div class="chartLoading" id="cpuLoading">
+                <i class="fas fa-spinner fa-spin"></i>
+                <p>Loading CPU data...</p>
+            </div>
             <div class="chartTitle">
                 <span><i class="fas fa-microchip"></i> CPU Usage (Averaged Across All Cores)</span>
             </div>
@@ -61,7 +60,11 @@ $defaultAdapter = $configuredAdapter;
         </div>
 
         <!-- Load Average Chart -->
-        <div class="chartCard">
+        <div class="chartCard" id="loadCard">
+            <div class="chartLoading" id="loadLoading">
+                <i class="fas fa-spinner fa-spin"></i>
+                <p>Loading load average data...</p>
+            </div>
             <div class="chartTitle">
                 <span><i class="fas fa-tachometer-alt"></i> Load Average</span>
             </div>
@@ -89,7 +92,11 @@ $defaultAdapter = $configuredAdapter;
         </div>
 
         <!-- Free Memory Chart -->
-        <div class="chartCard">
+        <div class="chartCard" id="memoryCard">
+            <div class="chartLoading" id="memoryLoading">
+                <i class="fas fa-spinner fa-spin"></i>
+                <p>Loading memory data...</p>
+            </div>
             <div class="chartTitle">
                 <span><i class="fas fa-memory"></i> Free Memory</span>
             </div>
@@ -97,7 +104,11 @@ $defaultAdapter = $configuredAdapter;
         </div>
 
         <!-- Disk Status + Chart -->
-        <div class="chartCard">
+        <div class="chartCard" id="diskCard">
+            <div class="chartLoading" id="diskLoading">
+                <i class="fas fa-spinner fa-spin"></i>
+                <p>Loading disk data...</p>
+            </div>
             <div class="chartTitle">
                 <span><i class="fas fa-hdd"></i> Disk Free Space (Root)</span>
             </div>
@@ -108,7 +119,11 @@ $defaultAdapter = $configuredAdapter;
         </div>
 
         <!-- Network Interface Bandwidth Chart -->
-        <div class="chartCard">
+        <div class="chartCard" id="networkCard">
+            <div class="chartLoading" id="networkLoading">
+                <i class="fas fa-spinner fa-spin"></i>
+                <p>Loading network data...</p>
+            </div>
             <div class="chartTitle">
                 <span><i class="fas fa-network-wired"></i> Network Bandwidth</span>
             </div>
@@ -125,6 +140,10 @@ $defaultAdapter = $configuredAdapter;
 
         <!-- Temperature Status + Chart -->
         <div class="chartCard" id="thermalCard" style="display: none;">
+            <div class="chartLoading" id="thermalLoading">
+                <i class="fas fa-spinner fa-spin"></i>
+                <p>Loading temperature data...</p>
+            </div>
             <div class="chartTitle">
                 <span><i class="fas fa-thermometer-half"></i> Temperature (Thermal Zones)</span>
             </div>
@@ -136,6 +155,10 @@ $defaultAdapter = $configuredAdapter;
 
         <!-- Wireless Metrics Chart -->
         <div class="chartCard" id="wirelessCard" style="display: none;">
+            <div class="chartLoading" id="wirelessLoading">
+                <i class="fas fa-spinner fa-spin"></i>
+                <p>Loading wireless data...</p>
+            </div>
             <div class="chartTitle">
                 <span><i class="fas fa-wifi"></i> Wireless Signal Quality</span>
             </div>
@@ -434,6 +457,7 @@ $defaultAdapter = $configuredAdapter;
         {
             key: 'memory',
             canvasId: 'memoryChart',
+            loadingId: 'memoryLoading',
             url: (hours) => `/api/plugin/fpp-plugin-watcher/metrics/memory/free?hours=${hours}`,
             prepare: (payload) => {
                 if (!payload || !payload.success || !payload.data || payload.data.length === 0) {
@@ -487,6 +511,7 @@ $defaultAdapter = $configuredAdapter;
         {
             key: 'cpu',
             canvasId: 'cpuChart',
+            loadingId: 'cpuLoading',
             url: (hours) => `/api/plugin/fpp-plugin-watcher/metrics/cpu/average?hours=${hours}`,
             prepare: (payload) => {
                 if (!payload || !payload.success || !payload.data || payload.data.length === 0) {
@@ -524,6 +549,7 @@ $defaultAdapter = $configuredAdapter;
         {
             key: 'load',
             canvasId: 'loadChart',
+            loadingId: 'loadLoading',
             url: (hours) => `/api/plugin/fpp-plugin-watcher/metrics/load/average?hours=${hours}`,
             prepare: (payload) => {
                 if (!payload || !payload.success || !payload.data || payload.data.length === 0) {
@@ -594,6 +620,7 @@ $defaultAdapter = $configuredAdapter;
         {
             key: 'disk',
             canvasId: 'diskChart',
+            loadingId: 'diskLoading',
             url: (hours) => `/api/plugin/fpp-plugin-watcher/metrics/disk/free?hours=${hours}`,
             prepare: (payload) => {
                 if (!payload || !payload.success || !payload.data || payload.data.length === 0) {
@@ -630,6 +657,7 @@ $defaultAdapter = $configuredAdapter;
         {
             key: 'network',
             canvasId: 'networkChart',
+            loadingId: 'networkLoading',
             url: (hours) => `/api/plugin/fpp-plugin-watcher/metrics/interface/bandwidth?interface=${getSelectedInterface()}&hours=${hours}`,
             prepare: (payload) => {
                 if (!payload || !payload.success || !payload.data || payload.data.length === 0) {
@@ -685,6 +713,7 @@ $defaultAdapter = $configuredAdapter;
             key: 'thermal',
             canvasId: 'thermalChart',
             cardId: 'thermalCard',
+            loadingId: 'thermalLoading',
             url: (hours) => `/api/plugin/fpp-plugin-watcher/metrics/thermal?hours=${hours}`,
             prepare: (payload) => {
                 if (!payload || !payload.success || !payload.data || payload.data.length === 0 || !payload.zones || payload.zones.length === 0) {
@@ -737,6 +766,7 @@ $defaultAdapter = $configuredAdapter;
             key: 'wireless',
             canvasId: 'wirelessChart',
             cardId: 'wirelessCard',
+            loadingId: 'wirelessLoading',
             url: (hours) => `/api/plugin/fpp-plugin-watcher/metrics/wireless?hours=${hours}`,
             prepare: (payload) => {
                 if (!payload || !payload.success || !payload.data || payload.data.length === 0 || !payload.interfaces || payload.interfaces.length === 0) {
@@ -809,6 +839,12 @@ $defaultAdapter = $configuredAdapter;
     ];
 
     async function updateMetric(definition, hours) {
+        // Show loading state
+        if (definition.loadingId) {
+            const loadingEl = document.getElementById(definition.loadingId);
+            if (loadingEl) loadingEl.style.display = 'flex';
+        }
+
         try {
             const payload = await fetchJson(definition.url(hours));
             const prepared = definition.prepare(payload);
@@ -816,6 +852,11 @@ $defaultAdapter = $configuredAdapter;
             if (!prepared || prepared.hidden) {
                 if (definition.cardId) {
                     document.getElementById(definition.cardId).style.display = 'none';
+                }
+                // Hide loading even for hidden/empty data
+                if (definition.loadingId) {
+                    const loadingEl = document.getElementById(definition.loadingId);
+                    if (loadingEl) loadingEl.style.display = 'none';
                 }
                 return;
             }
@@ -825,10 +866,21 @@ $defaultAdapter = $configuredAdapter;
             }
 
             renderChart(definition.key, definition.canvasId, prepared.datasets, hours, prepared.chartOptions);
+
+            // Hide loading overlay after chart is rendered
+            if (definition.loadingId) {
+                const loadingEl = document.getElementById(definition.loadingId);
+                if (loadingEl) loadingEl.style.display = 'none';
+            }
         } catch (error) {
             console.error(`Error updating ${definition.key} chart:`, error);
             if (definition.cardId) {
                 document.getElementById(definition.cardId).style.display = 'none';
+            }
+            // Hide loading on error
+            if (definition.loadingId) {
+                const loadingEl = document.getElementById(definition.loadingId);
+                if (loadingEl) loadingEl.style.display = 'none';
             }
         }
     }
@@ -888,12 +940,11 @@ $defaultAdapter = $configuredAdapter;
                 refreshBtn.style.animation = 'spin 1s linear infinite';
             }
 
-            await loadInterfaces();
-            await loadSystemStatus();
+            // Start these in parallel - don't wait for interfaces before loading metrics
+            loadInterfaces();
+            loadSystemStatus();
+            // runMetricUpdates uses Promise.all internally, so charts update progressively
             await runMetricUpdates();
-
-            document.getElementById('loadingIndicator').style.display = 'none';
-            document.getElementById('metricsContent').style.display = 'block';
 
             if (refreshBtn) {
                 refreshBtn.style.animation = '';

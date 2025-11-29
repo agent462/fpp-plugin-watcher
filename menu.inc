@@ -17,6 +17,7 @@ $watcherConfig = readPluginConfig();
 $showMultiSyncMenu = !empty($watcherConfig['multiSyncMetricsEnabled']);
 $showMultiSyncPingMenu = !empty($watcherConfig['multiSyncPingEnabled']);
 $showFalconMonitorMenu = !empty($watcherConfig['falconMonitorEnabled']);
+$showControlUIMenu = !empty($watcherConfig['controlUIEnabled']);
 
 $menuEntries = Array(
 	Array(
@@ -81,6 +82,20 @@ if ($showMultiSyncPingMenu) {
 			'text' => 'Watcher - Multi-Sync Ping',
 			'type' => 'status',
 			'page' => 'multiSyncPingUI.php',
+			'wrap' => 1
+		)
+	]);
+}
+
+// Add Remote Control UI menu entry only if enabled
+if ($showControlUIMenu) {
+	// Find the Help entry index (it may have shifted due to previous entries)
+	$helpIndex = count($menuEntries) - 1;
+	array_splice($menuEntries, $helpIndex, 0, [
+		Array(
+			'text' => 'Watcher - Remote Control',
+			'type' => 'status',
+			'page' => 'controlUI.php',
 			'wrap' => 1
 		)
 	]);

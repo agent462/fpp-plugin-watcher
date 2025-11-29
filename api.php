@@ -170,6 +170,31 @@ function getEndpointsfpppluginwatcher() {
         'callback' => 'fpppluginWatcherFalconDiscover');
     array_push($result, $ep);
 
+    // Remote control proxy endpoints
+    $ep = array(
+        'method' => 'GET',
+        'endpoint' => 'remote/status',
+        'callback' => 'fpppluginWatcherRemoteStatus');
+    array_push($result, $ep);
+
+    $ep = array(
+        'method' => 'POST',
+        'endpoint' => 'remote/command',
+        'callback' => 'fpppluginWatcherRemoteCommand');
+    array_push($result, $ep);
+
+    $ep = array(
+        'method' => 'POST',
+        'endpoint' => 'remote/restart',
+        'callback' => 'fpppluginWatcherRemoteRestart');
+    array_push($result, $ep);
+
+    $ep = array(
+        'method' => 'POST',
+        'endpoint' => 'remote/reboot',
+        'callback' => 'fpppluginWatcherRemoteReboot');
+    array_push($result, $ep);
+
     return $result;
 }
 
@@ -646,5 +671,186 @@ function fpppluginwatcherFalconDiscover() {
             'error' => $e->getMessage()
         ]);
     }
+}
+
+// GET /api/plugin/fpp-plugin-watcher/remote/status?host=192.168.x.x
+// Proxy to fetch status from a remote FPP instance
+function fpppluginWatcherRemoteStatus() {
+    $host = isset($_GET['host']) ? trim($_GET['host']) : '';
+
+    if (empty($host)) {
+        /** @disregard P1010 */
+        return json([
+            'success' => false,
+            'error' => 'Missing host parameter'
+        ]);
+    }
+
+    // Validate host format (basic check)
+    if (!filter_var($host, FILTER_VALIDATE_IP) && !preg_match('/^[a-zA-Z0-9\-\.]+$/', $host)) {
+        /** @disregard P1010 */
+        return json([
+            'success' => false,
+            'error' => 'Invalid host format'
+        ]);
+    }
+
+    // Fetch fppd status
+    $statusUrl = "http://{$host}/api/fppd/status";
+    $status = apiCall('GET', $statusUrl, [], true, 5);
+
+    if ($status === false) {
+        /** @disregard P1010 */
+        return json([
+            'success' => false,
+            'error' => 'Failed to connect to remote host',
+            'host' => $host
+        ]);
+    }
+
+    // Fetch test mode status
+    $testModeUrl = "http://{$host}/api/testmode";
+    $testMode = apiCall('GET', $testModeUrl, [], true, 5);
+    if ($testMode === false) {
+        $testMode = ['enabled' => 0];
+    }
+
+    /** @disregard P1010 */
+    return json([
+        'success' => true,
+        'host' => $host,
+        'status' => $status,
+        'testMode' => $testMode
+    ]);
+}
+
+// POST /api/plugin/fpp-plugin-watcher/remote/command
+// Proxy to send a command to a remote FPP instance
+function fpppluginWatcherRemoteCommand() {
+    $input = json_decode(file_get_contents('php://input'), true);
+
+    if (!isset($input['host'])) {
+        /** @disregard P1010 */
+        return json([
+            'success' => false,
+            'error' => 'Missing host parameter'
+        ]);
+    }
+
+    if (!isset($input['command'])) {
+        /** @disregard P1010 */
+        return json([
+            'success' => false,
+            'error' => 'Missing command parameter'
+        ]);
+    }
+
+    $host = trim($input['host']);
+
+    // Validate host format
+    if (!filter_var($host, FILTER_VALIDATE_IP) && !preg_match('/^[a-zA-Z0-9\-\.]+$/', $host)) {
+        /** @disregard P1010 */
+        return json([
+            'success' => false,
+            'error' => 'Invalid host format'
+        ]);
+    }
+
+    // Build command payload as JSON string
+    $commandData = json_encode([
+        'command' => $input['command'],
+        'multisyncCommand' => $input['multisyncCommand'] ?? false,
+        'multisyncHosts' => $input['multisyncHosts'] ?? '',
+        'args' => $input['args'] ?? []
+    ]);
+
+    $commandUrl = "http://{$host}/api/command";
+    $result = apiCall('POST', $commandUrl, $commandData, true, 10);
+
+    if ($result === false) {
+        /** @disregard P1010 */
+        return json([
+            'success' => false,
+            'error' => 'Failed to send command to remote host',
+            'host' => $host
+        ]);
+    }
+
+    /** @disregard P1010 */
+    return json([
+        'success' => true,
+        'host' => $host,
+        'result' => $result
+    ]);
+}
+
+// POST /api/plugin/fpp-plugin-watcher/remote/restart
+// Proxy to restart fppd on a remote FPP instance
+function fpppluginWatcherRemoteRestart() {
+    $input = json_decode(file_get_contents('php://input'), true);
+
+    if (!isset($input['host'])) {
+        /** @disregard P1010 */
+        return json([
+            'success' => false,
+            'error' => 'Missing host parameter'
+        ]);
+    }
+
+    $host = trim($input['host']);
+
+    // Validate host format
+    if (!filter_var($host, FILTER_VALIDATE_IP) && !preg_match('/^[a-zA-Z0-9\-\.]+$/', $host)) {
+        /** @disregard P1010 */
+        return json([
+            'success' => false,
+            'error' => 'Invalid host format'
+        ]);
+    }
+
+    $restartUrl = "http://{$host}/api/system/fppd/restart";
+    $result = apiCall('GET', $restartUrl, [], true, 10);
+
+    /** @disregard P1010 */
+    return json([
+        'success' => true,
+        'host' => $host,
+        'message' => 'Restart command sent'
+    ]);
+}
+
+// POST /api/plugin/fpp-plugin-watcher/remote/reboot
+// Proxy to reboot a remote FPP instance
+function fpppluginWatcherRemoteReboot() {
+    $input = json_decode(file_get_contents('php://input'), true);
+
+    if (!isset($input['host'])) {
+        /** @disregard P1010 */
+        return json([
+            'success' => false,
+            'error' => 'Missing host parameter'
+        ]);
+    }
+
+    $host = trim($input['host']);
+
+    // Validate host format
+    if (!filter_var($host, FILTER_VALIDATE_IP) && !preg_match('/^[a-zA-Z0-9\-\.]+$/', $host)) {
+        /** @disregard P1010 */
+        return json([
+            'success' => false,
+            'error' => 'Invalid host format'
+        ]);
+    }
+
+    $rebootUrl = "http://{$host}/api/system/reboot";
+    $result = apiCall('GET', $rebootUrl, [], true, 10);
+
+    /** @disregard P1010 */
+    return json([
+        'success' => true,
+        'host' => $host,
+        'message' => 'Reboot command sent'
+    ]);
 }
 ?>
