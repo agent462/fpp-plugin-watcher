@@ -63,7 +63,7 @@ function readPluginConfig($forceReload = false) {
 
     ensureFppOwnership($configFile);
 
-    logMessage("Loading Watcher config file: ".WATCHERCONFIGFILELOCATION);
+    #logMessage("Loading Watcher config file: ".WATCHERCONFIGFILELOCATION); \\ make this debug in future
     $fd = fopen($configFile, 'r');
     if ($fd === false) {
         logMessage("ERROR: Failed to open config file: " . WATCHERCONFIGFILELOCATION);

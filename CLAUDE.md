@@ -4,60 +4,58 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-Watcher is an FPP (Falcon Player) plugin that provides network connectivity monitoring with automatic recovery, system metrics dashboards, multi-sync host monitoring, and Falcon controller management. It runs on Raspberry Pi and BeagleBone devices.
+Watcher is an FPP (Falcon Player) plugin that provides network connectivity monitoring with automatic recovery, system metrics dashboards, multi-sync host monitoring, Falcon controller management, and remote FPP control. It runs on Raspberry Pi and BeagleBone devices.
 
 ## Common Commands
-
-Make sure you chown all new files and files you have edited.
 
 ```bash
 # Check PHP syntax for all plugin files
 for file in /home/fpp/media/plugins/fpp-plugin-watcher/*.php /home/fpp/media/plugins/fpp-plugin-watcher/lib/*.php; do php -l "$file"; done
 
-# Chown new files and files you edit to fpp:fpp
-cd /home/fpp/media/plugins/fpp-plugin-watcher/
-chown -R fpp:fpp *
+# Chown files to fpp:fpp (required after editing)
+sudo chown -R fpp:fpp /home/fpp/media/plugins/fpp-plugin-watcher/*
 
-# View plugin logs
+# View logs
 tail -f /home/fpp/media/logs/fpp-plugin-watcher.log
-
-# View ping metrics log
 tail -f /home/fpp/media/logs/fpp-plugin-watcher-ping-metrics.log
 
-# Test API endpoints locally
+# Test API endpoints
 curl http://127.0.0.1/api/plugin/fpp-plugin-watcher/version
-curl http://127.0.0.1/api/plugin/fpp-plugin-watcher/metrics/ping/raw
 curl http://127.0.0.1/api/plugin/fpp-plugin-watcher/metrics/all
 
-# Restart FPP to reload plugin
+# Restart FPP
 sudo systemctl restart fppd
 ```
 
 ## Architecture
 
-### File Structure
-- **api.php**: REST API endpoint definitions and handlers. All endpoints registered via `getEndpointsfpppluginwatcher()`
-- **UI files**: Web interface pages:
-  - **configUI.php**: Plugin configuration page
-  - **localMetricsUI.php**: Local system metrics (CPU, memory, disk, thermal, wireless)
-  - **connectivityUI.php**: Ping connectivity monitoring
-  - **falconMonitorUI.php**: Falcon hardware controller status
-  - **remoteMetricsUI.php**: Multi-sync remote host system metrics
-  - **remotePingUI.php**: Multi-sync remote host ping statistics
-  - **remoteControlUI.php**: Remote FPP system control panel
+### Root Files
+- **api.php**: REST API endpoint definitions and handlers
 - **menu.inc**: Dynamic FPP menu registration based on enabled features
-- **connectivityCheck.php**: Background daemon for network monitoring loop (runs via postStart.sh)
+- **connectivityCheck.php**: Background daemon for network monitoring (runs via postStart.sh)
+- **pluginInfo.json**: Plugin metadata and version info
+
+### UI Pages
+- **configUI.php**: Plugin configuration
+- **localMetricsUI.php**: Local system metrics (CPU, memory, disk, thermal, wireless)
+- **connectivityUI.php**: Ping connectivity monitoring
+- **falconMonitorUI.php**: Falcon hardware controller status
+- **remoteMetricsUI.php**: Multi-sync remote host system metrics
+- **remotePingUI.php**: Multi-sync remote host ping statistics
+- **remoteControlUI.php**: Remote FPP system control panel
 
 ### Library Files (/lib/)
 - **watcherCommon.php**: Constants, logging, network interface detection, FPP API wrappers
 - **config.php**: Configuration reading/writing, collectd service management
-- **metrics.php**: System metrics from collectd RRD files (CPU, memory, disk, thermal, wireless)
+- **metrics.php**: System metrics from collectd RRD files
 - **pingMetricsRollup.php**: Ping metrics aggregation into tiers (1min, 5min, 15min, 1hour)
 - **multiSyncPingMetrics.php**: Multi-sync host ping tracking and rollups
 - **falconController.php**: Falcon hardware controller communication class
 - **rollupBase.php**: Generic RRD-style rollup functions shared across metric types
 - **apiCall.php**: HTTP request helper with cURL
 - **resetNetworkAdapter.php**: Network adapter reset via FPP API
+- **remoteControl.php**: Remote FPP instance control (restart, reboot, upgrade)
+- **updateCheck.php**: GitHub version checking for plugin updates
 
 ### Scripts (/scripts/)
 - **postStart.sh**: Plugin startup (manages collectd, launches connectivityCheck.php)
@@ -65,44 +63,42 @@ sudo systemctl restart fppd
 - **fpp_uninstall.sh**: Cleanup
 
 ### Configuration
-- Config file location: `/opt/fpp/media/config/plugin.fpp-plugin-watcher` (INI format)
+- Config file: `/opt/fpp/media/config/plugin.fpp-plugin-watcher` (INI format)
 - Use FPP's `WriteSettingToFile()` function to save settings
-- Boolean values stored as strings, normalized via `normalizeBoolean()` in config.php
+- Boolean values normalized via `normalizeBoolean()` in config.php
 
 ## Key Patterns
-- Keep api.php as simple shell logic as you can.  Helper functions should go in the lib files.
-- Use watcher based js function and css class names so we don't interfere with FPP or Bootstrap
-- Make sure you have very concise comments
+
+### Code Style
+- Keep api.php simple; helper functions go in lib files
+- Use `watcher` prefix for JS functions and CSS classes to avoid conflicts
+- Concise comments only
 
 ### FPP Plugin Conventions
 - Include `/opt/fpp/www/common.php` for FPP functions (`json()`, `WriteSettingToFile()`, etc.)
-- Use `/** @disregard P1010 */` comment to suppress IDE warnings for FPP globals
+- Use `/** @disregard P1010 */` to suppress IDE warnings for FPP globals
 - API endpoints return via `json($result)` function
 - Menu entries use `$menuEntries` array with type: status/content/help
 
 ### Metrics Rollup System
-Metrics are aggregated into time-based tiers for efficient historical queries:
-- Raw data → 1min → 5min → 15min → 1hour buckets
+- Raw data aggregates into 1min, 5min, 15min, 1hour buckets
 - State tracked in JSON files (last_processed, last_bucket_end timestamps)
 - Automatic tier selection based on requested time range
 
 ### File Ownership
-Files created by the plugin use `ensureFppOwnership()` to set fpp:fpp ownership for web access.
+- Use `ensureFppOwnership()` for plugin-created files
+- Always chown edited files to fpp:fpp
 
-#### FPP Local API (http://127.0.0.1/api)
-
-Used by the plugin to interact with FPP:
+## FPP Local API (http://127.0.0.1/api)
 
 - `GET /api/system/status` - Get current FPP status
 - `GET /api/network/interface` - Get all network interfaces
-- `GET /api/network/interface/:interfaceName` - Get specific interface settings
-- `POST /api/network/interface/:interfaceName/apply` - Reset network interface (used by plugin)
-- `GET /api/plugin/:RepoName/settings/:SettingName` - Get plugin setting (not currently used)
-- `POST /api/plugin/:RepoName/settings/:SettingName` - Update plugin setting (not currently used)
+- `POST /api/network/interface/:interfaceName/apply` - Reset network interface
+- `GET /api/fppd/status` - Get playback status
 
-Full list of FPP API's located at http://127.0.0.1/apihelp.php
+Full API docs: http://127.0.0.1/apihelp.php
 
-## Additional Resources
+## Resources
 
 - **FPP Documentation**: https://github.com/FalconChristmas/fpp/tree/master/docs
 - **Plugin Template**: https://github.com/FalconChristmas/fpp-plugin-Template
