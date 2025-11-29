@@ -192,20 +192,18 @@ if ($showDashboard) {
                             <span class="toggleSlider"></span>
                         </label>
                     </div>
-                    <div class="update-banner update-banner--fpp" id="fpp-update-container-<?php echo htmlspecialchars($system['address']); ?>">
-                        <div class="banner-info">
-                            <div>
-                                <div class="banner-text"><i class="fas fa-code-branch"></i> FPP Update Available</div>
-                                <div class="banner-version" id="fpp-update-version-<?php echo htmlspecialchars($system['address']); ?>"></div>
+                    <div class="updates-container" id="updates-container-<?php echo htmlspecialchars($system['address']); ?>">
+                        <div class="updates-header">
+                            <i class="fas fa-arrow-circle-up"></i> Updates Available
+                        </div>
+                        <div class="update-row update-row--fpp" id="fpp-update-row-<?php echo htmlspecialchars($system['address']); ?>">
+                            <div class="update-info">
+                                <span class="update-name"><i class="fas fa-code-branch"></i> FPP</span>
+                                <span class="update-version" id="fpp-update-version-<?php echo htmlspecialchars($system['address']); ?>"></span>
                             </div>
                             <button class="banner-btn" onclick="upgradeFPPSingle('<?php echo htmlspecialchars($system['address']); ?>')" id="fpp-upgrade-btn-<?php echo htmlspecialchars($system['address']); ?>">
                                 <i class="fas fa-download"></i> Upgrade
                             </button>
-                        </div>
-                    </div>
-                    <div class="update-banner update-banner--plugin" id="upgrades-container-<?php echo htmlspecialchars($system['address']); ?>">
-                        <div class="banner-header">
-                            <i class="fas fa-arrow-circle-up"></i> Updates Available
                         </div>
                         <div id="upgrades-list-<?php echo htmlspecialchars($system['address']); ?>"></div>
                     </div>
@@ -490,9 +488,9 @@ function updateCardUI(address, data) {
     const testModeToggle = document.getElementById(`testmode-${address}`);
     const restartBtn = document.getElementById(`restart-btn-${address}`);
     const rebootBtn = document.getElementById(`reboot-btn-${address}`);
-    const upgradesContainer = document.getElementById(`upgrades-container-${address}`);
+    const updatesContainer = document.getElementById(`updates-container-${address}`);
     const upgradesList = document.getElementById(`upgrades-list-${address}`);
-    const fppUpdateContainer = document.getElementById(`fpp-update-container-${address}`);
+    const fppUpdateRow = document.getElementById(`fpp-update-row-${address}`);
     const fppUpdateVersion = document.getElementById(`fpp-update-version-${address}`);
 
     if (!data.success) {
@@ -506,8 +504,8 @@ function updateCardUI(address, data) {
         testModeToggle.checked = false;
         restartBtn.disabled = true;
         rebootBtn.disabled = true;
-        upgradesContainer.classList.remove('visible');
-        fppUpdateContainer.classList.remove('visible');
+        updatesContainer.classList.remove('visible');
+        fppUpdateRow.classList.remove('visible');
         return;
     }
 
@@ -562,11 +560,11 @@ function updateCardUI(address, data) {
     // Track FPP updates
     if (fppUpdateAvailable) {
         hostsWithFPPUpdates.set(address, { hostname: remoteHostnames[address] || address, localVersion: fppLocalVersion, remoteVersion: fppRemoteVersion });
-        fppUpdateContainer.classList.add('visible');
+        fppUpdateRow.classList.add('visible');
         fppUpdateVersion.textContent = `${fppLocalVersion} → ${fppRemoteVersion}`;
     } else {
         hostsWithFPPUpdates.delete(address);
-        fppUpdateContainer.classList.remove('visible');
+        fppUpdateRow.classList.remove('visible');
     }
     updateBulkButton('fppUpgradeAllBtn', 'fppUpgradeAllCount', hostsWithFPPUpdates);
 
@@ -577,9 +575,9 @@ function updateCardUI(address, data) {
             const versionDisplay = plugin.latestVersion ? `v${plugin.installedVersion} → v${plugin.latestVersion}` : `v${plugin.installedVersion}`;
             html += `
                 <div class="upgrade-item" id="upgrade-item-${address}-${plugin.repoName}">
-                    <div class="plugin-info">
-                        <div class="plugin-name">${plugin.name}</div>
-                        <div class="plugin-version">${versionDisplay}</div>
+                    <div class="update-info">
+                        <span class="update-name">${plugin.name}</span>
+                        <span class="update-version">${versionDisplay}</span>
                     </div>
                     <button class="banner-btn" onclick="upgradePlugin('${address}', '${plugin.repoName}')" id="upgrade-btn-${address}-${plugin.repoName}">
                         <i class="fas fa-download"></i> Upgrade
@@ -587,10 +585,15 @@ function updateCardUI(address, data) {
                 </div>`;
         });
         upgradesList.innerHTML = html;
-        upgradesContainer.classList.add('visible');
     } else {
-        upgradesContainer.classList.remove('visible');
         upgradesList.innerHTML = '';
+    }
+
+    // Show/hide unified updates container based on any updates available
+    if (fppUpdateAvailable || pluginUpdates.length > 0) {
+        updatesContainer.classList.add('visible');
+    } else {
+        updatesContainer.classList.remove('visible');
     }
 }
 
