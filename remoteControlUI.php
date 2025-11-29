@@ -79,7 +79,7 @@ if ($showDashboard) {
     .toggleSwitch input:checked + .toggleSlider { background-color: #ffc107; }
     .toggleSwitch input:checked + .toggleSlider:before { transform: translateX(22px); }
     .toggleSwitch input:disabled + .toggleSlider { opacity: 0.5; cursor: not-allowed; }
-    .actionButtons { display: flex; gap: 0.5rem; flex-wrap: wrap; padding-top: 0.75rem; border-top: 1px solid #e9ecef; }
+    .actionButtons { display: flex; gap: 0.5rem; flex-wrap: wrap; padding-top: 0.75rem; margin-top: 1rem; border-top: 1px solid #e9ecef; }
     .actionBtn {
         flex: 1; min-width: 100px; padding: 0.5rem 0.75rem; border: none; border-radius: 6px;
         font-size: 0.8rem; font-weight: 500; cursor: pointer; display: inline-flex;
