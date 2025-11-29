@@ -5,6 +5,8 @@ include_once WATCHERPLUGINDIR . '/lib/pingMetricsRollup.php';
 include_once WATCHERPLUGINDIR . '/lib/multiSyncPingMetrics.php';
 include_once WATCHERPLUGINDIR . '/lib/falconController.php';
 include_once WATCHERPLUGINDIR . '/lib/config.php';
+include_once WATCHERPLUGINDIR . '/lib/updateCheck.php';
+include_once WATCHERPLUGINDIR . '/lib/remoteControl.php';
 /**
  * Returns the API endpoints for the fpp-plugin-watcher plugin
  */
@@ -218,6 +220,13 @@ function getEndpointsfpppluginwatcher() {
         'method' => 'GET',
         'endpoint' => 'update/check',
         'callback' => 'fpppluginWatcherUpdateCheck');
+    array_push($result, $ep);
+
+    // FPP upgrade endpoint (streaming)
+    $ep = array(
+        'method' => 'POST',
+        'endpoint' => 'remote/fpp/upgrade',
+        'callback' => 'fpppluginWatcherRemoteFPPUpgrade');
     array_push($result, $ep);
 
     return $result;
@@ -628,28 +637,7 @@ function fpppluginwatcherFalconReboot() {
 // GET /api/plugin/fpp-plugin-watcher/falcon/discover
 // Discover Falcon controllers on a subnet
 function fpppluginwatcherFalconDiscover() {
-    // Get subnet from query param or auto-detect from FPP
-    $subnet = isset($_GET['subnet']) ? trim($_GET['subnet']) : null;
-
-    if (empty($subnet)) {
-        // Try to auto-detect from FPP's network settings
-        $interfaces = @file_get_contents('http://127.0.0.1/api/network/interface');
-        if ($interfaces) {
-            $ifData = json_decode($interfaces, true);
-            if ($ifData && is_array($ifData)) {
-                foreach ($ifData as $iface) {
-                    if (!empty($iface['IP']) && $iface['IP'] !== '127.0.0.1') {
-                        // Extract subnet from IP (e.g., 192.168.1.100 -> 192.168.1)
-                        $parts = explode('.', $iface['IP']);
-                        if (count($parts) === 4) {
-                            $subnet = $parts[0] . '.' . $parts[1] . '.' . $parts[2];
-                            break;
-                        }
-                    }
-                }
-            }
-        }
-    }
+    $subnet = isset($_GET['subnet']) ? trim($_GET['subnet']) : FalconController::autoDetectSubnet();
 
     if (empty($subnet)) {
         /** @disregard P1010 */
@@ -659,7 +647,6 @@ function fpppluginwatcherFalconDiscover() {
         ]);
     }
 
-    // Validate subnet format (should be like 192.168.1)
     if (!FalconController::isValidSubnet($subnet)) {
         /** @disregard P1010 */
         return json([
@@ -668,19 +655,12 @@ function fpppluginwatcherFalconDiscover() {
         ]);
     }
 
-    // Get optional range parameters
-    $startIp = isset($_GET['start']) ? intval($_GET['start']) : 1;
-    $endIp = isset($_GET['end']) ? intval($_GET['end']) : 254;
-    $timeout = isset($_GET['timeout']) ? intval($_GET['timeout']) : 1;
-
-    // Clamp values
-    $startIp = max(1, min(254, $startIp));
-    $endIp = max($startIp, min(254, $endIp));
-    $timeout = max(1, min(5, $timeout));
+    $startIp = max(1, min(254, isset($_GET['start']) ? intval($_GET['start']) : 1));
+    $endIp = max($startIp, min(254, isset($_GET['end']) ? intval($_GET['end']) : 254));
+    $timeout = max(1, min(5, isset($_GET['timeout']) ? intval($_GET['timeout']) : 1));
 
     try {
         $discovered = FalconController::discover($subnet, $startIp, $endIp, $timeout);
-
         /** @disregard P1010 */
         return json([
             'success' => true,
@@ -705,48 +685,11 @@ function fpppluginWatcherRemoteStatus() {
 
     if (empty($host)) {
         /** @disregard P1010 */
-        return json([
-            'success' => false,
-            'error' => 'Missing host parameter'
-        ]);
-    }
-
-    // Validate host format (basic check)
-    if (!filter_var($host, FILTER_VALIDATE_IP) && !preg_match('/^[a-zA-Z0-9\-\.]+$/', $host)) {
-        /** @disregard P1010 */
-        return json([
-            'success' => false,
-            'error' => 'Invalid host format'
-        ]);
-    }
-
-    // Fetch system status (includes restartFlag and rebootFlag)
-    $statusUrl = "http://{$host}/api/system/status";
-    $status = apiCall('GET', $statusUrl, [], true, 5);
-
-    if ($status === false) {
-        /** @disregard P1010 */
-        return json([
-            'success' => false,
-            'error' => 'Failed to connect to remote host',
-            'host' => $host
-        ]);
-    }
-
-    // Fetch test mode status
-    $testModeUrl = "http://{$host}/api/testmode";
-    $testMode = apiCall('GET', $testModeUrl, [], true, 5);
-    if ($testMode === false) {
-        $testMode = ['enabled' => 0];
+        return json(['success' => false, 'error' => 'Missing host parameter']);
     }
 
     /** @disregard P1010 */
-    return json([
-        'success' => true,
-        'host' => $host,
-        'status' => $status,
-        'testMode' => $testMode
-    ]);
+    return json(getRemoteStatus($host));
 }
 
 // POST /api/plugin/fpp-plugin-watcher/remote/command
@@ -756,57 +699,24 @@ function fpppluginWatcherRemoteCommand() {
 
     if (!isset($input['host'])) {
         /** @disregard P1010 */
-        return json([
-            'success' => false,
-            'error' => 'Missing host parameter'
-        ]);
+        return json(['success' => false, 'error' => 'Missing host parameter']);
     }
 
     if (!isset($input['command'])) {
         /** @disregard P1010 */
-        return json([
-            'success' => false,
-            'error' => 'Missing command parameter'
-        ]);
+        return json(['success' => false, 'error' => 'Missing command parameter']);
     }
 
-    $host = trim($input['host']);
-
-    // Validate host format
-    if (!filter_var($host, FILTER_VALIDATE_IP) && !preg_match('/^[a-zA-Z0-9\-\.]+$/', $host)) {
-        /** @disregard P1010 */
-        return json([
-            'success' => false,
-            'error' => 'Invalid host format'
-        ]);
-    }
-
-    // Build command payload as JSON string
-    $commandData = json_encode([
-        'command' => $input['command'],
-        'multisyncCommand' => $input['multisyncCommand'] ?? false,
-        'multisyncHosts' => $input['multisyncHosts'] ?? '',
-        'args' => $input['args'] ?? []
-    ]);
-
-    $commandUrl = "http://{$host}/api/command";
-    $result = apiCall('POST', $commandUrl, $commandData, true, 10);
-
-    if ($result === false) {
-        /** @disregard P1010 */
-        return json([
-            'success' => false,
-            'error' => 'Failed to send command to remote host',
-            'host' => $host
-        ]);
-    }
+    $result = sendRemoteCommand(
+        trim($input['host']),
+        $input['command'],
+        $input['args'] ?? [],
+        $input['multisyncCommand'] ?? false,
+        $input['multisyncHosts'] ?? ''
+    );
 
     /** @disregard P1010 */
-    return json([
-        'success' => true,
-        'host' => $host,
-        'result' => $result
-    ]);
+    return json($result);
 }
 
 // POST /api/plugin/fpp-plugin-watcher/remote/restart
@@ -816,32 +726,11 @@ function fpppluginWatcherRemoteRestart() {
 
     if (!isset($input['host'])) {
         /** @disregard P1010 */
-        return json([
-            'success' => false,
-            'error' => 'Missing host parameter'
-        ]);
+        return json(['success' => false, 'error' => 'Missing host parameter']);
     }
-
-    $host = trim($input['host']);
-
-    // Validate host format
-    if (!filter_var($host, FILTER_VALIDATE_IP) && !preg_match('/^[a-zA-Z0-9\-\.]+$/', $host)) {
-        /** @disregard P1010 */
-        return json([
-            'success' => false,
-            'error' => 'Invalid host format'
-        ]);
-    }
-
-    $restartUrl = "http://{$host}/api/system/fppd/restart";
-    $result = apiCall('GET', $restartUrl, [], true, 10);
 
     /** @disregard P1010 */
-    return json([
-        'success' => true,
-        'host' => $host,
-        'message' => 'Restart command sent'
-    ]);
+    return json(restartRemoteFPPD(trim($input['host'])));
 }
 
 // POST /api/plugin/fpp-plugin-watcher/remote/reboot
@@ -851,32 +740,11 @@ function fpppluginWatcherRemoteReboot() {
 
     if (!isset($input['host'])) {
         /** @disregard P1010 */
-        return json([
-            'success' => false,
-            'error' => 'Missing host parameter'
-        ]);
+        return json(['success' => false, 'error' => 'Missing host parameter']);
     }
-
-    $host = trim($input['host']);
-
-    // Validate host format
-    if (!filter_var($host, FILTER_VALIDATE_IP) && !preg_match('/^[a-zA-Z0-9\-\.]+$/', $host)) {
-        /** @disregard P1010 */
-        return json([
-            'success' => false,
-            'error' => 'Invalid host format'
-        ]);
-    }
-
-    $rebootUrl = "http://{$host}/api/system/reboot";
-    $result = apiCall('GET', $rebootUrl, [], true, 10);
 
     /** @disregard P1010 */
-    return json([
-        'success' => true,
-        'host' => $host,
-        'message' => 'Reboot command sent'
-    ]);
+    return json(rebootRemoteFPP(trim($input['host'])));
 }
 
 // POST /api/plugin/fpp-plugin-watcher/remote/upgrade
@@ -886,55 +754,13 @@ function fpppluginWatcherRemoteUpgrade() {
 
     if (!isset($input['host'])) {
         /** @disregard P1010 */
-        return json([
-            'success' => false,
-            'error' => 'Missing host parameter'
-        ]);
+        return json(['success' => false, 'error' => 'Missing host parameter']);
     }
 
-    $host = trim($input['host']);
-    // Default to fpp-plugin-watcher for backward compatibility
-    $plugin = isset($input['plugin']) ? trim($input['plugin']) : WATCHERPLUGINNAME;
-
-    // Validate host format
-    if (!filter_var($host, FILTER_VALIDATE_IP) && !preg_match('/^[a-zA-Z0-9\-\.]+$/', $host)) {
-        /** @disregard P1010 */
-        return json([
-            'success' => false,
-            'error' => 'Invalid host format'
-        ]);
-    }
-
-    // Validate plugin name format (alphanumeric, dash, underscore)
-    if (!preg_match('/^[a-zA-Z0-9\-_]+$/', $plugin)) {
-        /** @disregard P1010 */
-        return json([
-            'success' => false,
-            'error' => 'Invalid plugin name format'
-        ]);
-    }
-
-    $upgradeUrl = "http://{$host}/api/plugin/{$plugin}/upgrade";
-    $result = apiCall('POST', $upgradeUrl, [], true, 120);
-
-    if ($result === false) {
-        /** @disregard P1010 */
-        return json([
-            'success' => false,
-            'error' => 'Failed to trigger plugin upgrade on remote host',
-            'host' => $host,
-            'plugin' => $plugin
-        ]);
-    }
+    $plugin = isset($input['plugin']) ? trim($input['plugin']) : null;
 
     /** @disregard P1010 */
-    return json([
-        'success' => true,
-        'host' => $host,
-        'plugin' => $plugin,
-        'message' => 'Plugin upgrade initiated on remote host',
-        'result' => $result
-    ]);
+    return json(upgradeRemotePlugin(trim($input['host']), $plugin));
 }
 
 // GET /api/plugin/fpp-plugin-watcher/remote/plugins?host=x
@@ -944,39 +770,11 @@ function fpppluginWatcherRemotePlugins() {
 
     if (empty($host)) {
         /** @disregard P1010 */
-        return json([
-            'success' => false,
-            'error' => 'Missing host parameter'
-        ]);
-    }
-
-    // Validate host format
-    if (!filter_var($host, FILTER_VALIDATE_IP) && !preg_match('/^[a-zA-Z0-9\-\.]+$/', $host)) {
-        /** @disregard P1010 */
-        return json([
-            'success' => false,
-            'error' => 'Invalid host format'
-        ]);
-    }
-
-    $pluginsUrl = "http://{$host}/api/plugin";
-    $plugins = apiCall('GET', $pluginsUrl, [], true, 10);
-
-    if ($plugins === false) {
-        /** @disregard P1010 */
-        return json([
-            'success' => false,
-            'error' => 'Failed to fetch plugins from remote host',
-            'host' => $host
-        ]);
+        return json(['success' => false, 'error' => 'Missing host parameter']);
     }
 
     /** @disregard P1010 */
-    return json([
-        'success' => true,
-        'host' => $host,
-        'plugins' => $plugins
-    ]);
+    return json(getRemotePlugins($host));
 }
 
 // GET /api/plugin/fpp-plugin-watcher/remote/plugins/updates?host=x
@@ -986,146 +784,31 @@ function fpppluginWatcherRemotePluginUpdates() {
 
     if (empty($host)) {
         /** @disregard P1010 */
-        return json([
-            'success' => false,
-            'error' => 'Missing host parameter'
-        ]);
-    }
-
-    // Validate host format
-    if (!filter_var($host, FILTER_VALIDATE_IP) && !preg_match('/^[a-zA-Z0-9\-\.]+$/', $host)) {
-        /** @disregard P1010 */
-        return json([
-            'success' => false,
-            'error' => 'Invalid host format'
-        ]);
-    }
-
-    // Get list of installed plugins (returns array of plugin name strings)
-    $pluginsUrl = "http://{$host}/api/plugin";
-    $pluginNames = apiCall('GET', $pluginsUrl, [], true, 10);
-
-    if ($pluginNames === false || !is_array($pluginNames)) {
-        /** @disregard P1010 */
-        return json([
-            'success' => false,
-            'error' => 'Failed to fetch plugins from remote host',
-            'host' => $host
-        ]);
-    }
-
-    // Get latest Watcher version from GitHub for comparison
-    $latestWatcherVersion = null;
-    $githubUrl = 'https://raw.githubusercontent.com/agent462/fpp-plugin-watcher/main/pluginInfo.json';
-    $ch = curl_init();
-    curl_setopt($ch, CURLOPT_URL, $githubUrl);
-    curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
-    curl_setopt($ch, CURLOPT_TIMEOUT, 5);
-    curl_setopt($ch, CURLOPT_FOLLOWLOCATION, true);
-    curl_setopt($ch, CURLOPT_USERAGENT, 'FPP-Plugin-Watcher');
-    $response = curl_exec($ch);
-    $httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
-    curl_close($ch);
-    if ($response !== false && $httpCode === 200) {
-        $githubInfo = json_decode($response, true);
-        if ($githubInfo && isset($githubInfo['version'])) {
-            $latestWatcherVersion = $githubInfo['version'];
-        }
-    }
-
-    $updatesAvailable = [];
-
-    // Check each plugin for updates
-    foreach ($pluginNames as $repoName) {
-        // Skip if not a string (unexpected format)
-        if (!is_string($repoName)) continue;
-
-        // Get full plugin info from /api/plugin/:repoName
-        $pluginInfoUrl = "http://{$host}/api/plugin/{$repoName}";
-        $pluginInfo = apiCall('GET', $pluginInfoUrl, [], true, 5);
-
-        if (!$pluginInfo || !is_array($pluginInfo)) continue;
-
-        $hasUpdate = false;
-        $installedVersion = $pluginInfo['version'] ?? 'unknown';
-        $pluginName = $pluginInfo['name'] ?? $repoName;
-
-        // Check FPP's built-in update flag
-        if (isset($pluginInfo['updatesAvailable']) && $pluginInfo['updatesAvailable']) {
-            $hasUpdate = true;
-        }
-
-        // For Watcher plugin, also compare against GitHub version
-        if ($repoName === WATCHERPLUGINNAME && $latestWatcherVersion && $installedVersion !== 'unknown') {
-            if (version_compare($latestWatcherVersion, $installedVersion, '>')) {
-                $hasUpdate = true;
-            }
-        }
-
-        if ($hasUpdate) {
-            $updateInfo = [
-                'repoName' => $repoName,
-                'name' => $pluginName,
-                'installedVersion' => $installedVersion,
-                'updatesAvailable' => true
-            ];
-            // Include latest version for Watcher plugin
-            if ($repoName === WATCHERPLUGINNAME && $latestWatcherVersion) {
-                $updateInfo['latestVersion'] = $latestWatcherVersion;
-            }
-            $updatesAvailable[] = $updateInfo;
-        }
+        return json(['success' => false, 'error' => 'Missing host parameter']);
     }
 
     /** @disregard P1010 */
-    return json([
-        'success' => true,
-        'host' => $host,
-        'totalPlugins' => count($pluginNames),
-        'updatesAvailable' => $updatesAvailable
-    ]);
+    return json(checkRemotePluginUpdates($host));
 }
 
 // GET /api/plugin/fpp-plugin-watcher/update/check
 // Check GitHub for latest plugin version
 function fpppluginWatcherUpdateCheck() {
-    $githubUrl = 'https://raw.githubusercontent.com/agent462/fpp-plugin-watcher/main/pluginInfo.json';
-
-    // Fetch version from GitHub
-    $ch = curl_init();
-    curl_setopt($ch, CURLOPT_URL, $githubUrl);
-    curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
-    curl_setopt($ch, CURLOPT_TIMEOUT, 10);
-    curl_setopt($ch, CURLOPT_FOLLOWLOCATION, true);
-    curl_setopt($ch, CURLOPT_USERAGENT, 'FPP-Plugin-Watcher');
-
-    $response = curl_exec($ch);
-    $httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
-    $error = curl_error($ch);
-    curl_close($ch);
-
-    if ($response === false || $httpCode !== 200) {
-        /** @disregard P1010 */
-        return json([
-            'success' => false,
-            'error' => $error ?: "Failed to fetch from GitHub (HTTP $httpCode)"
-        ]);
-    }
-
-    $remoteInfo = json_decode($response, true);
-    if (!$remoteInfo || !isset($remoteInfo['version'])) {
-        /** @disregard P1010 */
-        return json([
-            'success' => false,
-            'error' => 'Invalid response from GitHub'
-        ]);
-    }
-
     /** @disregard P1010 */
-    return json([
-        'success' => true,
-        'latestVersion' => $remoteInfo['version'],
-        'repoName' => $remoteInfo['repoName'] ?? WATCHERPLUGINNAME
-    ]);
+    return json(checkWatcherUpdate());
+}
+
+// POST /api/plugin/fpp-plugin-watcher/remote/fpp/upgrade
+// Streams the FPP upgrade output from a remote host
+function fpppluginWatcherRemoteFPPUpgrade() {
+    $input = json_decode(file_get_contents('php://input'), true);
+
+    if (!isset($input['host'])) {
+        header('Content-Type: application/json');
+        echo json_encode(['success' => false, 'error' => 'Missing host parameter']);
+        return;
+    }
+
+    streamRemoteFPPUpgrade(trim($input['host']));
 }
 ?>

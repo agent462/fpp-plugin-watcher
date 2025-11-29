@@ -1,9 +1,38 @@
+/**
+ * Watcher Plugin - Common UI Styles
+ *
+ * Shared styles used across multiple UI pages in the Watcher plugin.
+ * This file contains reusable components for consistency across:
+ * - controlUI.php (Remote System Control)
+ * - metricsUI.php (System Metrics)
+ * - connectivityUI.php (Connectivity Monitoring)
+ * - falconMonitorUI.php (Falcon Controller Monitor)
+ * - allMetricsUI.php (All Metrics Dashboard)
+ * - multiSyncPingUI.php (MultiSync Ping Metrics)
+ */
+
+/* ==========================================================================
+   Layout Containers
+   ========================================================================== */
+
+/**
+ * Main container for metrics/dashboard pages
+ * Centers content with max-width for readability on large screens
+ */
 .metricsContainer {
     max-width: 1400px;
     margin: 0 auto;
     padding: 1rem;
 }
 
+/* ==========================================================================
+   Chart Components
+   ========================================================================== */
+
+/**
+ * Card wrapper for chart visualizations
+ * Used in metrics pages to contain Chart.js graphs
+ */
 .chartCard {
     position: relative;
     background-color: #fff;
@@ -14,6 +43,11 @@
     box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
 }
 
+/**
+ * Loading overlay for charts
+ * Displays spinner while chart data is being fetched
+ * Position: absolute to overlay the chart container
+ */
 .chartLoading {
     position: absolute;
     top: 0;
@@ -40,6 +74,10 @@
     font-size: 0.875rem;
 }
 
+/**
+ * Chart title with accent border
+ * Includes flexbox for optional right-aligned controls/badges
+ */
 .chartTitle {
     font-size: 1.25rem;
     font-weight: 600;
@@ -52,6 +90,9 @@
     align-items: center;
 }
 
+/**
+ * Chart control row (time range selectors, filters, etc.)
+ */
 .chartControls {
     display: flex;
     gap: 1rem;
@@ -59,6 +100,9 @@
     flex-wrap: wrap;
 }
 
+/**
+ * Individual control group (label + input/select)
+ */
 .controlGroup {
     display: flex;
     align-items: center;
@@ -78,6 +122,14 @@
     font-size: 0.875rem;
 }
 
+/* ==========================================================================
+   Loading States
+   ========================================================================== */
+
+/**
+ * Full-page loading spinner
+ * Used for initial page load states
+ */
 .loadingSpinner {
     text-align: center;
     padding: 3rem;
@@ -94,6 +146,14 @@
     100% { transform: rotate(360deg); }
 }
 
+/* ==========================================================================
+   Floating Action Buttons
+   ========================================================================== */
+
+/**
+ * Fixed position refresh button (bottom-right corner)
+ * Purple gradient matching the Watcher theme
+ */
 .refreshButton {
     position: fixed;
     bottom: 2rem;
@@ -119,6 +179,15 @@
     font-size: 1.5rem;
 }
 
+/* ==========================================================================
+   Statistics Bar
+   ========================================================================== */
+
+/**
+ * Horizontal stats summary bar
+ * Purple gradient background with evenly spaced stat items
+ * Used at top of metrics pages for quick summary
+ */
 .statsBar {
     display: flex;
     gap: 1rem;
@@ -145,6 +214,10 @@
     font-weight: bold;
 }
 
+/**
+ * Data tier badge (1min, 5min, 15min, 1hour)
+ * Shows which rollup tier is being displayed
+ */
 .tierBadge {
     display: inline-block;
     padding: 0.25rem 0.75rem;
@@ -156,6 +229,14 @@
     margin-left: 0.5rem;
 }
 
+/* ==========================================================================
+   Info/Help Boxes
+   ========================================================================== */
+
+/**
+ * Informational callout box
+ * Blue left border accent for tips/notes
+ */
 .infoBox {
     background: #e7f3ff;
     border-left: 4px solid #007bff;
@@ -166,4 +247,595 @@
 
 .infoBox strong {
     color: #007bff;
+}
+
+/* ==========================================================================
+   Shared Modal Styles
+
+   Usage: Add class="watcher-modal" to modal backdrop
+   Content sizes: modal-content--sm (400px), --md (500px), --lg (700px)
+   Button styles: btn-primary, btn-secondary, btn-danger, btn-success, btn-muted
+   ========================================================================== */
+
+/**
+ * Modal backdrop overlay
+ * Centers modal content vertically and horizontally
+ */
+.watcher-modal {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: rgba(0,0,0,0.5);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 9999;
+}
+
+/** Darker backdrop variant for streaming/progress modals */
+.watcher-modal.watcher-modal--dark {
+    background: rgba(0,0,0,0.6);
+}
+
+/**
+ * Modal content container
+ * Base styles - combine with size modifier classes
+ */
+.watcher-modal .modal-content {
+    background: #fff;
+    border-radius: 12px;
+    padding: 1.5rem;
+    width: 90%;
+    box-shadow: 0 4px 24px rgba(0,0,0,0.2);
+}
+
+/** Small modal (400px) - confirmations, simple dialogs */
+.watcher-modal .modal-content--sm {
+    max-width: 400px;
+}
+
+/** Medium modal (500px) - forms, progress lists */
+.watcher-modal .modal-content--md {
+    max-width: 500px;
+}
+
+/** Large modal (700px) - streaming output, detailed views */
+.watcher-modal .modal-content--lg {
+    max-width: 700px;
+    max-height: 80vh;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+    box-sizing: border-box;
+}
+
+/**
+ * Modal header (h4)
+ * Flexbox for icon + title alignment
+ */
+.watcher-modal h4 {
+    margin: 0 0 1rem 0;
+    color: #212529;
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+}
+
+.watcher-modal p {
+    margin: 0 0 1.25rem 0;
+    color: #6c757d;
+}
+
+/**
+ * Modal button row
+ * Right-aligned by default, use --center modifier for centered
+ */
+.watcher-modal .modal-buttons {
+    display: flex;
+    gap: 0.75rem;
+    justify-content: flex-end;
+    padding-top: 0.5rem;
+}
+
+.watcher-modal .modal-buttons--center {
+    justify-content: center;
+}
+
+/* Modal Button Base Styles */
+.watcher-modal .btn {
+    padding: 0.5rem 1rem;
+    border-radius: 6px;
+    font-size: 0.9rem;
+    cursor: pointer;
+    border: none;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.4rem;
+    white-space: nowrap;
+    transition: background 0.3s ease;
+}
+
+/** Fixed-width button for consistent sizing in button groups */
+.watcher-modal .btn--fixed {
+    width: 160px;
+    height: 38px;
+    box-sizing: border-box;
+}
+
+/* Button Color Variants */
+.watcher-modal .btn-secondary {
+    background: #e9ecef;
+    color: #495057;
+}
+
+.watcher-modal .btn-secondary:hover {
+    background: #dee2e6;
+}
+
+.watcher-modal .btn-danger {
+    background: #dc3545;
+    color: #fff;
+}
+
+.watcher-modal .btn-danger:hover:not(:disabled) {
+    background: #c82333;
+}
+
+.watcher-modal .btn-primary {
+    background: #007bff;
+    color: #fff;
+}
+
+.watcher-modal .btn-primary:hover:not(:disabled) {
+    background: #0056b3;
+}
+
+.watcher-modal .btn-success {
+    background: #28a745;
+    color: #fff;
+}
+
+.watcher-modal .btn-success:hover:not(:disabled) {
+    background: #218838;
+}
+
+.watcher-modal .btn-muted {
+    background: #6c757d;
+    color: #fff;
+}
+
+.watcher-modal .btn-muted:hover:not(:disabled) {
+    background: #5a6268;
+}
+
+.watcher-modal .btn:disabled {
+    opacity: 0.7;
+    cursor: not-allowed;
+}
+
+/* Modal Progress Info Text */
+.watcher-modal .progress-info {
+    margin-bottom: 1rem;
+    font-size: 0.9rem;
+    color: #6c757d;
+}
+
+/**
+ * Scrollable host list for bulk operations
+ * Each host shows name and status indicator
+ */
+.watcher-modal .host-list {
+    max-height: 300px;
+    overflow-y: auto;
+    margin-bottom: 1rem;
+    border: 1px solid #e9ecef;
+    border-radius: 8px;
+}
+
+.watcher-modal .host-item {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 0.6rem 0.75rem;
+    border-bottom: 1px solid #e9ecef;
+    font-size: 0.85rem;
+}
+
+.watcher-modal .host-item:last-child {
+    border-bottom: none;
+}
+
+.watcher-modal .host-item .host-name {
+    font-weight: 500;
+    color: #212529;
+}
+
+/**
+ * Host status indicators in bulk operation modals
+ * States: pending, in-progress, success, error
+ */
+.watcher-modal .host-item .host-status {
+    display: flex;
+    align-items: center;
+    gap: 0.4rem;
+    font-size: 0.8rem;
+}
+
+.watcher-modal .host-item .host-status.pending { color: #6c757d; }
+.watcher-modal .host-item .host-status.in-progress { color: #007bff; }
+.watcher-modal .host-item .host-status.success { color: #28a745; }
+.watcher-modal .host-item .host-status.error { color: #dc3545; }
+
+/** Restart type label (FPPD Restart vs Reboot) */
+.watcher-modal .host-item .restart-type {
+    font-size: 0.7rem;
+    color: #6c757d;
+    margin-left: 0.5rem;
+}
+
+.watcher-modal .host-item .restart-type.reboot { color: #dc3545; }
+.watcher-modal .host-item .restart-type.restart { color: #fd7e14; }
+
+/**
+ * Terminal-style streaming output
+ * Dark background with monospace font for command output
+ * Used in FPP upgrade modal
+ */
+.watcher-modal .stream-output {
+    flex: 1;
+    min-height: 300px;
+    max-height: 400px;
+    overflow-y: auto;
+    background: #1e1e1e;
+    color: #d4d4d4;
+    font-family: 'Consolas', 'Monaco', 'Courier New', monospace;
+    font-size: 0.8rem;
+    padding: 1rem;
+    border-radius: 8px;
+    white-space: pre-wrap;
+    word-wrap: break-word;
+    margin-bottom: 1rem;
+}
+
+/**
+ * Host selection dropdown in modals
+ */
+.watcher-modal .host-selector {
+    margin-bottom: 1rem;
+}
+
+.watcher-modal .host-selector label {
+    display: block;
+    margin-bottom: 0.5rem;
+    font-weight: 500;
+    color: #495057;
+}
+
+.watcher-modal .host-selector select {
+    width: 100%;
+    padding: 0.5rem;
+    border: 1px solid #ced4da;
+    border-radius: 6px;
+    font-size: 0.9rem;
+}
+
+/* ==========================================================================
+   Bulk Action Buttons (Upgrade All, Restart All, FPP Upgrade)
+
+   Usage: Add base class + variant modifier
+   Example: class="bulk-action-btn bulk-action-btn--upgrade"
+   Visibility: Hidden by default, add .visible class to show
+   ========================================================================== */
+
+.bulk-action-btn {
+    display: none;
+    color: #fff;
+    border: none;
+    padding: 0.5rem 1rem;
+    border-radius: 6px;
+    font-size: 0.85rem;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    margin-right: 0.75rem;
+    align-items: center;
+    gap: 0.4rem;
+}
+
+.bulk-action-btn:hover:not(:disabled) {
+    transform: translateY(-1px);
+}
+
+.bulk-action-btn:disabled {
+    opacity: 0.7;
+    cursor: not-allowed;
+}
+
+/** Show button when there are items to process */
+.bulk-action-btn.visible {
+    display: inline-flex;
+}
+
+/** Count badge inside button */
+.bulk-action-btn .badge {
+    background: rgba(255,255,255,0.3);
+    padding: 0.1rem 0.4rem;
+    border-radius: 10px;
+    font-size: 0.75rem;
+}
+
+/* Button Gradient Variants */
+
+/** Green gradient - Watcher plugin upgrades */
+.bulk-action-btn--upgrade {
+    background: linear-gradient(135deg, #28a745 0%, #20c997 100%);
+}
+
+.bulk-action-btn--upgrade:hover:not(:disabled) {
+    box-shadow: 0 2px 8px rgba(40, 167, 69, 0.3);
+}
+
+/** Orange-red gradient - Restart/Reboot operations */
+.bulk-action-btn--restart {
+    background: linear-gradient(135deg, #fd7e14 0%, #dc3545 100%);
+}
+
+.bulk-action-btn--restart:hover:not(:disabled) {
+    box-shadow: 0 2px 8px rgba(220, 53, 69, 0.3);
+}
+
+/** Blue-purple gradient - FPP core upgrades */
+.bulk-action-btn--fpp {
+    background: linear-gradient(135deg, #007bff 0%, #6610f2 100%);
+}
+
+.bulk-action-btn--fpp:hover:not(:disabled) {
+    box-shadow: 0 2px 8px rgba(0, 123, 255, 0.3);
+}
+
+/* ==========================================================================
+   Status Indicators (Pills/Badges)
+
+   Usage: <span class="status-indicator status-indicator--online">
+            <span class="dot"></span>Online
+          </span>
+   ========================================================================== */
+
+/** Container for multiple status indicators */
+.status-indicators {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.35rem;
+    margin-top: 0.15rem;
+}
+
+/** Base status indicator pill */
+.status-indicator {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.3rem;
+    padding: 0.2rem 0.5rem;
+    border-radius: 10px;
+    font-size: 0.7rem;
+    font-weight: 500;
+    white-space: nowrap;
+}
+
+/** Colored dot before text (uses currentColor) */
+.status-indicator .dot {
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    background: currentColor;
+}
+
+/* Status Indicator Color Variants */
+
+/** Green - System is online and healthy */
+.status-indicator--online {
+    background: rgba(40, 167, 69, 0.1);
+    color: #28a745;
+}
+
+/** Red - System is offline or unreachable */
+.status-indicator--offline {
+    background: rgba(220, 53, 69, 0.1);
+    color: #dc3545;
+}
+
+/** Yellow - Test mode is active */
+.status-indicator--testing {
+    background: rgba(255, 193, 7, 0.15);
+    color: #856404;
+}
+
+/** Yellow - FPPD restart required */
+.status-indicator--restart {
+    background: rgba(255, 193, 7, 0.15);
+    color: #856404;
+}
+
+/** Red - Full system reboot required */
+.status-indicator--reboot {
+    background: rgba(220, 53, 69, 0.15);
+    color: #dc3545;
+}
+
+/** Blue - Update/upgrade available */
+.status-indicator--update {
+    background: rgba(0, 123, 255, 0.15);
+    color: #007bff;
+}
+
+/* ==========================================================================
+   Empty State Messages
+
+   Usage: Shown when feature is disabled or no data available
+   ========================================================================== */
+
+.empty-message {
+    padding: 3rem;
+    text-align: center;
+    background: #f8f9fa;
+    border-radius: 8px;
+    margin: 2rem auto;
+    max-width: 600px;
+}
+
+.empty-message h3 {
+    color: #495057;
+    margin-bottom: 1rem;
+}
+
+.empty-message p {
+    color: #6c757d;
+}
+
+.empty-message i {
+    font-size: 3rem;
+    margin-bottom: 1rem;
+    opacity: 0.5;
+}
+
+/* ==========================================================================
+   Refresh Bar
+
+   Usage: Top bar with last update time and action buttons
+   ========================================================================== */
+
+.refresh-bar {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 1.5rem;
+    padding: 0.75rem 1rem;
+    background: #f8f9fa;
+    border-radius: 8px;
+}
+
+.refresh-bar .last-update {
+    font-size: 0.85rem;
+    color: #6c757d;
+}
+
+/* ==========================================================================
+   Update Banners (Card Inline Notifications)
+
+   Usage: Inline banners within cards showing available updates
+   Variants: --fpp (blue-purple), --plugin (green)
+   Visibility: Hidden by default, add .visible class to show
+   ========================================================================== */
+
+.update-banner {
+    display: none;
+    margin: -0.25rem -1.25rem 0.75rem -1.25rem;
+    padding: 0.5rem 0.75rem;
+}
+
+.update-banner.visible {
+    display: block;
+}
+
+/** Blue-purple gradient for FPP core updates */
+.update-banner--fpp {
+    background: linear-gradient(135deg, #007bff 0%, #6610f2 100%);
+}
+
+/** Green gradient for plugin updates */
+.update-banner--plugin {
+    background: linear-gradient(135deg, #28a745 0%, #20c997 100%);
+}
+
+/** Banner content layout (info on left, button on right) */
+.update-banner .banner-info {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    color: #fff;
+}
+
+.update-banner .banner-text {
+    font-size: 0.8rem;
+}
+
+.update-banner .banner-text i {
+    margin-right: 0.35rem;
+}
+
+.update-banner .banner-version {
+    font-size: 0.7rem;
+    opacity: 0.9;
+}
+
+/** Semi-transparent button for banner actions */
+.update-banner .banner-btn {
+    padding: 0.3rem 0.6rem;
+    background: rgba(255,255,255,0.2);
+    border: 1px solid rgba(255,255,255,0.5);
+    border-radius: 4px;
+    color: #fff;
+    font-size: 0.7rem;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    display: inline-flex;
+    align-items: center;
+    gap: 0.3rem;
+    white-space: nowrap;
+}
+
+.update-banner .banner-btn:hover:not(:disabled) {
+    background: rgba(255,255,255,0.3);
+    border-color: rgba(255,255,255,0.8);
+}
+
+.update-banner .banner-btn:disabled {
+    opacity: 0.7;
+    cursor: not-allowed;
+}
+
+/** Header for plugin upgrade list banners */
+.update-banner .banner-header {
+    padding: 0.5rem 0.75rem;
+    color: #fff;
+    font-size: 0.75rem;
+    font-weight: 600;
+    border-bottom: 1px solid rgba(255,255,255,0.2);
+}
+
+.update-banner .banner-header i {
+    margin-right: 0.35rem;
+}
+
+/**
+ * Individual plugin upgrade items within banner
+ * Shows plugin name, version info, and upgrade button
+ */
+.upgrade-item {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 0.5rem 0.75rem;
+    border-bottom: 1px solid rgba(255,255,255,0.1);
+}
+
+.upgrade-item:last-child {
+    border-bottom: none;
+}
+
+.upgrade-item .plugin-info {
+    color: #fff;
+    font-size: 0.8rem;
+}
+
+.upgrade-item .plugin-name {
+    font-weight: 600;
+}
+
+.upgrade-item .plugin-version {
+    font-size: 0.7rem;
+    opacity: 0.85;
 }

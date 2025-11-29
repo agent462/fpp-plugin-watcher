@@ -993,6 +993,33 @@ class FalconController
     }
 
     /**
+     * Auto-detect subnet from FPP's network settings
+     *
+     * @return string|null The subnet (e.g., "192.168.1") or null if unable to detect
+     */
+    public static function autoDetectSubnet()
+    {
+        // Try to auto-detect from FPP's network settings
+        $interfaces = @file_get_contents('http://127.0.0.1/api/network/interface');
+        if ($interfaces) {
+            $ifData = json_decode($interfaces, true);
+            if ($ifData && is_array($ifData)) {
+                foreach ($ifData as $iface) {
+                    if (!empty($iface['IP']) && $iface['IP'] !== '127.0.0.1') {
+                        // Extract subnet from IP (e.g., 192.168.1.100 -> 192.168.1)
+                        $parts = explode('.', $iface['IP']);
+                        if (count($parts) === 4) {
+                            return $parts[0] . '.' . $parts[1] . '.' . $parts[2];
+                        }
+                    }
+                }
+            }
+        }
+
+        return null;
+    }
+
+    /**
      * Static method to discover Falcon controllers on a subnet
      *
      * @param string $subnet Subnet base (e.g., "192.168.1")
