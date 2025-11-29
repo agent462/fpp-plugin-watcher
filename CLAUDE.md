@@ -70,8 +70,9 @@ sudo systemctl restart fppd
 - Boolean values stored as strings, normalized via `normalizeBoolean()` in config.php
 
 ## Key Patterns
-
-Keep api.php as simple shell logic as you can.  Helper functions should go in the lib files.
+- Keep api.php as simple shell logic as you can.  Helper functions should go in the lib files.
+- Use watcher based js function and css class names so we don't interfere with FPP or Bootstrap
+- Make sure you have very concise comments
 
 ### FPP Plugin Conventions
 - Include `/opt/fpp/www/common.php` for FPP functions (`json()`, `WriteSettingToFile()`, etc.)

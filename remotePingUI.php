@@ -25,21 +25,6 @@ $showDashboard = $isEnabled && $isPlayerMode;
 <?php endif; ?>
 
 <style>
-    .disabledMessage {
-        padding: 3rem;
-        text-align: center;
-        background: #f8f9fa;
-        border-radius: 8px;
-        margin: 2rem auto;
-        max-width: 600px;
-    }
-    .disabledMessage h3 {
-        color: #495057;
-        margin-bottom: 1rem;
-    }
-    .disabledMessage p {
-        color: #6c757d;
-    }
     .hostSelector {
         display: flex;
         flex-wrap: wrap;
@@ -115,12 +100,12 @@ $showDashboard = $isEnabled && $isPlayerMode;
     </h2>
 
     <?php if (!$isEnabled): ?>
-    <div class="disabledMessage">
+    <div class="empty-message">
         <h3><i class="fas fa-exclamation-circle"></i> Multi-Sync Metrics Disabled</h3>
         <p>This feature is not enabled. Go to <a href="plugin.php?plugin=fpp-plugin-watcher&page=configUI.php">Watcher Config</a> to enable it.</p>
     </div>
     <?php elseif (!$isPlayerMode): ?>
-    <div class="disabledMessage">
+    <div class="empty-message">
         <h3><i class="fas fa-info-circle"></i> Player Mode Required</h3>
         <p>This feature is only available when FPP is in Player mode. Current mode: <?php echo htmlspecialchars($localSystem['fppModeString'] ?? 'unknown'); ?></p>
     </div>

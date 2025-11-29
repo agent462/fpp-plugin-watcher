@@ -102,7 +102,7 @@ if ($showDashboard) {
         border-radius: 6px;
         padding: 1rem;
     }
-    .chartTitle {
+    .miniChartTitle {
         font-size: 0.875rem;
         font-weight: 600;
         color: #495057;
@@ -144,21 +144,6 @@ if ($showDashboard) {
         font-size: 0.75rem;
         opacity: 0.8;
     }
-    .disabledMessage {
-        padding: 3rem;
-        text-align: center;
-        background: #f8f9fa;
-        border-radius: 8px;
-        margin: 2rem auto;
-        max-width: 600px;
-    }
-    .disabledMessage h3 {
-        color: #495057;
-        margin-bottom: 1rem;
-    }
-    .disabledMessage p {
-        color: #6c757d;
-    }
     .allSystemsContainer {
         padding: 1rem;
     }
@@ -177,12 +162,12 @@ if ($showDashboard) {
     </h2>
 
     <?php if (!$isEnabled): ?>
-    <div class="disabledMessage">
+    <div class="empty-message">
         <h3><i class="fas fa-exclamation-circle"></i> Multi-Sync Metrics Disabled</h3>
         <p>This feature is not enabled. Go to <a href="plugin.php?plugin=fpp-plugin-watcher&page=configUI.php">Watcher Config</a> to enable it.</p>
     </div>
     <?php elseif (!$isPlayerMode): ?>
-    <div class="disabledMessage">
+    <div class="empty-message">
         <h3><i class="fas fa-info-circle"></i> Player Mode Required</h3>
         <p>This feature is only available when FPP is in Player mode. Current mode: <?php echo htmlspecialchars($localSystem['fppModeString'] ?? 'unknown'); ?></p>
     </div>
@@ -541,26 +526,26 @@ if ($showDashboard) {
                 </div>
                 <div class="chartsContainer">
                     <div class="chartWrapper">
-                        <div class="chartTitle"><i class="fas fa-microchip"></i> CPU Usage</div>
+                        <div class="miniChartTitle"><i class="fas fa-microchip"></i> CPU Usage</div>
                         <canvas id="cpuChart-${index}" height="150"></canvas>
                     </div>
                     <div class="chartWrapper">
-                        <div class="chartTitle"><i class="fas fa-memory"></i> Free Memory</div>
+                        <div class="miniChartTitle"><i class="fas fa-memory"></i> Free Memory</div>
                         <canvas id="memoryChart-${index}" height="150"></canvas>
                     </div>
                     ${metrics.temperature ? `
                     <div class="chartWrapper">
-                        <div class="chartTitle"><i class="fas fa-thermometer-half"></i> Temperature</div>
+                        <div class="miniChartTitle"><i class="fas fa-thermometer-half"></i> Temperature</div>
                         <canvas id="tempChart-${index}" height="150"></canvas>
                     </div>` : ''}
                     ${metrics.wireless ? `
                     <div class="chartWrapper">
-                        <div class="chartTitle"><i class="fas fa-wifi"></i> WiFi Signal</div>
+                        <div class="miniChartTitle"><i class="fas fa-wifi"></i> WiFi Signal</div>
                         <canvas id="wirelessChart-${index}" height="150"></canvas>
                     </div>` : ''}
                     ${metrics.ping ? `
                     <div class="chartWrapper">
-                        <div class="chartTitle"><i class="fas fa-network-wired"></i> Ping Latency</div>
+                        <div class="miniChartTitle"><i class="fas fa-network-wired"></i> Ping Latency</div>
                         <canvas id="pingChart-${index}" height="150"></canvas>
                     </div>` : ''}
                 </div>

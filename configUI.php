@@ -303,7 +303,7 @@ if ($isPlayerMode) {
                             storage to keep historical data for these metrics.  On Linux we also run this process at a lower priority.  This ensures FPP
                             performance is not impacted while still collecting useful system metrics.
                             <p></p>
-                            These metrics are displayed in the. "Watcher - Metrics" dashboard.
+                            These metrics are displayed in the. "Watcher - Local Metrics" dashboard.
                             Disabling this service will stop metric collection and reduce system overhead, but historical data will be preserved.
                         </div>
                     </div>
@@ -341,13 +341,13 @@ if ($isPlayerMode) {
                     </div>
                 </div>
 
-                <!-- Enable/Disable Multi-Sync Ping Monitoring -->
+                <!-- Enable/Disable Remote Ping Monitoring -->
                 <div class="row settingRow">
                     <div class="col-md-4 col-lg-3">
                         <label class="settingLabel">
                             <input type="checkbox" id="multiSyncPingEnabled" name="multiSyncPingEnabled" class="form-check-input" value="1"
                                 <?php echo (!empty($config['multiSyncPingEnabled'])) ? 'checked' : ''; ?>>
-                            Enable Multi-Sync Ping Monitoring
+                            Enable Remote Ping Monitoring
                         </label>
                     </div>
                     <div class="col-md-8">
@@ -361,7 +361,7 @@ if ($isPlayerMode) {
                     </div>
                 </div>
 
-                <!-- Multi-Sync Ping Interval (sub-setting) -->
+                <!-- Remote Ping Interval (sub-setting) -->
                 <div class="row settingRow" style="margin-left: 2rem; padding-left: 1rem; border-left: 3px solid #dee2e6;">
                     <div class="col-md-4 col-lg-3">
                         <label class="settingLabel" for="multiSyncPingInterval">Ping Interval (seconds)</label>
@@ -371,7 +371,7 @@ if ($isPlayerMode) {
                             min="10" max="300" value="<?php echo htmlspecialchars($config['multiSyncPingInterval'] ?? WATCHERDEFAULTSETTINGS['multiSyncPingInterval']); ?>">
                         <div class="settingDescription">
                             How frequently to ping each remote multi-sync system (10-300 seconds).
-                            Lower values provide more granular monitoring but increase network traffic.
+                            Lower values provide more granular monitoring but increase network traffic and storage.
                         </div>
                     </div>
                 </div>

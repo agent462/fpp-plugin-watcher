@@ -139,6 +139,14 @@ if ($showDashboard) {
         </div>
     </div>
 
+    <!-- Sync Status Grid - shown when sequence is playing -->
+    <div class="sync-status-container" id="syncStatusContainer">
+        <div class="sync-status-header">
+            <h3><i class="fas fa-sync-alt"></i> Playback Sync Status <span class="sync-sequence-name" id="syncSequenceName"></span></h3>
+        </div>
+        <div class="sync-status-grid" id="syncStatusGrid"></div>
+    </div>
+
     <div id="loadingIndicator" class="loadingSpinner">
         <i class="fas fa-spinner"></i>
         <p>Loading remote system status...</p>
@@ -178,7 +186,7 @@ if ($showDashboard) {
                         </div>
                     </div>
                     <div class="actionRow">
-                        <span class="actionLabel"><i class="fas fa-vial"></i> Test Mode</span>
+                        <span class="actionLabel"><i class="fas fa-vial"></i> Test Mode (Local Channels)</span>
                         <label class="toggleSwitch">
                             <input type="checkbox" id="testmode-<?php echo htmlspecialchars($system['address']); ?>" onchange="toggleTestMode('<?php echo htmlspecialchars($system['address']); ?>', this.checked)" disabled>
                             <span class="toggleSlider"></span>
@@ -273,6 +281,8 @@ let hostsNeedingRestart = new Map();
 let hostsWithFPPUpdates = new Map();
 let currentBulkType = null;
 let fppUpgradeAbortController = null;
+let syncCheckInterval = null;
+const SYNC_THRESHOLD_SECONDS = 3; // hosts are out of sync if time differs by more than this
 
 // =============================================================================
 // Helper Functions
@@ -331,6 +341,95 @@ async function processBulkOperation(hostsArray, operationFn, idPrefix, progressE
     }
 
     return { completed, failed, total };
+}
+
+// =============================================================================
+// Sync Status Grid (uses server-side batch fetch to avoid browser connection limits)
+// =============================================================================
+
+async function updateSyncStatus() {
+    const container = document.getElementById('syncStatusContainer');
+    const grid = document.getElementById('syncStatusGrid');
+    const seqName = document.getElementById('syncSequenceName');
+
+    // Single server-side batch request (uses curl_multi for parallel fetches with timeouts)
+    let data;
+    try {
+        const response = await fetch('/api/plugin/fpp-plugin-watcher/remote/playback/sync', { signal: AbortSignal.timeout(5000) });
+        if (!response.ok) { container.classList.remove('visible'); return; }
+        data = await response.json();
+    } catch {
+        container.classList.remove('visible');
+        return;
+    }
+
+    // If local is not playing, hide sync grid
+    if (!data.local || data.local.status !== 'playing') {
+        container.classList.remove('visible');
+        stopSyncChecking();
+        return;
+    }
+
+    const localStatus = { address: 'local', ...data.local };
+    const allStatuses = [localStatus, ...data.remotes];
+    const refTime = localStatus.secondsPlayed;
+    const refSequence = localStatus.sequence;
+
+    // Build grid HTML
+    let html = '';
+    allStatuses.forEach(host => {
+        let boxClass = '';
+        let diffHtml = '';
+
+        if (host.status === 'offline') {
+            boxClass = 'offline';
+        } else if (host.status !== 'playing') {
+            boxClass = 'idle';
+        } else if (host.sequence !== refSequence) {
+            boxClass = 'out-of-sync';
+            diffHtml = `<div class="sync-host-box__diff">Different sequence</div>`;
+        } else {
+            const timeDiff = Math.abs(host.secondsPlayed - refTime);
+            if (timeDiff > SYNC_THRESHOLD_SECONDS) {
+                boxClass = 'out-of-sync';
+                const sign = host.secondsPlayed > refTime ? '+' : '-';
+                diffHtml = `<div class="sync-host-box__diff">${sign}${timeDiff.toFixed(1)}s</div>`;
+            }
+        }
+
+        const seqDisplay = host.sequence ? host.sequence.replace(/\.(fseq|eseq)$/i, '') : '--';
+        const timeDisplay = host.status === 'offline' ? 'Offline' : (host.status !== 'playing' ? 'Idle' : host.timeElapsed);
+        const modeClass = host.mode === 'player' ? 'player' : 'remote';
+        const modeLabel = host.mode === 'player' ? 'P' : 'R';
+
+        html += `
+            <div class="sync-host-box ${boxClass}">
+                <div class="sync-host-box__mode sync-host-box__mode--${modeClass}" title="${host.mode}">${modeLabel}</div>
+                <div class="sync-host-box__name">${host.hostname}</div>
+                <div class="sync-host-box__sequence" title="${seqDisplay}">${seqDisplay}</div>
+                <div class="sync-host-box__time">${timeDisplay}</div>
+                ${diffHtml}
+            </div>`;
+    });
+
+    grid.innerHTML = html;
+    seqName.textContent = `- ${refSequence.replace(/\.(fseq|eseq)$/i, '')}`;
+    container.classList.add('visible');
+
+    // Start rapid polling if not already running
+    startSyncChecking();
+}
+
+function startSyncChecking() {
+    if (syncCheckInterval) return;
+    syncCheckInterval = setInterval(updateSyncStatus, 1000);
+}
+
+function stopSyncChecking() {
+    if (syncCheckInterval) {
+        clearInterval(syncCheckInterval);
+        syncCheckInterval = null;
+    }
 }
 
 // =============================================================================
@@ -448,7 +547,7 @@ function updateCardUI(address, data) {
     } else {
         hostsWithWatcherUpdates.delete(address);
     }
-    updateBulkButton('upgradeAllBtn', 'upgradeAllCount', hostsWithWatcherUpdates, 2);
+    updateBulkButton('upgradeAllBtn', 'upgradeAllCount', hostsWithWatcherUpdates);
 
     // Track restart/reboot needed
     if (needsReboot) {
@@ -507,9 +606,12 @@ async function refreshAllStatus() {
     document.getElementById('controlContent').style.display = 'block';
 
     try {
-        await Promise.all(remoteAddresses.map(addr =>
-            fetchRemoteStatus(addr).then(result => updateCardUI(result.address, result))
-        ));
+        await Promise.all([
+            ...remoteAddresses.map(addr =>
+                fetchRemoteStatus(addr).then(result => updateCardUI(result.address, result))
+            ),
+            updateSyncStatus()
+        ]);
         document.getElementById('lastUpdateTime').textContent = new Date().toLocaleTimeString();
     } finally {
         refreshBtn.innerHTML = '<i class="fas fa-sync-alt"></i> Refresh All';

@@ -12,6 +12,17 @@
  */
 
 /* ==========================================================================
+   CSS Custom Properties (Variables)
+   ========================================================================== */
+
+:root {
+    /* Primary purple gradient - used for headers, buttons, stats bars */
+    --watcher-gradient-purple: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    /* Gray gradient - used for offline/disabled states */
+    --watcher-gradient-gray: linear-gradient(135deg, #6c757d 0%, #495057 100%);
+}
+
+/* ==========================================================================
    Layout Containers
    ========================================================================== */
 
@@ -161,7 +172,7 @@
     width: 60px;
     height: 60px;
     border-radius: 50%;
-    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    background: var(--watcher-gradient-purple);
     color: white;
     border: none;
     box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
@@ -192,7 +203,7 @@
     display: flex;
     gap: 1rem;
     padding: 1rem;
-    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    background: var(--watcher-gradient-purple);
     border-radius: 0.5rem;
     margin-bottom: 1.5rem;
     color: white;
@@ -843,4 +854,673 @@
 .upgrade-item .plugin-version {
     font-size: 0.7rem;
     opacity: 0.85;
+}
+
+/* ==========================================================================
+   Toolbar Component
+
+   Usage: Horizontal bar with controls and status text
+   ========================================================================== */
+
+.watcher-toolbar {
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+    margin-bottom: 1.5rem;
+    flex-wrap: wrap;
+}
+
+.watcher-toolbar .last-update {
+    margin-left: auto;
+    color: #6c757d;
+    font-size: 0.875rem;
+}
+
+@media (max-width: 768px) {
+    .watcher-toolbar {
+        flex-direction: column;
+        align-items: stretch;
+    }
+    .watcher-toolbar .last-update {
+        margin-left: 0;
+        text-align: center;
+    }
+}
+
+/* ==========================================================================
+   Config Panel Component
+
+   Usage: Collapsible configuration section
+   ========================================================================== */
+
+.watcher-config-panel {
+    background-color: #fff;
+    border: 1px solid #dee2e6;
+    border-radius: 0.5rem;
+    padding: 1.5rem;
+    margin-bottom: 1.5rem;
+    display: none;
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
+}
+
+.watcher-config-panel.visible {
+    display: block;
+}
+
+.watcher-config-panel label {
+    font-weight: 500;
+    margin-bottom: 0.5rem;
+    display: block;
+}
+
+.watcher-config-panel .input-group {
+    display: flex;
+    gap: 0.5rem;
+    margin-bottom: 0.5rem;
+}
+
+.watcher-config-panel .input-group input {
+    flex: 1;
+}
+
+@media (max-width: 768px) {
+    .watcher-config-panel .input-group {
+        flex-direction: column;
+    }
+}
+
+/* ==========================================================================
+   Card Grid System
+
+   Usage: Grid of cards for displaying controller/host information
+   ========================================================================== */
+
+.watcher-card-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(400px, 1fr));
+    gap: 1.5rem;
+}
+
+@media (max-width: 768px) {
+    .watcher-card-grid {
+        grid-template-columns: 1fr;
+    }
+}
+
+/* ==========================================================================
+   Card Component
+
+   Usage: Individual card within grid
+   Modifiers: --offline (dimmed appearance)
+   ========================================================================== */
+
+.watcher-card {
+    background-color: #fff;
+    border: 1px solid #dee2e6;
+    border-radius: 0.5rem;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
+    overflow: hidden;
+    transition: transform 0.2s, box-shadow 0.2s;
+}
+
+.watcher-card:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 4px 16px rgba(0, 0, 0, 0.12);
+}
+
+.watcher-card--offline {
+    opacity: 0.8;
+}
+
+/* Card Header */
+.watcher-card__header {
+    background: var(--watcher-gradient-purple);
+    color: white;
+    padding: 1rem 1.25rem;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}
+
+.watcher-card__header--offline {
+    background: var(--watcher-gradient-gray);
+}
+
+.watcher-card__header--loading {
+    background: linear-gradient(135deg, #9ca3af 0%, #6b7280 100%);
+}
+
+.watcher-card__title {
+    font-size: 1.1rem;
+    font-weight: 600;
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+}
+
+.watcher-card__badge {
+    display: inline-block;
+    padding: 0.25rem 0.75rem;
+    border-radius: 1rem;
+    font-size: 0.75rem;
+    font-weight: 600;
+    text-transform: uppercase;
+}
+
+.watcher-card__badge--online {
+    background-color: rgba(255, 255, 255, 0.2);
+    color: white;
+}
+
+.watcher-card__badge--offline {
+    background-color: #f8d7da;
+    color: #721c24;
+}
+
+/* Card Body */
+.watcher-card__body {
+    padding: 1.25rem;
+}
+
+.watcher-card__body--offline {
+    text-align: center;
+    padding: 2rem;
+    color: #6c757d;
+}
+
+.watcher-card__body--offline i {
+    font-size: 3rem;
+    margin-bottom: 1rem;
+    opacity: 0.5;
+    display: block;
+}
+
+/* Card Footer */
+.watcher-card__footer {
+    background-color: #f8f9fa;
+    padding: 0.75rem 1.25rem;
+    display: flex;
+    justify-content: space-between;
+    gap: 0.5rem;
+    border-top: 1px solid #e9ecef;
+}
+
+@media (max-width: 768px) {
+    .watcher-card__footer {
+        flex-direction: column;
+    }
+    .watcher-card__footer .btn {
+        width: 100%;
+    }
+}
+
+/* ==========================================================================
+   Quick Stats Grid
+
+   Usage: Horizontal stat summary within cards
+   ========================================================================== */
+
+.watcher-quick-stats {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 0.75rem;
+    margin-bottom: 1.25rem;
+    padding-bottom: 1.25rem;
+    border-bottom: 1px solid #f0f0f0;
+}
+
+@media (max-width: 768px) {
+    .watcher-quick-stats {
+        grid-template-columns: repeat(2, 1fr);
+    }
+}
+
+.watcher-quick-stats__item {
+    text-align: center;
+}
+
+.watcher-quick-stats__label {
+    display: block;
+    font-size: 0.7rem;
+    color: #6c757d;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    margin-bottom: 0.25rem;
+}
+
+.watcher-quick-stats__value {
+    display: block;
+    font-size: 0.9rem;
+    font-weight: 600;
+    color: #212529;
+}
+
+/* ==========================================================================
+   Section Title
+
+   Usage: Section headers within cards
+   ========================================================================== */
+
+.watcher-section-title {
+    font-size: 0.85rem;
+    font-weight: 600;
+    color: #495057;
+    margin: 1rem 0 0.75rem 0;
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+}
+
+.watcher-section-title i {
+    color: #667eea;
+}
+
+/* ==========================================================================
+   Temperature Display
+
+   Usage: Temperature readings with visual bars
+   ========================================================================== */
+
+.watcher-temp-grid {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 0.75rem;
+}
+
+.watcher-temp-item {
+    text-align: center;
+}
+
+.watcher-temp-item__label {
+    font-size: 0.75rem;
+    color: #6c757d;
+    margin-bottom: 0.25rem;
+}
+
+.watcher-temp-item__value {
+    font-size: 1.25rem;
+    font-weight: 700;
+    margin-bottom: 0.25rem;
+}
+
+.watcher-temp-item__bar {
+    height: 4px;
+    background-color: #e9ecef;
+    border-radius: 2px;
+    overflow: hidden;
+}
+
+.watcher-temp-item__bar-fill {
+    height: 100%;
+    transition: width 0.3s ease;
+}
+
+/* ==========================================================================
+   Voltage Display
+
+   Usage: Voltage readings with status indicators
+   ========================================================================== */
+
+.watcher-voltage-info {
+    display: flex;
+    gap: 1.5rem;
+}
+
+.watcher-voltage-item {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+}
+
+.watcher-voltage-item__label {
+    font-size: 0.875rem;
+    color: #6c757d;
+}
+
+.watcher-voltage-item__value {
+    font-weight: 600;
+    padding: 0.25rem 0.5rem;
+    border-radius: 0.25rem;
+    font-size: 0.875rem;
+}
+
+.watcher-voltage-item__value--good {
+    background-color: #d4edda;
+    color: #155724;
+}
+
+.watcher-voltage-item__value--warning {
+    background-color: #fff3cd;
+    color: #856404;
+}
+
+.watcher-voltage-item__value--normal {
+    background-color: #e9ecef;
+    color: #495057;
+}
+
+/* ==========================================================================
+   Pixel Info Display
+
+   Usage: Pixel count summary with bank breakdown
+   ========================================================================== */
+
+.watcher-pixel-info {
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+    flex-wrap: wrap;
+}
+
+.watcher-pixel-total {
+    display: flex;
+    flex-direction: column;
+}
+
+.watcher-pixel-total__label {
+    font-size: 0.75rem;
+    color: #6c757d;
+}
+
+.watcher-pixel-total__value {
+    font-size: 1.5rem;
+    font-weight: 700;
+    color: #667eea;
+}
+
+.watcher-pixel-banks {
+    display: flex;
+    gap: 0.75rem;
+    flex-wrap: wrap;
+}
+
+.watcher-pixel-bank {
+    font-size: 0.75rem;
+    color: #6c757d;
+    background-color: #f8f9fa;
+    padding: 0.25rem 0.5rem;
+    border-radius: 0.25rem;
+}
+
+/* ==========================================================================
+   Detail Rows
+
+   Usage: Key-value pairs in card details section
+   ========================================================================== */
+
+.watcher-details {
+    margin-top: 1rem;
+    padding-top: 1rem;
+    border-top: 1px solid #f0f0f0;
+}
+
+.watcher-details__row {
+    display: flex;
+    justify-content: space-between;
+    padding: 0.35rem 0;
+    font-size: 0.875rem;
+}
+
+.watcher-details__label {
+    color: #6c757d;
+}
+
+.watcher-details__value {
+    font-weight: 500;
+    color: #212529;
+}
+
+/* ==========================================================================
+   Test Mode Button
+
+   Usage: Toggle button for test mode with active state
+   ========================================================================== */
+
+.watcher-test-btn.active {
+    background-color: #ffc107;
+    border-color: #ffc107;
+    color: #212529;
+}
+
+.watcher-test-btn.active:hover {
+    background-color: #e0a800;
+    border-color: #d39e00;
+}
+
+/* ==========================================================================
+   Skeleton Loading Animation
+
+   Usage: Placeholder elements while content loads
+   ========================================================================== */
+
+@keyframes watcher-shimmer {
+    0% { background-position: -200% 0; }
+    100% { background-position: 200% 0; }
+}
+
+.watcher-skeleton {
+    background: linear-gradient(90deg, #f0f0f0 25%, #e0e0e0 50%, #f0f0f0 75%);
+    background-size: 200% 100%;
+    animation: watcher-shimmer 1.5s infinite;
+    border-radius: 4px;
+}
+
+.watcher-skeleton--text {
+    height: 1em;
+    margin-bottom: 0.5em;
+}
+
+.watcher-skeleton--text-short { width: 40%; }
+.watcher-skeleton--text-medium { width: 60%; }
+.watcher-skeleton--text-long { width: 80%; }
+
+.watcher-skeleton--badge {
+    width: 60px;
+    height: 24px;
+    border-radius: 1rem;
+}
+
+.watcher-skeleton--stat {
+    height: 2em;
+    width: 100%;
+}
+
+.watcher-skeleton--temp {
+    height: 3em;
+    width: 100%;
+}
+
+.watcher-skeleton--btn {
+    width: 60px;
+    height: 32px;
+}
+
+/* ==========================================================================
+   Discovery Results
+
+   Usage: Network discovery result list
+   ========================================================================== */
+
+.watcher-discovery-results {
+    display: none;
+    margin-top: 1rem;
+}
+
+.watcher-discovery-results.visible {
+    display: block;
+}
+
+.watcher-discovery-results__container {
+    padding: 0.75rem;
+    background: #f8f9fa;
+    border: 1px solid #dee2e6;
+    border-radius: 4px;
+}
+
+.watcher-discovery-results__header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 0.75rem;
+}
+
+.watcher-discovery-item {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 0.5rem;
+    background: white;
+    border: 1px solid #dee2e6;
+    border-radius: 4px;
+    margin-bottom: 0.5rem;
+}
+
+.watcher-discovery-item:last-child {
+    margin-bottom: 0;
+}
+
+/* ==========================================================================
+   Sync Status Grid
+
+   Usage: Compact grid showing sequence playback sync status across hosts
+   Visibility: Hidden by default, shown when sequence is playing
+   ========================================================================== */
+
+.sync-status-container {
+    display: none;
+    margin-bottom: 1.5rem;
+}
+
+.sync-status-container.visible {
+    display: block;
+}
+
+.sync-status-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 0.75rem;
+}
+
+.sync-status-header h3 {
+    margin: 0;
+    font-size: 1rem;
+    font-weight: 600;
+    color: #212529;
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+}
+
+.sync-status-header h3 i {
+    color: #667eea;
+}
+
+.sync-status-header .sync-sequence-name {
+    font-size: 0.85rem;
+    color: #6c757d;
+    font-weight: normal;
+}
+
+.sync-status-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+    gap: 0.75rem;
+}
+
+.sync-host-box {
+    background: #fff;
+    border: 2px solid #28a745;
+    border-radius: 8px;
+    padding: 0.6rem 0.75rem;
+    transition: all 0.3s ease;
+    position: relative;
+}
+
+.sync-host-box__mode {
+    position: absolute;
+    top: 0.35rem;
+    right: 0.4rem;
+    width: 18px;
+    height: 18px;
+    border-radius: 50%;
+    font-size: 0.65rem;
+    font-weight: 700;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: #fff;
+}
+
+.sync-host-box__mode--player {
+    background: #667eea;
+}
+
+.sync-host-box__mode--remote {
+    background: #6c757d;
+}
+
+.sync-host-box.out-of-sync {
+    border-color: #dc3545;
+    background: #fff5f5;
+}
+
+.sync-host-box.offline {
+    border-color: #6c757d;
+    background: #f8f9fa;
+    opacity: 0.7;
+}
+
+.sync-host-box.idle {
+    border-color: #ffc107;
+    background: #fffdf5;
+}
+
+.sync-host-box__name {
+    font-size: 0.8rem;
+    font-weight: 600;
+    color: #212529;
+    margin-bottom: 0.25rem;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.sync-host-box__sequence {
+    font-size: 0.7rem;
+    color: #6c757d;
+    margin-bottom: 0.25rem;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.sync-host-box__time {
+    font-size: 0.85rem;
+    font-weight: 600;
+    color: #28a745;
+    font-family: 'Consolas', 'Monaco', monospace;
+}
+
+.sync-host-box.out-of-sync .sync-host-box__time {
+    color: #dc3545;
+}
+
+.sync-host-box.offline .sync-host-box__time,
+.sync-host-box.idle .sync-host-box__time {
+    color: #6c757d;
+    font-size: 0.75rem;
+    font-weight: normal;
+}
+
+.sync-host-box__diff {
+    font-size: 0.65rem;
+    color: #dc3545;
+    margin-top: 0.15rem;
+}
+
+@media (max-width: 768px) {
+    .sync-status-grid {
+        grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+    }
 }

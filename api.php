@@ -215,6 +215,12 @@ function getEndpointsfpppluginwatcher() {
         'callback' => 'fpppluginWatcherRemotePluginUpdates');
     array_push($result, $ep);
 
+    $ep = array(
+        'method' => 'GET',
+        'endpoint' => 'remote/playback/sync',
+        'callback' => 'fpppluginWatcherRemotePlaybackSync');
+    array_push($result, $ep);
+
     // Plugin update endpoints
     $ep = array(
         'method' => 'GET',
@@ -789,6 +795,93 @@ function fpppluginWatcherRemotePluginUpdates() {
 
     /** @disregard P1010 */
     return json(checkRemotePluginUpdates($host));
+}
+
+// GET /api/plugin/fpp-plugin-watcher/remote/playback/sync
+// Batch fetch playback status from all multisync hosts (parallel with timeouts)
+function fpppluginWatcherRemotePlaybackSync() {
+    $remoteSystems = getMultiSyncRemoteSystems();
+    if (empty($remoteSystems)) {
+        /** @disregard P1010 */
+        return json(['success' => true, 'local' => null, 'remotes' => []]);
+    }
+
+    // Fetch local status
+    $localStatus = apiCall('GET', 'http://127.0.0.1/api/fppd/status', [], true, 2);
+    $local = null;
+    if ($localStatus !== false) {
+        $local = [
+            'hostname' => $localStatus['host_name'] ?? 'Local',
+            'status' => $localStatus['status_name'] ?? 'unknown',
+            'sequence' => $localStatus['current_sequence'] ?? '',
+            'secondsPlayed' => floatval($localStatus['seconds_played'] ?? 0),
+            'timeElapsed' => $localStatus['time_elapsed'] ?? '00:00',
+            'mode' => $localStatus['mode_name'] ?? 'unknown'
+        ];
+    }
+
+    // Parallel fetch from all remotes using curl_multi
+    $mh = curl_multi_init();
+    $handles = [];
+    $timeout = 2;
+
+    foreach ($remoteSystems as $system) {
+        $ch = curl_init("http://{$system['address']}/api/fppd/status");
+        curl_setopt_array($ch, [
+            CURLOPT_RETURNTRANSFER => true,
+            CURLOPT_TIMEOUT => $timeout,
+            CURLOPT_CONNECTTIMEOUT => $timeout,
+            CURLOPT_HTTPHEADER => ['Accept: application/json']
+        ]);
+        curl_multi_add_handle($mh, $ch);
+        $handles[$system['address']] = ['handle' => $ch, 'hostname' => $system['hostname']];
+    }
+
+    // Execute all requests in parallel
+    do {
+        $status = curl_multi_exec($mh, $active);
+        if ($active) curl_multi_select($mh);
+    } while ($active && $status === CURLM_OK);
+
+    // Collect results
+    $remotes = [];
+    foreach ($handles as $address => $info) {
+        $ch = $info['handle'];
+        $response = curl_multi_getcontent($ch);
+        $httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+        curl_multi_remove_handle($mh, $ch);
+        curl_close($ch);
+
+        if ($httpCode === 200 && $response) {
+            $data = json_decode($response, true);
+            if ($data) {
+                $remotes[] = [
+                    'address' => $address,
+                    'hostname' => $info['hostname'],
+                    'status' => $data['status_name'] ?? 'unknown',
+                    'sequence' => $data['current_sequence'] ?? '',
+                    'secondsPlayed' => floatval($data['seconds_played'] ?? 0),
+                    'timeElapsed' => $data['time_elapsed'] ?? '00:00',
+                    'mode' => $data['mode_name'] ?? 'unknown'
+                ];
+                continue;
+            }
+        }
+        // Offline/failed
+        $remotes[] = [
+            'address' => $address,
+            'hostname' => $info['hostname'],
+            'status' => 'offline',
+            'sequence' => '',
+            'secondsPlayed' => 0,
+            'timeElapsed' => '--:--',
+            'mode' => 'unknown'
+        ];
+    }
+    curl_multi_close($mh);
+
+    /** @disregard P1010 */
+    return json(['success' => true, 'local' => $local, 'remotes' => $remotes]);
 }
 
 // GET /api/plugin/fpp-plugin-watcher/update/check
