@@ -18,7 +18,7 @@ define('FALCON_F4V2_PRODUCT_CODE', 1);
 define('FALCON_F16V2_PRODUCT_CODE', 2);
 define('FALCON_F4V3_PRODUCT_CODE', 3);
 define('FALCON_F16V3_PRODUCT_CODE', 5);
-define('FALCON_F48_PRODUCT_CODE', 6);
+define('FALCON_F48_PRODUCT_CODE', 7);
 
 /**
  * Falcon Controller Modes (from strings.xml cm attribute)
