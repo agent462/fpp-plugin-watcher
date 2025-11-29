@@ -430,6 +430,49 @@ if ($showDashboard) {
         border-radius: 10px;
         font-size: 0.75rem;
     }
+    .restartAllBtn {
+        display: none;
+        background: linear-gradient(135deg, #fd7e14 0%, #dc3545 100%);
+        color: #fff;
+        border: none;
+        padding: 0.5rem 1rem;
+        border-radius: 6px;
+        font-size: 0.85rem;
+        font-weight: 600;
+        cursor: pointer;
+        transition: all 0.2s ease;
+        margin-right: 0.75rem;
+    }
+    .restartAllBtn:hover:not(:disabled) {
+        transform: translateY(-1px);
+        box-shadow: 0 2px 8px rgba(220, 53, 69, 0.3);
+    }
+    .restartAllBtn:disabled {
+        opacity: 0.7;
+        cursor: not-allowed;
+    }
+    .restartAllBtn.visible {
+        display: inline-flex;
+        align-items: center;
+        gap: 0.4rem;
+    }
+    .restartAllBtn .badge {
+        background: rgba(255,255,255,0.3);
+        padding: 0.1rem 0.4rem;
+        border-radius: 10px;
+        font-size: 0.75rem;
+    }
+    .progressModal .hostItem .restartType {
+        font-size: 0.7rem;
+        color: #6c757d;
+        margin-left: 0.5rem;
+    }
+    .progressModal .hostItem .restartType.reboot {
+        color: #dc3545;
+    }
+    .progressModal .hostItem .restartType.restart {
+        color: #fd7e14;
+    }
     .progressModal {
         position: fixed;
         top: 0;
@@ -528,10 +571,17 @@ if ($showDashboard) {
         display: flex;
         align-items: center;
         justify-content: center;
+        transition: background 0.3s ease;
     }
     .progressModal .btn-close:disabled {
         opacity: 0.7;
         cursor: not-allowed;
+    }
+    .progressModal .btn-close:not(:disabled) {
+        background: #28a745;
+    }
+    .progressModal .btn-close:not(:disabled):hover {
+        background: #218838;
     }
 </style>
 
@@ -566,6 +616,9 @@ if ($showDashboard) {
         <div>
             <button class="upgradeAllBtn" id="upgradeAllBtn" onclick="showUpgradeAllModal()">
                 <i class="fas fa-arrow-circle-up"></i> Upgrade All Watcher <span class="badge" id="upgradeAllCount">0</span>
+            </button>
+            <button class="restartAllBtn" id="restartAllBtn" onclick="showRestartAllModal()">
+                <i class="fas fa-sync"></i> Restart Required <span class="badge" id="restartAllCount">0</span>
             </button>
             <button class="buttons btn-outline-primary" onclick="refreshAllStatus()" id="refreshBtn">
                 <i class="fas fa-sync-alt"></i> Refresh All
@@ -666,6 +719,19 @@ if ($showDashboard) {
         </div>
     </div>
 
+    <div id="restartAllModal" class="progressModal" style="display: none;">
+        <div class="modalContent">
+            <h4><i class="fas fa-sync" style="color: #fd7e14;"></i> Restarting Systems</h4>
+            <div class="progressInfo" id="restartProgressInfo">Preparing to restart...</div>
+            <div class="hostList" id="restartHostList">
+                <!-- Host items populated by JavaScript -->
+            </div>
+            <div class="modalButtons">
+                <button class="btn btn-close" id="restartModalCloseBtn" onclick="closeRestartAllModal()" disabled>Close</button>
+            </div>
+        </div>
+    </div>
+
     <?php endif; ?>
 </div>
 
@@ -676,6 +742,7 @@ if ($showDashboard) {
     let isRefreshing = false;
     let pendingReboot = null;
     let hostsWithWatcherUpdates = new Map(); // Map of address -> {hostname, installedVersion, latestVersion}
+    let hostsNeedingRestart = new Map(); // Map of address -> {hostname, type: 'restart'|'reboot'}
 
     // Fetch status for a single remote via local proxy
     async function fetchRemoteStatus(address) {
@@ -818,6 +885,23 @@ if ($showDashboard) {
             hostsWithWatcherUpdates.delete(address);
         }
         updateUpgradeAllButton();
+
+        // Track hosts needing restart for "Restart All" feature
+        // Priority: reboot > restart (if both are set, prefer reboot)
+        if (needsReboot) {
+            hostsNeedingRestart.set(address, {
+                hostname: remoteHostnames[address] || address,
+                type: 'reboot'
+            });
+        } else if (needsRestart) {
+            hostsNeedingRestart.set(address, {
+                hostname: remoteHostnames[address] || address,
+                type: 'restart'
+            });
+        } else {
+            hostsNeedingRestart.delete(address);
+        }
+        updateRestartAllButton();
 
         if (pluginUpdates.length > 0) {
             // Build upgrade items HTML
@@ -1236,6 +1320,134 @@ if ($showDashboard) {
 
         // Refresh all statuses to update the cards
         refreshAllStatus();
+    }
+
+    // Update the "Restart All" button visibility and count
+    function updateRestartAllButton() {
+        const btn = document.getElementById('restartAllBtn');
+        const countBadge = document.getElementById('restartAllCount');
+        const count = hostsNeedingRestart.size;
+
+        if (count >= 1) {
+            btn.classList.add('visible');
+            countBadge.textContent = count;
+        } else {
+            btn.classList.remove('visible');
+        }
+    }
+
+    // Show the restart all modal and start the restart process
+    async function showRestartAllModal() {
+        if (hostsNeedingRestart.size < 1) return;
+
+        const modal = document.getElementById('restartAllModal');
+        const hostList = document.getElementById('restartHostList');
+        const progressInfo = document.getElementById('restartProgressInfo');
+        const closeBtn = document.getElementById('restartModalCloseBtn');
+
+        // Count types for summary
+        let rebootCount = 0;
+        let restartCount = 0;
+        hostsNeedingRestart.forEach(info => {
+            if (info.type === 'reboot') rebootCount++;
+            else restartCount++;
+        });
+
+        // Build host list HTML
+        let hostListHtml = '';
+        hostsNeedingRestart.forEach((info, address) => {
+            const typeLabel = info.type === 'reboot' ? 'Reboot' : 'FPPD Restart';
+            const typeClass = info.type;
+            hostListHtml += `
+                <div class="hostItem" id="restart-host-${address.replace(/\./g, '-')}">
+                    <div class="hostName">
+                        ${info.hostname} (${address})
+                        <span class="restartType ${typeClass}">${typeLabel}</span>
+                    </div>
+                    <div class="hostStatus pending" id="restart-status-${address.replace(/\./g, '-')}">
+                        <i class="fas fa-clock"></i> Pending
+                    </div>
+                </div>
+            `;
+        });
+        hostList.innerHTML = hostListHtml;
+
+        // Show modal
+        modal.style.display = 'flex';
+        closeBtn.disabled = true;
+
+        // Get array of hosts to restart
+        const hostsToRestart = Array.from(hostsNeedingRestart.entries());
+        let completed = 0;
+        let failed = 0;
+
+        progressInfo.textContent = `Processing 0 of ${hostsToRestart.length} hosts...`;
+
+        // Process each host sequentially
+        for (const [address, info] of hostsToRestart) {
+            const statusEl = document.getElementById(`restart-status-${address.replace(/\./g, '-')}`);
+
+            // Mark as in progress
+            statusEl.className = 'hostStatus in-progress';
+            if (info.type === 'reboot') {
+                statusEl.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Rebooting...';
+            } else {
+                statusEl.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Restarting...';
+            }
+
+            try {
+                let endpoint;
+                if (info.type === 'reboot') {
+                    endpoint = '/api/plugin/fpp-plugin-watcher/remote/reboot';
+                } else {
+                    endpoint = '/api/plugin/fpp-plugin-watcher/remote/restart';
+                }
+
+                const response = await fetch(endpoint, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ host: address })
+                });
+
+                const data = await response.json();
+
+                if (!data.success) {
+                    throw new Error(data.error || 'Operation failed');
+                }
+
+                // Mark as success
+                statusEl.className = 'hostStatus success';
+                statusEl.innerHTML = '<i class="fas fa-check"></i> Done';
+                completed++;
+
+            } catch (error) {
+                console.error(`Error processing ${info.type} on ${address}:`, error);
+                statusEl.className = 'hostStatus error';
+                statusEl.innerHTML = `<i class="fas fa-times"></i> Failed`;
+                failed++;
+            }
+
+            progressInfo.textContent = `Processed ${completed + failed} of ${hostsToRestart.length} hosts...`;
+        }
+
+        // Done - update progress info and enable close button
+        if (failed === 0) {
+            progressInfo.textContent = `Successfully processed ${completed} hosts!`;
+        } else {
+            progressInfo.textContent = `Completed: ${completed} succeeded, ${failed} failed`;
+        }
+        closeBtn.disabled = false;
+    }
+
+    // Close the restart all modal
+    function closeRestartAllModal() {
+        const modal = document.getElementById('restartAllModal');
+        modal.style.display = 'none';
+
+        // Refresh all statuses to update the cards after a delay (especially for reboots)
+        setTimeout(() => {
+            refreshAllStatus();
+        }, 3000);
     }
 
     // Auto-refresh every 30 seconds
