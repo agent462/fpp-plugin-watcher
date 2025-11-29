@@ -724,13 +724,33 @@ if ($showDashboard) {
         try {
             let requestData;
             if (enable) {
+                // Get channel ranges from remote system
+                let channelRange = "1-8388608"; // fallback to max range
+                try {
+                    const infoResponse = await fetch(`http://${address}/api/system/info`);
+                    if (infoResponse.ok) {
+                        const info = await infoResponse.json();
+                        if (info.channelRanges) {
+                            // Convert 0-based to 1-based channel numbers
+                            const parts = info.channelRanges.split('-');
+                            if (parts.length === 2) {
+                                const start = parseInt(parts[0]) + 1;
+                                const end = parseInt(parts[1]) + 1;
+                                channelRange = `${start}-${end}`;
+                            }
+                        }
+                    }
+                } catch (e) {
+                    console.warn(`Could not fetch channel info from ${address}, using default range`);
+                }
+
                 // Start test mode with RGB Cycle pattern
                 requestData = {
                     host: address,
                     command: "Test Start",
                     multisyncCommand: false,
                     multisyncHosts: "",
-                    args: ["1000", "RGB Cycle", "1-8", "R-G-B"]
+                    args: ["1000", "RGB Cycle", channelRange, "R-G-B"]
                 };
             } else {
                 // Stop test mode
