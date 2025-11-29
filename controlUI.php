@@ -105,14 +105,21 @@ if ($showDashboard) {
         font-weight: 500;
         color: #212529;
     }
+    .statusIndicators {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 0.35rem;
+        margin-top: 0.15rem;
+    }
     .statusIndicator {
         display: inline-flex;
         align-items: center;
-        gap: 0.35rem;
-        padding: 0.25rem 0.6rem;
-        border-radius: 12px;
-        font-size: 0.75rem;
+        gap: 0.3rem;
+        padding: 0.2rem 0.5rem;
+        border-radius: 10px;
+        font-size: 0.7rem;
         font-weight: 500;
+        white-space: nowrap;
     }
     .statusIndicator.online {
         background: rgba(40, 167, 69, 0.1);
@@ -125,6 +132,14 @@ if ($showDashboard) {
     .statusIndicator.testing {
         background: rgba(255, 193, 7, 0.15);
         color: #856404;
+    }
+    .statusIndicator.restart-required {
+        background: rgba(255, 193, 7, 0.15);
+        color: #856404;
+    }
+    .statusIndicator.reboot-required {
+        background: rgba(220, 53, 69, 0.15);
+        color: #dc3545;
     }
     .statusIndicator .dot {
         width: 6px;
@@ -253,85 +268,74 @@ if ($showDashboard) {
         margin-bottom: 1rem;
         opacity: 0.5;
     }
-    .updateBanner {
+    .actionBtn.upgrade {
+        background: #28a745;
+        color: #fff;
+    }
+    .actionBtn.upgrade:hover:not(:disabled) {
+        background: #218838;
+    }
+    .upgradesContainer {
+        display: none;
+        margin: -0.25rem -1.25rem 0.75rem -1.25rem;
+        background: linear-gradient(135deg, #28a745 0%, #20c997 100%);
+    }
+    .upgradesContainer.visible {
+        display: block;
+    }
+    .upgradesContainer .upgradesHeader {
+        padding: 0.5rem 0.75rem;
+        color: #fff;
+        font-size: 0.75rem;
+        font-weight: 600;
+        border-bottom: 1px solid rgba(255,255,255,0.2);
+    }
+    .upgradesContainer .upgradesHeader i {
+        margin-right: 0.35rem;
+    }
+    .upgradeItem {
         display: flex;
         align-items: center;
         justify-content: space-between;
-        padding: 1rem 1.25rem;
-        background: linear-gradient(135deg, #28a745 0%, #20c997 100%);
-        border-radius: 8px;
-        margin-bottom: 1.5rem;
+        padding: 0.5rem 0.75rem;
+        border-bottom: 1px solid rgba(255,255,255,0.1);
+    }
+    .upgradeItem:last-child {
+        border-bottom: none;
+    }
+    .upgradeItem .pluginInfo {
         color: #fff;
-        box-shadow: 0 2px 8px rgba(40, 167, 69, 0.3);
+        font-size: 0.8rem;
     }
-    .updateBanner.checking {
-        background: linear-gradient(135deg, #6c757d 0%, #adb5bd 100%);
-    }
-    .updateBanner.error {
-        background: linear-gradient(135deg, #dc3545 0%, #e4606d 100%);
-    }
-    .updateBanner .updateInfo {
-        display: flex;
-        align-items: center;
-        gap: 0.75rem;
-    }
-    .updateBanner .updateInfo i {
-        font-size: 1.5rem;
-    }
-    .updateBanner .updateText h4 {
-        margin: 0 0 0.25rem 0;
-        font-size: 1rem;
+    .upgradeItem .pluginName {
         font-weight: 600;
     }
-    .updateBanner .updateText p {
-        margin: 0;
-        font-size: 0.85rem;
-        opacity: 0.9;
+    .upgradeItem .pluginVersion {
+        font-size: 0.7rem;
+        opacity: 0.85;
     }
-    .updateBanner .updateBtn {
-        padding: 0.5rem 1.25rem;
+    .upgradeItem .upgradeBtn {
+        padding: 0.3rem 0.6rem;
         background: rgba(255,255,255,0.2);
-        border: 2px solid rgba(255,255,255,0.5);
-        border-radius: 6px;
+        border: 1px solid rgba(255,255,255,0.5);
+        border-radius: 4px;
         color: #fff;
+        font-size: 0.7rem;
         font-weight: 600;
         cursor: pointer;
         transition: all 0.2s ease;
         display: inline-flex;
         align-items: center;
-        gap: 0.5rem;
+        gap: 0.3rem;
+        white-space: nowrap;
     }
-    .updateBanner .updateBtn:hover:not(:disabled) {
+    .upgradeItem .upgradeBtn:hover:not(:disabled) {
         background: rgba(255,255,255,0.3);
         border-color: rgba(255,255,255,0.8);
     }
-    .updateBanner .updateBtn:disabled {
+    .upgradeItem .upgradeBtn:disabled {
         opacity: 0.7;
         cursor: not-allowed;
-    }
-    .versionInfo {
-        display: flex;
-        align-items: center;
-        gap: 0.5rem;
-        padding: 0.5rem 1rem;
-        background: #f8f9fa;
-        border-radius: 6px;
-        margin-bottom: 1.5rem;
-        font-size: 0.85rem;
-        color: #6c757d;
-    }
-    .versionInfo .currentVersion {
-        font-weight: 600;
-        color: #495057;
-    }
-    .versionInfo .checkLink {
-        margin-left: auto;
-        color: #667eea;
-        cursor: pointer;
-        text-decoration: none;
-    }
-    .versionInfo .checkLink:hover {
-        text-decoration: underline;
     }
     .refreshBar {
         display: flex;
@@ -401,27 +405,6 @@ if ($showDashboard) {
         <i class="fas fa-gamepad"></i> Remote System Control
     </h2>
 
-    <!-- Update Banner (hidden by default, shown via JS when update available) -->
-    <div id="updateBanner" class="updateBanner" style="display: none;">
-        <div class="updateInfo">
-            <i class="fas fa-arrow-circle-up"></i>
-            <div class="updateText">
-                <h4>Update Available</h4>
-                <p>Version <span id="remoteVersionText">--</span> is available (you have <span id="localVersionText">--</span>)</p>
-            </div>
-        </div>
-        <button class="updateBtn" onclick="upgradePlugin()" id="upgradeBtn">
-            <i class="fas fa-download"></i> Upgrade Now
-        </button>
-    </div>
-
-    <!-- Version Info Bar -->
-    <div class="versionInfo">
-        <i class="fas fa-info-circle"></i>
-        <span>Watcher Plugin: <span class="currentVersion"><?php echo htmlspecialchars(WATCHERVERSION); ?></span></span>
-        <a class="checkLink" onclick="checkForUpdates()"><i class="fas fa-sync-alt"></i> Check for updates</a>
-    </div>
-
     <?php if (!$isEnabled): ?>
     <div class="disabledMessage">
         <h3><i class="fas fa-exclamation-circle"></i> Remote Control Disabled</h3>
@@ -488,6 +471,14 @@ if ($showDashboard) {
                             <span class="infoValue" id="watcher-<?php echo htmlspecialchars($system['address']); ?>">--</span>
                         </div>
                     </div>
+                    <div class="upgradesContainer" id="upgrades-container-<?php echo htmlspecialchars($system['address']); ?>">
+                        <div class="upgradesHeader">
+                            <i class="fas fa-arrow-circle-up"></i> Updates Available
+                        </div>
+                        <div class="upgradesList" id="upgrades-list-<?php echo htmlspecialchars($system['address']); ?>">
+                            <!-- Upgrade items populated by JavaScript -->
+                        </div>
+                    </div>
                     <div class="controlActions">
                         <div class="actionRow">
                             <span class="actionLabel"><i class="fas fa-vial"></i> Test Mode</span>
@@ -525,100 +516,6 @@ if ($showDashboard) {
     <?php endif; ?>
 </div>
 
-<!-- Update check script (always included) -->
-<script>
-    // Check for plugin updates
-    async function checkForUpdates() {
-        const banner = document.getElementById('updateBanner');
-        const checkLink = document.querySelector('.checkLink');
-        const originalCheckText = checkLink.innerHTML;
-
-        checkLink.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Checking...';
-
-        try {
-            const response = await fetch('/api/plugin/fpp-plugin-watcher/update/check');
-            const data = await response.json();
-
-            if (!data.success) {
-                console.error('Update check failed:', data.error);
-                checkLink.innerHTML = '<i class="fas fa-exclamation-triangle"></i> Check failed';
-                setTimeout(() => { checkLink.innerHTML = originalCheckText; }, 3000);
-                return;
-            }
-
-            document.getElementById('localVersionText').textContent = data.localVersion;
-            document.getElementById('remoteVersionText').textContent = data.remoteVersion;
-
-            if (data.updateAvailable) {
-                banner.classList.remove('checking', 'error');
-                banner.style.display = 'flex';
-                checkLink.innerHTML = '<i class="fas fa-check"></i> Update available!';
-            } else {
-                banner.style.display = 'none';
-                checkLink.innerHTML = '<i class="fas fa-check"></i> Up to date!';
-            }
-
-            setTimeout(() => { checkLink.innerHTML = originalCheckText; }, 3000);
-
-        } catch (error) {
-            console.error('Error checking for updates:', error);
-            checkLink.innerHTML = '<i class="fas fa-exclamation-triangle"></i> Check failed';
-            setTimeout(() => { checkLink.innerHTML = originalCheckText; }, 3000);
-        }
-    }
-
-    // Upgrade the plugin
-    async function upgradePlugin() {
-        const btn = document.getElementById('upgradeBtn');
-        const banner = document.getElementById('updateBanner');
-        const originalBtnHtml = btn.innerHTML;
-
-        if (!confirm('Are you sure you want to upgrade the Watcher plugin? The page will reload after the upgrade.')) {
-            return;
-        }
-
-        btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Upgrading...';
-        btn.disabled = true;
-
-        try {
-            const response = await fetch('/api/plugin/fpp-plugin-watcher/update/upgrade', {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json'
-                }
-            });
-
-            const data = await response.json();
-
-            if (data.success) {
-                btn.innerHTML = '<i class="fas fa-check"></i> Upgrade Complete!';
-                banner.querySelector('.updateText h4').textContent = 'Upgrade Complete!';
-                banner.querySelector('.updateText p').textContent = 'Reloading page...';
-
-                // Reload the page after a short delay
-                setTimeout(() => {
-                    window.location.reload();
-                }, 2000);
-            } else {
-                throw new Error(data.error || 'Upgrade failed');
-            }
-
-        } catch (error) {
-            console.error('Error upgrading plugin:', error);
-            btn.innerHTML = originalBtnHtml;
-            btn.disabled = false;
-            banner.classList.add('error');
-            banner.querySelector('.updateText h4').textContent = 'Upgrade Failed';
-            banner.querySelector('.updateText p').textContent = error.message;
-        }
-    }
-
-    // Check for updates on page load (with a slight delay to not block rendering)
-    document.addEventListener('DOMContentLoaded', function() {
-        setTimeout(checkForUpdates, 1000);
-    });
-</script>
-
 <?php if ($showDashboard && !empty($remoteSystems)): ?>
 <script>
     const remoteAddresses = <?php echo json_encode(array_column($remoteSystems, 'address')); ?>;
@@ -628,10 +525,11 @@ if ($showDashboard) {
     // Fetch status for a single remote via local proxy
     async function fetchRemoteStatus(address) {
         try {
-            // Fetch both status and watcher version in parallel
-            const [statusResponse, versionResponse] = await Promise.all([
+            // Fetch status, watcher version, and plugin updates in parallel
+            const [statusResponse, versionResponse, updatesResponse] = await Promise.all([
                 fetch(`/api/plugin/fpp-plugin-watcher/remote/status?host=${encodeURIComponent(address)}`),
-                fetch(`http://${address}/api/plugin/fpp-plugin-watcher/version`).catch(() => null)
+                fetch(`http://${address}/api/plugin/fpp-plugin-watcher/version`).catch(() => null),
+                fetch(`/api/plugin/fpp-plugin-watcher/remote/plugins/updates?host=${encodeURIComponent(address)}`).catch(() => null)
             ]);
 
             const data = await statusResponse.json();
@@ -655,12 +553,26 @@ if ($showDashboard) {
                 }
             }
 
+            // Get plugin updates
+            let pluginUpdates = [];
+            if (updatesResponse && updatesResponse.ok) {
+                try {
+                    const updatesData = await updatesResponse.json();
+                    if (updatesData.success && updatesData.updatesAvailable) {
+                        pluginUpdates = updatesData.updatesAvailable;
+                    }
+                } catch (e) {
+                    console.error('Error parsing plugin updates:', e);
+                }
+            }
+
             return {
                 success: true,
                 address: address,
                 status: data.status,
                 testMode: data.testMode,
-                watcherVersion: watcherVersion
+                watcherVersion: watcherVersion,
+                pluginUpdates: pluginUpdates
             };
         } catch (error) {
             console.error(`Error fetching status for ${address}:`, error);
@@ -683,10 +595,12 @@ if ($showDashboard) {
         const testModeToggle = document.getElementById(`testmode-${address}`);
         const restartBtn = document.getElementById(`restart-btn-${address}`);
         const rebootBtn = document.getElementById(`reboot-btn-${address}`);
+        const upgradesContainer = document.getElementById(`upgrades-container-${address}`);
+        const upgradesList = document.getElementById(`upgrades-list-${address}`);
 
         if (!data.success) {
             card.classList.add('offline');
-            statusEl.innerHTML = '<span class="statusIndicator offline"><span class="dot"></span> Offline</span>';
+            statusEl.innerHTML = '<div class="statusIndicators"><span class="statusIndicator offline"><span class="dot"></span>Offline</span></div>';
             platformEl.textContent = '--';
             versionEl.textContent = '--';
             modeEl.textContent = '--';
@@ -695,6 +609,8 @@ if ($showDashboard) {
             testModeToggle.checked = false;
             restartBtn.disabled = true;
             rebootBtn.disabled = true;
+            upgradesContainer.classList.remove('visible');
+            upgradesList.innerHTML = '';
             return;
         }
 
@@ -702,13 +618,21 @@ if ($showDashboard) {
         const status = data.status;
         const testMode = data.testMode;
 
-        // Update status indicator
+        // Update status indicators (can show multiple)
         const isTestMode = testMode.enabled === 1;
+        const needsReboot = status.rebootFlag === 1;
+        const needsRestart = status.restartFlag === 1;
+
+        let indicators = ['<span class="statusIndicator online"><span class="dot"></span>Online</span>'];
         if (isTestMode) {
-            statusEl.innerHTML = '<span class="statusIndicator testing"><span class="dot"></span> Test Mode</span>';
-        } else {
-            statusEl.innerHTML = '<span class="statusIndicator online"><span class="dot"></span> Online</span>';
+            indicators.push('<span class="statusIndicator testing"><span class="dot"></span>Test Mode</span>');
         }
+        if (needsReboot) {
+            indicators.push('<span class="statusIndicator reboot-required"><span class="dot"></span>Reboot Req</span>');
+        } else if (needsRestart) {
+            indicators.push('<span class="statusIndicator restart-required"><span class="dot"></span>Restart Req</span>');
+        }
+        statusEl.innerHTML = '<div class="statusIndicators">' + indicators.join('') + '</div>';
 
         // Update info
         platformEl.textContent = status.platform || '--';
@@ -723,6 +647,38 @@ if ($showDashboard) {
         // Enable action buttons
         restartBtn.disabled = false;
         rebootBtn.disabled = false;
+
+        // Check for plugin updates
+        const pluginUpdates = data.pluginUpdates || [];
+        if (pluginUpdates.length > 0) {
+            // Build upgrade items HTML
+            let upgradesHtml = '';
+            pluginUpdates.forEach(plugin => {
+                const escapedAddress = address.replace(/'/g, "\\'");
+                const escapedRepoName = plugin.repoName.replace(/'/g, "\\'");
+                // Show version comparison for Watcher, just installed version for others
+                let versionDisplay = `v${plugin.installedVersion}`;
+                if (plugin.latestVersion) {
+                    versionDisplay = `v${plugin.installedVersion} → v${plugin.latestVersion}`;
+                }
+                upgradesHtml += `
+                    <div class="upgradeItem" id="upgrade-item-${address}-${plugin.repoName}">
+                        <div class="pluginInfo">
+                            <div class="pluginName">${plugin.name}</div>
+                            <div class="pluginVersion">${versionDisplay}</div>
+                        </div>
+                        <button class="upgradeBtn" onclick="upgradePlugin('${escapedAddress}', '${escapedRepoName}')" id="upgrade-btn-${address}-${plugin.repoName}">
+                            <i class="fas fa-download"></i> Upgrade
+                        </button>
+                    </div>
+                `;
+            });
+            upgradesList.innerHTML = upgradesHtml;
+            upgradesContainer.classList.add('visible');
+        } else {
+            upgradesContainer.classList.remove('visible');
+            upgradesList.innerHTML = '';
+        }
     }
 
     // Refresh status for all remotes
@@ -940,6 +896,56 @@ if ($showDashboard) {
             closeConfirmDialog();
         }
     });
+
+    // Upgrade any plugin on a remote system
+    async function upgradePlugin(address, pluginRepoName) {
+        const btn = document.getElementById(`upgrade-btn-${address}-${pluginRepoName}`);
+        const upgradeItem = document.getElementById(`upgrade-item-${address}-${pluginRepoName}`);
+        const originalBtnHtml = btn.innerHTML;
+
+        if (!confirm(`Are you sure you want to upgrade ${pluginRepoName} on ${address}? This may take a moment.`)) {
+            return;
+        }
+
+        btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i>';
+        btn.disabled = true;
+
+        try {
+            const response = await fetch('/api/plugin/fpp-plugin-watcher/remote/upgrade', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({ host: address, plugin: pluginRepoName })
+            });
+
+            const data = await response.json();
+
+            if (!data.success) {
+                throw new Error(data.error || 'Upgrade failed');
+            }
+
+            // Show success and remove the item
+            btn.innerHTML = '<i class="fas fa-check"></i> Done';
+            setTimeout(() => {
+                if (upgradeItem) {
+                    upgradeItem.style.opacity = '0.5';
+                }
+            }, 500);
+
+            // Refresh status after a delay to update the card
+            setTimeout(async () => {
+                const result = await fetchRemoteStatus(address);
+                updateCardUI(address, result);
+            }, 3000);
+
+        } catch (error) {
+            console.error(`Error upgrading ${pluginRepoName} on ${address}:`, error);
+            btn.innerHTML = originalBtnHtml;
+            btn.disabled = false;
+            alert(`Upgrade failed: ${error.message}`);
+        }
+    }
 
     // Auto-refresh every 30 seconds
     setInterval(() => {

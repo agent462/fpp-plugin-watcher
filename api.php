@@ -195,17 +195,29 @@ function getEndpointsfpppluginwatcher() {
         'callback' => 'fpppluginWatcherRemoteReboot');
     array_push($result, $ep);
 
+    $ep = array(
+        'method' => 'POST',
+        'endpoint' => 'remote/upgrade',
+        'callback' => 'fpppluginWatcherRemoteUpgrade');
+    array_push($result, $ep);
+
+    $ep = array(
+        'method' => 'GET',
+        'endpoint' => 'remote/plugins',
+        'callback' => 'fpppluginWatcherRemotePlugins');
+    array_push($result, $ep);
+
+    $ep = array(
+        'method' => 'GET',
+        'endpoint' => 'remote/plugins/updates',
+        'callback' => 'fpppluginWatcherRemotePluginUpdates');
+    array_push($result, $ep);
+
     // Plugin update endpoints
     $ep = array(
         'method' => 'GET',
         'endpoint' => 'update/check',
         'callback' => 'fpppluginWatcherUpdateCheck');
-    array_push($result, $ep);
-
-    $ep = array(
-        'method' => 'POST',
-        'endpoint' => 'update/upgrade',
-        'callback' => 'fpppluginWatcherUpdateUpgrade');
     array_push($result, $ep);
 
     return $result;
@@ -708,8 +720,8 @@ function fpppluginWatcherRemoteStatus() {
         ]);
     }
 
-    // Fetch fppd status
-    $statusUrl = "http://{$host}/api/fppd/status";
+    // Fetch system status (includes restartFlag and rebootFlag)
+    $statusUrl = "http://{$host}/api/system/status";
     $status = apiCall('GET', $statusUrl, [], true, 5);
 
     if ($status === false) {
@@ -867,15 +879,219 @@ function fpppluginWatcherRemoteReboot() {
     ]);
 }
 
+// POST /api/plugin/fpp-plugin-watcher/remote/upgrade
+// Proxy to upgrade any plugin on a remote FPP instance
+function fpppluginWatcherRemoteUpgrade() {
+    $input = json_decode(file_get_contents('php://input'), true);
+
+    if (!isset($input['host'])) {
+        /** @disregard P1010 */
+        return json([
+            'success' => false,
+            'error' => 'Missing host parameter'
+        ]);
+    }
+
+    $host = trim($input['host']);
+    // Default to fpp-plugin-watcher for backward compatibility
+    $plugin = isset($input['plugin']) ? trim($input['plugin']) : WATCHERPLUGINNAME;
+
+    // Validate host format
+    if (!filter_var($host, FILTER_VALIDATE_IP) && !preg_match('/^[a-zA-Z0-9\-\.]+$/', $host)) {
+        /** @disregard P1010 */
+        return json([
+            'success' => false,
+            'error' => 'Invalid host format'
+        ]);
+    }
+
+    // Validate plugin name format (alphanumeric, dash, underscore)
+    if (!preg_match('/^[a-zA-Z0-9\-_]+$/', $plugin)) {
+        /** @disregard P1010 */
+        return json([
+            'success' => false,
+            'error' => 'Invalid plugin name format'
+        ]);
+    }
+
+    $upgradeUrl = "http://{$host}/api/plugin/{$plugin}/upgrade";
+    $result = apiCall('POST', $upgradeUrl, [], true, 120);
+
+    if ($result === false) {
+        /** @disregard P1010 */
+        return json([
+            'success' => false,
+            'error' => 'Failed to trigger plugin upgrade on remote host',
+            'host' => $host,
+            'plugin' => $plugin
+        ]);
+    }
+
+    /** @disregard P1010 */
+    return json([
+        'success' => true,
+        'host' => $host,
+        'plugin' => $plugin,
+        'message' => 'Plugin upgrade initiated on remote host',
+        'result' => $result
+    ]);
+}
+
+// GET /api/plugin/fpp-plugin-watcher/remote/plugins?host=x
+// Get list of installed plugins on a remote FPP instance
+function fpppluginWatcherRemotePlugins() {
+    $host = isset($_GET['host']) ? trim($_GET['host']) : '';
+
+    if (empty($host)) {
+        /** @disregard P1010 */
+        return json([
+            'success' => false,
+            'error' => 'Missing host parameter'
+        ]);
+    }
+
+    // Validate host format
+    if (!filter_var($host, FILTER_VALIDATE_IP) && !preg_match('/^[a-zA-Z0-9\-\.]+$/', $host)) {
+        /** @disregard P1010 */
+        return json([
+            'success' => false,
+            'error' => 'Invalid host format'
+        ]);
+    }
+
+    $pluginsUrl = "http://{$host}/api/plugin";
+    $plugins = apiCall('GET', $pluginsUrl, [], true, 10);
+
+    if ($plugins === false) {
+        /** @disregard P1010 */
+        return json([
+            'success' => false,
+            'error' => 'Failed to fetch plugins from remote host',
+            'host' => $host
+        ]);
+    }
+
+    /** @disregard P1010 */
+    return json([
+        'success' => true,
+        'host' => $host,
+        'plugins' => $plugins
+    ]);
+}
+
+// GET /api/plugin/fpp-plugin-watcher/remote/plugins/updates?host=x
+// Check for updates on all installed plugins on a remote FPP instance
+function fpppluginWatcherRemotePluginUpdates() {
+    $host = isset($_GET['host']) ? trim($_GET['host']) : '';
+
+    if (empty($host)) {
+        /** @disregard P1010 */
+        return json([
+            'success' => false,
+            'error' => 'Missing host parameter'
+        ]);
+    }
+
+    // Validate host format
+    if (!filter_var($host, FILTER_VALIDATE_IP) && !preg_match('/^[a-zA-Z0-9\-\.]+$/', $host)) {
+        /** @disregard P1010 */
+        return json([
+            'success' => false,
+            'error' => 'Invalid host format'
+        ]);
+    }
+
+    // Get list of installed plugins (returns array of plugin name strings)
+    $pluginsUrl = "http://{$host}/api/plugin";
+    $pluginNames = apiCall('GET', $pluginsUrl, [], true, 10);
+
+    if ($pluginNames === false || !is_array($pluginNames)) {
+        /** @disregard P1010 */
+        return json([
+            'success' => false,
+            'error' => 'Failed to fetch plugins from remote host',
+            'host' => $host
+        ]);
+    }
+
+    // Get latest Watcher version from GitHub for comparison
+    $latestWatcherVersion = null;
+    $githubUrl = 'https://raw.githubusercontent.com/agent462/fpp-plugin-watcher/main/pluginInfo.json';
+    $ch = curl_init();
+    curl_setopt($ch, CURLOPT_URL, $githubUrl);
+    curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
+    curl_setopt($ch, CURLOPT_TIMEOUT, 5);
+    curl_setopt($ch, CURLOPT_FOLLOWLOCATION, true);
+    curl_setopt($ch, CURLOPT_USERAGENT, 'FPP-Plugin-Watcher');
+    $response = curl_exec($ch);
+    $httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+    curl_close($ch);
+    if ($response !== false && $httpCode === 200) {
+        $githubInfo = json_decode($response, true);
+        if ($githubInfo && isset($githubInfo['version'])) {
+            $latestWatcherVersion = $githubInfo['version'];
+        }
+    }
+
+    $updatesAvailable = [];
+
+    // Check each plugin for updates
+    foreach ($pluginNames as $repoName) {
+        // Skip if not a string (unexpected format)
+        if (!is_string($repoName)) continue;
+
+        // Get full plugin info from /api/plugin/:repoName
+        $pluginInfoUrl = "http://{$host}/api/plugin/{$repoName}";
+        $pluginInfo = apiCall('GET', $pluginInfoUrl, [], true, 5);
+
+        if (!$pluginInfo || !is_array($pluginInfo)) continue;
+
+        $hasUpdate = false;
+        $installedVersion = $pluginInfo['version'] ?? 'unknown';
+        $pluginName = $pluginInfo['name'] ?? $repoName;
+
+        // Check FPP's built-in update flag
+        if (isset($pluginInfo['updatesAvailable']) && $pluginInfo['updatesAvailable']) {
+            $hasUpdate = true;
+        }
+
+        // For Watcher plugin, also compare against GitHub version
+        if ($repoName === WATCHERPLUGINNAME && $latestWatcherVersion && $installedVersion !== 'unknown') {
+            if (version_compare($latestWatcherVersion, $installedVersion, '>')) {
+                $hasUpdate = true;
+            }
+        }
+
+        if ($hasUpdate) {
+            $updateInfo = [
+                'repoName' => $repoName,
+                'name' => $pluginName,
+                'installedVersion' => $installedVersion,
+                'updatesAvailable' => true
+            ];
+            // Include latest version for Watcher plugin
+            if ($repoName === WATCHERPLUGINNAME && $latestWatcherVersion) {
+                $updateInfo['latestVersion'] = $latestWatcherVersion;
+            }
+            $updatesAvailable[] = $updateInfo;
+        }
+    }
+
+    /** @disregard P1010 */
+    return json([
+        'success' => true,
+        'host' => $host,
+        'totalPlugins' => count($pluginNames),
+        'updatesAvailable' => $updatesAvailable
+    ]);
+}
+
 // GET /api/plugin/fpp-plugin-watcher/update/check
 // Check GitHub for latest plugin version
 function fpppluginWatcherUpdateCheck() {
     $githubUrl = 'https://raw.githubusercontent.com/agent462/fpp-plugin-watcher/main/pluginInfo.json';
 
-    // Get local version (strip 'v' prefix for comparison)
-    $localVersion = ltrim(WATCHERVERSION, 'v');
-
-    // Fetch remote version from GitHub
+    // Fetch version from GitHub
     $ch = curl_init();
     curl_setopt($ch, CURLOPT_URL, $githubUrl);
     curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
@@ -892,8 +1108,7 @@ function fpppluginWatcherUpdateCheck() {
         /** @disregard P1010 */
         return json([
             'success' => false,
-            'error' => $error ?: "Failed to fetch from GitHub (HTTP $httpCode)",
-            'localVersion' => $localVersion
+            'error' => $error ?: "Failed to fetch from GitHub (HTTP $httpCode)"
         ]);
     }
 
@@ -902,47 +1117,15 @@ function fpppluginWatcherUpdateCheck() {
         /** @disregard P1010 */
         return json([
             'success' => false,
-            'error' => 'Invalid response from GitHub',
-            'localVersion' => $localVersion
+            'error' => 'Invalid response from GitHub'
         ]);
     }
-
-    $remoteVersion = $remoteInfo['version'];
-
-    // Compare versions using version_compare
-    $comparison = version_compare($remoteVersion, $localVersion);
-    $updateAvailable = $comparison > 0;
 
     /** @disregard P1010 */
     return json([
         'success' => true,
-        'localVersion' => $localVersion,
-        'remoteVersion' => $remoteVersion,
-        'updateAvailable' => $updateAvailable,
+        'latestVersion' => $remoteInfo['version'],
         'repoName' => $remoteInfo['repoName'] ?? WATCHERPLUGINNAME
-    ]);
-}
-
-// POST /api/plugin/fpp-plugin-watcher/update/upgrade
-// Trigger plugin upgrade via FPP API
-function fpppluginWatcherUpdateUpgrade() {
-    $upgradeUrl = 'http://127.0.0.1/api/plugin/' . WATCHERPLUGINNAME . '/upgrade';
-
-    $result = apiCall('POST', $upgradeUrl, [], true, 120);
-
-    if ($result === false) {
-        /** @disregard P1010 */
-        return json([
-            'success' => false,
-            'error' => 'Failed to trigger plugin upgrade'
-        ]);
-    }
-
-    /** @disregard P1010 */
-    return json([
-        'success' => true,
-        'message' => 'Plugin upgrade initiated',
-        'result' => $result
     ]);
 }
 ?>
