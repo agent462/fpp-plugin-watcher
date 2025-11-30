@@ -77,6 +77,53 @@ renderCSSIncludes(false);
     .actionBtn.loading { pointer-events: none; }
     .actionBtn.loading i { animation: spin 1s linear infinite; }
     @keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
+    /* Connectivity alert */
+    .connectivity-alert {
+        display: none;
+        background: #fff3cd;
+        border: 1px solid #ffc107;
+        border-radius: 8px;
+        padding: 0.75rem;
+        margin-bottom: 1rem;
+    }
+    .connectivity-alert.visible { display: block; }
+    .connectivity-alert-content {
+        display: flex;
+        align-items: center;
+        gap: 0.75rem;
+    }
+    .connectivity-alert-icon {
+        color: #856404;
+        font-size: 1.25rem;
+        flex-shrink: 0;
+    }
+    .connectivity-alert-text {
+        flex: 1;
+        font-size: 0.85rem;
+        color: #856404;
+    }
+    .connectivity-alert-text strong { display: block; margin-bottom: 0.15rem; }
+    .connectivity-alert-details { font-size: 0.75rem; opacity: 0.85; }
+    .connectivity-alert-btn {
+        background: #ffc107;
+        color: #212529;
+        border: none;
+        border-radius: 4px;
+        padding: 0.4rem 0.75rem;
+        font-size: 0.75rem;
+        font-weight: 500;
+        cursor: pointer;
+        display: inline-flex;
+        align-items: center;
+        gap: 0.3rem;
+        white-space: nowrap;
+        transition: background 0.2s;
+    }
+    .connectivity-alert-btn:hover { background: #e0a800; }
+    .connectivity-alert-btn:disabled { opacity: 0.6; cursor: not-allowed; }
+    .bulk-action-btn--connectivity { background: #ffc107; color: #212529; }
+    .bulk-action-btn--connectivity:hover { background: #e0a800; }
+    .status-indicator--connectivity { background: #fff3cd; color: #856404; }
 </style>
 
 <div class="metricsContainer">
@@ -99,6 +146,9 @@ renderCSSIncludes(false);
             <i class="fas fa-clock"></i> Last updated: <span id="lastUpdateTime">--</span>
         </span>
         <div>
+            <button class="bulk-action-btn bulk-action-btn--connectivity" id="connectivityFailBtn" onclick="showBulkModal('connectivity')">
+                <i class="fas fa-network-wired"></i> Connectivity Failed <span class="badge" id="connectivityFailCount">0</span>
+            </button>
             <button class="bulk-action-btn bulk-action-btn--fpp" id="fppUpgradeAllBtn" onclick="showBulkModal('fpp')">
                 <i class="fas fa-code-branch"></i> Upgrade FPP <span class="badge" id="fppUpgradeAllCount">0</span>
             </button>
@@ -158,6 +208,18 @@ renderCSSIncludes(false);
                         <div class="infoItem">
                             <span class="infoLabel">Watcher</span>
                             <span class="infoValue" id="watcher-<?php echo htmlspecialchars($system['address']); ?>">--</span>
+                        </div>
+                    </div>
+                    <div class="connectivity-alert" id="connectivity-alert-<?php echo htmlspecialchars($system['address']); ?>">
+                        <div class="connectivity-alert-content">
+                            <div class="connectivity-alert-icon"><i class="fas fa-exclamation-triangle"></i></div>
+                            <div class="connectivity-alert-text">
+                                <strong>Connectivity Check Failed</strong>
+                                <span class="connectivity-alert-details" id="connectivity-details-<?php echo htmlspecialchars($system['address']); ?>"></span>
+                            </div>
+                            <button class="connectivity-alert-btn" onclick="clearRemoteResetState('<?php echo htmlspecialchars($system['address']); ?>')" id="connectivity-clear-btn-<?php echo htmlspecialchars($system['address']); ?>">
+                                <i class="fas fa-redo"></i> Clear
+                            </button>
                         </div>
                     </div>
                     <div class="actionRow">
@@ -253,6 +315,7 @@ let pendingReboot = null;
 let hostsWithWatcherUpdates = new Map();
 let hostsNeedingRestart = new Map();
 let hostsWithFPPUpdates = new Map();
+let hostsWithConnectivityFailure = new Map();
 let currentBulkType = null;
 let fppUpgradeAbortController = null;
 let syncCheckInterval = null;
@@ -412,11 +475,12 @@ function stopSyncChecking() {
 
 async function fetchRemoteStatus(address) {
     try {
-        const [statusResponse, versionResponse, updatesResponse, sysStatusResponse] = await Promise.all([
+        const [statusResponse, versionResponse, updatesResponse, sysStatusResponse, connectivityResponse] = await Promise.all([
             fetch(`/api/plugin/fpp-plugin-watcher/remote/status?host=${encodeURIComponent(address)}`),
             fetch(`http://${address}/api/plugin/fpp-plugin-watcher/version`).catch(() => null),
             fetch(`/api/plugin/fpp-plugin-watcher/remote/plugins/updates?host=${encodeURIComponent(address)}`).catch(() => null),
-            fetch(`http://${address}/api/system/status`).catch(() => null)
+            fetch(`http://${address}/api/system/status`).catch(() => null),
+            fetch(`/api/plugin/fpp-plugin-watcher/remote/connectivity/state?host=${encodeURIComponent(address)}`).catch(() => null)
         ]);
 
         const data = await statusResponse.json();
@@ -448,7 +512,17 @@ async function fetchRemoteStatus(address) {
             } catch (e) {}
         }
 
-        return { success: true, address, status: data.status, testMode: data.testMode, watcherVersion, pluginUpdates, fppLocalVersion, fppRemoteVersion };
+        let connectivityState = null;
+        if (connectivityResponse?.ok) {
+            try {
+                const connData = await connectivityResponse.json();
+                if (connData.success && connData.hasResetAdapter) {
+                    connectivityState = connData;
+                }
+            } catch (e) {}
+        }
+
+        return { success: true, address, status: data.status, testMode: data.testMode, watcherVersion, pluginUpdates, fppLocalVersion, fppRemoteVersion, connectivityState };
     } catch (error) {
         return { success: false, address, error: error.message };
     }
@@ -482,18 +556,23 @@ function updateCardUI(address, data) {
         rebootBtn.disabled = true;
         updatesContainer.classList.remove('visible');
         fppUpdateRow.classList.remove('visible');
+        document.getElementById(`connectivity-alert-${address}`)?.classList.remove('visible');
+        hostsWithConnectivityFailure.delete(address);
+        updateBulkButton('connectivityFailBtn', 'connectivityFailCount', hostsWithConnectivityFailure);
         return;
     }
 
     card.classList.remove('offline');
-    const { status, testMode, pluginUpdates = [], fppLocalVersion, fppRemoteVersion } = data;
+    const { status, testMode, pluginUpdates = [], fppLocalVersion, fppRemoteVersion, connectivityState } = data;
     const isTestMode = testMode.enabled === 1;
     const needsReboot = status.rebootFlag === 1;
     const needsRestart = status.restartFlag === 1;
     const fppUpdateAvailable = fppLocalVersion && fppRemoteVersion && fppRemoteVersion !== 'Unknown' && fppRemoteVersion !== '' && fppLocalVersion !== fppRemoteVersion;
+    const hasConnectivityFailure = connectivityState && connectivityState.hasResetAdapter;
 
     // Build status indicators
     let indicators = ['<span class="status-indicator status-indicator--online"><span class="dot"></span>Online</span>'];
+    if (hasConnectivityFailure) indicators.push('<span class="status-indicator status-indicator--connectivity"><span class="dot"></span>Conn. Failed</span>');
     if (isTestMode) indicators.push('<span class="status-indicator status-indicator--testing"><span class="dot"></span>Test Mode</span>');
     if (fppUpdateAvailable) indicators.push('<span class="status-indicator status-indicator--update"><span class="dot"></span>FPP Update</span>');
     if (needsReboot) indicators.push('<span class="status-indicator status-indicator--reboot"><span class="dot"></span>Reboot Req</span>');
@@ -543,6 +622,21 @@ function updateCardUI(address, data) {
         fppUpdateRow.classList.remove('visible');
     }
     updateBulkButton('fppUpgradeAllBtn', 'fppUpgradeAllCount', hostsWithFPPUpdates);
+
+    // Track connectivity failures
+    const connectivityAlert = document.getElementById(`connectivity-alert-${address}`);
+    const connectivityDetails = document.getElementById(`connectivity-details-${address}`);
+    if (hasConnectivityFailure) {
+        const resetTime = connectivityState.resetTime || 'Unknown time';
+        const adapter = connectivityState.adapter || 'Unknown';
+        hostsWithConnectivityFailure.set(address, { hostname: remoteHostnames[address] || address, resetTime, adapter });
+        connectivityDetails.textContent = `Adapter ${adapter} reset at ${resetTime}`;
+        connectivityAlert.classList.add('visible');
+    } else {
+        hostsWithConnectivityFailure.delete(address);
+        connectivityAlert.classList.remove('visible');
+    }
+    updateBulkButton('connectivityFailBtn', 'connectivityFailCount', hostsWithConnectivityFailure);
 
     // Plugin updates list
     if (pluginUpdates.length > 0) {
@@ -720,6 +814,34 @@ async function executeReboot() {
 document.getElementById('confirmRebootBtn').addEventListener('click', executeReboot);
 document.addEventListener('keydown', (e) => { if (e.key === 'Escape') { closeConfirmDialog(); closeBulkModal(); closeFPPUpgradeModal(); } });
 
+async function clearRemoteResetState(address) {
+    const btn = document.getElementById(`connectivity-clear-btn-${address}`);
+    const originalHtml = btn.innerHTML;
+    btn.disabled = true;
+    btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i>';
+
+    try {
+        const response = await fetch('/api/plugin/fpp-plugin-watcher/remote/connectivity/state/clear', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ host: address })
+        });
+        const data = await response.json();
+
+        if (!data.success) throw new Error(data.error || 'Failed to clear reset state');
+
+        // Refresh this card's status
+        setTimeout(async () => {
+            const result = await fetchRemoteStatus(address);
+            updateCardUI(address, result);
+        }, 1000);
+    } catch (error) {
+        btn.innerHTML = originalHtml;
+        btn.disabled = false;
+        alert(`Failed to clear reset state: ${error.message}`);
+    }
+}
+
 async function upgradePlugin(address, pluginRepoName) {
     const btn = document.getElementById(`upgrade-btn-${address}-${pluginRepoName}`);
     const item = document.getElementById(`upgrade-item-${address}-${pluginRepoName}`);
@@ -752,6 +874,19 @@ async function upgradePlugin(address, pluginRepoName) {
 // =============================================================================
 
 const bulkConfig = {
+    connectivity: {
+        title: '<i class="fas fa-network-wired" style="color: #ffc107;"></i> Clearing Connectivity Failures',
+        getHosts: () => hostsWithConnectivityFailure,
+        extraInfo: (info) => `<span style="font-size: 0.8em; color: #666;"> - ${info.adapter} at ${info.resetTime}</span>`,
+        operation: async ([address]) => {
+            const response = await fetch('/api/plugin/fpp-plugin-watcher/remote/connectivity/state/clear', {
+                method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ host: address })
+            });
+            const data = await response.json();
+            if (!data.success) throw new Error(data.error);
+        },
+        refreshDelay: 1000
+    },
     upgrade: {
         title: '<i class="fas fa-arrow-circle-up" style="color: #28a745;"></i> Upgrading Watcher',
         getHosts: () => hostsWithWatcherUpdates,

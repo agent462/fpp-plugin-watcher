@@ -235,7 +235,7 @@ function getEndpointsfpppluginwatcher() {
         'callback' => 'fpppluginWatcherRemoteFPPUpgrade');
     array_push($result, $ep);
 
-    // Connectivity state endpoints
+    // Connectivity state endpoints (local)
     $ep = array(
         'method' => 'GET',
         'endpoint' => 'connectivity/state',
@@ -246,6 +246,19 @@ function getEndpointsfpppluginwatcher() {
         'method' => 'POST',
         'endpoint' => 'connectivity/state/clear',
         'callback' => 'fpppluginWatcherConnectivityStateClear');
+    array_push($result, $ep);
+
+    // Connectivity state endpoints (remote proxy)
+    $ep = array(
+        'method' => 'GET',
+        'endpoint' => 'remote/connectivity/state',
+        'callback' => 'fpppluginWatcherRemoteConnectivityState');
+    array_push($result, $ep);
+
+    $ep = array(
+        'method' => 'POST',
+        'endpoint' => 'remote/connectivity/state/clear',
+        'callback' => 'fpppluginWatcherRemoteConnectivityStateClear');
     array_push($result, $ep);
 
     return $result;
@@ -964,5 +977,48 @@ function fpppluginWatcherConnectivityStateClear() {
         'success' => true,
         'message' => 'Reset state cleared and connectivity daemon restarted'
     ]);
+}
+
+// GET /api/plugin/fpp-plugin-watcher/remote/connectivity/state?host=x
+// Proxy to fetch connectivity state from a remote FPP instance
+function fpppluginWatcherRemoteConnectivityState() {
+    $host = isset($_GET['host']) ? trim($_GET['host']) : '';
+
+    if (empty($host)) {
+        /** @disregard P1010 */
+        return json(['success' => false, 'error' => 'Missing host parameter']);
+    }
+
+    $result = apiCall('GET', "http://{$host}/api/plugin/fpp-plugin-watcher/connectivity/state", [], true, 5);
+
+    if ($result === false) {
+        /** @disregard P1010 */
+        return json(['success' => false, 'error' => 'Failed to fetch connectivity state from remote host']);
+    }
+
+    /** @disregard P1010 */
+    return json($result);
+}
+
+// POST /api/plugin/fpp-plugin-watcher/remote/connectivity/state/clear
+// Proxy to clear connectivity state on a remote FPP instance
+function fpppluginWatcherRemoteConnectivityStateClear() {
+    $input = json_decode(file_get_contents('php://input'), true);
+
+    if (!isset($input['host'])) {
+        /** @disregard P1010 */
+        return json(['success' => false, 'error' => 'Missing host parameter']);
+    }
+
+    $host = trim($input['host']);
+    $result = apiCall('POST', "http://{$host}/api/plugin/fpp-plugin-watcher/connectivity/state/clear", [], true, 10);
+
+    if ($result === false) {
+        /** @disregard P1010 */
+        return json(['success' => false, 'error' => 'Failed to clear connectivity state on remote host']);
+    }
+
+    /** @disregard P1010 */
+    return json($result);
 }
 ?>
