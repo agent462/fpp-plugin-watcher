@@ -272,4 +272,123 @@ function getMultiSyncRemoteSystems() {
 
     return $remoteSystems;
 }
+
+/**
+ * Validate a host string (IP address or hostname)
+ *
+ * @param string $host The host to validate
+ * @return bool True if valid, false otherwise
+ */
+function validateHost($host) {
+    if (empty($host)) {
+        return false;
+    }
+    // Valid if it's an IP address
+    if (filter_var($host, FILTER_VALIDATE_IP)) {
+        return true;
+    }
+    // Valid if it matches hostname pattern (alphanumeric, dash, dot)
+    if (preg_match('/^[a-zA-Z0-9]([a-zA-Z0-9\-]{0,61}[a-zA-Z0-9])?(\.[a-zA-Z0-9]([a-zA-Z0-9\-]{0,61}[a-zA-Z0-9])?)*$/', $host)) {
+        return true;
+    }
+    return false;
+}
+
+/**
+ * Sort an array by timestamp field (ascending)
+ *
+ * @param array &$array Array to sort in place
+ * @param string $field Field name containing timestamp (default: 'timestamp')
+ */
+function sortByTimestamp(&$array, $field = 'timestamp') {
+    usort($array, function($a, $b) use ($field) {
+        return ($a[$field] ?? 0) - ($b[$field] ?? 0);
+    });
+}
+
+/**
+ * Read a JSON-lines log file with optional filtering
+ * Uses file locking for safe concurrent access.
+ *
+ * @param string $file Path to the file
+ * @param int $sinceTimestamp Only return entries newer than this (default: 0)
+ * @param callable|null $filterFn Optional filter function(entry) => bool
+ * @param bool $sort Whether to sort results by timestamp (default: true)
+ * @return array Array of parsed entries
+ */
+function readJsonLinesFile($file, $sinceTimestamp = 0, $filterFn = null, $sort = true) {
+    if (!file_exists($file)) {
+        return [];
+    }
+
+    $entries = [];
+    $fp = fopen($file, 'r');
+
+    if (!$fp) {
+        return [];
+    }
+
+    if (flock($fp, LOCK_SH)) {
+        while (($line = fgets($fp)) !== false) {
+            // Parse log format: [timestamp] {json}
+            if (preg_match('/\[.*?\]\s+(.+)$/', $line, $matches)) {
+                $jsonData = trim($matches[1]);
+                $entry = json_decode($jsonData, true);
+
+                if ($entry && isset($entry['timestamp'])) {
+                    // Skip old entries
+                    if ($entry['timestamp'] <= $sinceTimestamp) {
+                        continue;
+                    }
+                    // Apply custom filter if provided
+                    if ($filterFn !== null && !$filterFn($entry)) {
+                        continue;
+                    }
+                    $entries[] = $entry;
+                }
+            }
+        }
+        flock($fp, LOCK_UN);
+    }
+
+    fclose($fp);
+
+    if ($sort && !empty($entries)) {
+        sortByTimestamp($entries);
+    }
+
+    return $entries;
+}
+
+/**
+ * Make a simple HTTP GET request and return JSON-decoded response
+ * Lightweight wrapper for common fetch pattern.
+ *
+ * @param string $url URL to fetch
+ * @param int $timeout Timeout in seconds (default: 10)
+ * @param array $headers Optional headers
+ * @return array|null Decoded JSON or null on failure
+ */
+function fetchJsonUrl($url, $timeout = 10, $headers = []) {
+    $ch = curl_init();
+    curl_setopt($ch, CURLOPT_URL, $url);
+    curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
+    curl_setopt($ch, CURLOPT_TIMEOUT, $timeout);
+    curl_setopt($ch, CURLOPT_FOLLOWLOCATION, true);
+    curl_setopt($ch, CURLOPT_USERAGENT, 'FPP-Plugin-Watcher/' . WATCHERVERSION);
+
+    if (!empty($headers)) {
+        curl_setopt($ch, CURLOPT_HTTPHEADER, $headers);
+    }
+
+    $response = curl_exec($ch);
+    $httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+    curl_close($ch);
+
+    if ($response === false || $httpCode !== 200) {
+        return null;
+    }
+
+    return json_decode($response, true);
+}
 ?>

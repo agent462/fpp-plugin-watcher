@@ -5,6 +5,8 @@
  * Provides functions for checking plugin updates from GitHub.
  */
 
+include_once __DIR__ . '/watcherCommon.php';
+
 define('WATCHER_GITHUB_URL', 'https://raw.githubusercontent.com/agent462/fpp-plugin-watcher/main/pluginInfo.json');
 
 /**
@@ -13,22 +15,8 @@ define('WATCHER_GITHUB_URL', 'https://raw.githubusercontent.com/agent462/fpp-plu
  * @return string|null The latest version string, or null on failure
  */
 function getLatestWatcherVersion() {
-    $ch = curl_init();
-    curl_setopt($ch, CURLOPT_URL, WATCHER_GITHUB_URL);
-    curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
-    curl_setopt($ch, CURLOPT_TIMEOUT, 5);
-    curl_setopt($ch, CURLOPT_FOLLOWLOCATION, true);
-    curl_setopt($ch, CURLOPT_USERAGENT, 'FPP-Plugin-Watcher');
+    $githubInfo = fetchJsonUrl(WATCHER_GITHUB_URL, 5);
 
-    $response = curl_exec($ch);
-    $httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
-    curl_close($ch);
-
-    if ($response === false || $httpCode !== 200) {
-        return null;
-    }
-
-    $githubInfo = json_decode($response, true);
     if ($githubInfo && isset($githubInfo['version'])) {
         return $githubInfo['version'];
     }
@@ -42,27 +30,16 @@ function getLatestWatcherVersion() {
  * @return array Result with success status and version info
  */
 function checkWatcherUpdate() {
-    $ch = curl_init();
-    curl_setopt($ch, CURLOPT_URL, WATCHER_GITHUB_URL);
-    curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
-    curl_setopt($ch, CURLOPT_TIMEOUT, 10);
-    curl_setopt($ch, CURLOPT_FOLLOWLOCATION, true);
-    curl_setopt($ch, CURLOPT_USERAGENT, 'FPP-Plugin-Watcher');
+    $remoteInfo = fetchJsonUrl(WATCHER_GITHUB_URL, 10);
 
-    $response = curl_exec($ch);
-    $httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
-    $error = curl_error($ch);
-    curl_close($ch);
-
-    if ($response === false || $httpCode !== 200) {
+    if (!$remoteInfo) {
         return [
             'success' => false,
-            'error' => $error ?: "Failed to fetch from GitHub (HTTP $httpCode)"
+            'error' => 'Failed to fetch from GitHub'
         ];
     }
 
-    $remoteInfo = json_decode($response, true);
-    if (!$remoteInfo || !isset($remoteInfo['version'])) {
+    if (!isset($remoteInfo['version'])) {
         return [
             'success' => false,
             'error' => 'Invalid response from GitHub'

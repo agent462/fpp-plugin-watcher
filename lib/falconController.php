@@ -11,6 +11,8 @@
  * @version 1.0.0
  */
 
+include_once __DIR__ . '/watcherCommon.php';
+
 /**
  * Falcon Controller Product Codes
  */
@@ -905,17 +907,7 @@ class FalconController
      */
     public static function isValidHost($host)
     {
-        // Valid if it's an IP address
-        if (filter_var($host, FILTER_VALIDATE_IP)) {
-            return true;
-        }
-
-        // Valid if it matches hostname pattern
-        if (preg_match('/^[a-zA-Z0-9]([a-zA-Z0-9\-]{0,61}[a-zA-Z0-9])?(\.[a-zA-Z0-9]([a-zA-Z0-9\-]{0,61}[a-zA-Z0-9])?)*$/', $host)) {
-            return true;
-        }
-
-        return false;
+        return validateHost($host);
     }
 
     /**

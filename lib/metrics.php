@@ -1,5 +1,4 @@
 <?php
-include_once "/opt/fpp/www/common.php";
 include_once __DIR__ . "/watcherCommon.php";
 
 /**
@@ -63,9 +62,7 @@ function getPingMetrics($hoursBack = 24) {
     }
 
     // Sort by timestamp ascending (oldest first)
-    usort($metrics, function($a, $b) {
-        return $a['timestamp'] - $b['timestamp'];
-    });
+    sortByTimestamp($metrics);
 
     return [
         'success' => true,
@@ -421,9 +418,7 @@ function getCPUAverageMetrics($hoursBack = 24) {
     }
 
     // Sort by timestamp
-    usort($formattedData, function($a, $b) {
-        return $a['timestamp'] - $b['timestamp'];
-    });
+    sortByTimestamp($formattedData);
 
     return [
         'success' => true,

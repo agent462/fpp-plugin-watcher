@@ -5,18 +5,7 @@
  * Provides functions for proxying commands to remote FPP instances.
  */
 
-/**
- * Validate a host string (IP address or hostname)
- *
- * @param string $host The host to validate
- * @return bool True if valid, false otherwise
- */
-function validateFPPHost($host) {
-    if (empty($host)) {
-        return false;
-    }
-    return filter_var($host, FILTER_VALIDATE_IP) || preg_match('/^[a-zA-Z0-9\-\.]+$/', $host);
-}
+include_once __DIR__ . '/watcherCommon.php';
 
 /**
  * Get status from a remote FPP instance
@@ -25,7 +14,7 @@ function validateFPPHost($host) {
  * @return array Result with success status and data
  */
 function getRemoteStatus($host) {
-    if (!validateFPPHost($host)) {
+    if (!validateHost($host)) {
         return [
             'success' => false,
             'error' => 'Invalid host format'
@@ -70,7 +59,7 @@ function getRemoteStatus($host) {
  * @return array Result with success status
  */
 function sendRemoteCommand($host, $command, $args = [], $multisyncCommand = false, $multisyncHosts = '') {
-    if (!validateFPPHost($host)) {
+    if (!validateHost($host)) {
         return [
             'success' => false,
             'error' => 'Invalid host format'
@@ -110,7 +99,7 @@ function sendRemoteCommand($host, $command, $args = [], $multisyncCommand = fals
  * @return array Result with success status
  */
 function restartRemoteFPPD($host) {
-    if (!validateFPPHost($host)) {
+    if (!validateHost($host)) {
         return [
             'success' => false,
             'error' => 'Invalid host format'
@@ -134,7 +123,7 @@ function restartRemoteFPPD($host) {
  * @return array Result with success status
  */
 function rebootRemoteFPP($host) {
-    if (!validateFPPHost($host)) {
+    if (!validateHost($host)) {
         return [
             'success' => false,
             'error' => 'Invalid host format'
@@ -163,7 +152,7 @@ function upgradeRemotePlugin($host, $plugin = null) {
         $plugin = WATCHERPLUGINNAME;
     }
 
-    if (!validateFPPHost($host)) {
+    if (!validateHost($host)) {
         return [
             'success' => false,
             'error' => 'Invalid host format'
@@ -206,7 +195,7 @@ function upgradeRemotePlugin($host, $plugin = null) {
  * @return array Result with success status and plugins list
  */
 function getRemotePlugins($host) {
-    if (!validateFPPHost($host)) {
+    if (!validateHost($host)) {
         return [
             'success' => false,
             'error' => 'Invalid host format'
@@ -238,7 +227,7 @@ function getRemotePlugins($host) {
  * @return array Result with success status and updates list
  */
 function checkRemotePluginUpdates($host) {
-    if (!validateFPPHost($host)) {
+    if (!validateHost($host)) {
         return [
             'success' => false,
             'error' => 'Invalid host format'
@@ -320,7 +309,7 @@ function checkRemotePluginUpdates($host) {
  * @return void
  */
 function streamRemoteFPPUpgrade($host) {
-    if (!validateFPPHost($host)) {
+    if (!validateHost($host)) {
         header('Content-Type: application/json');
         echo json_encode([
             'success' => false,

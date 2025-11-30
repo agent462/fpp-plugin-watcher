@@ -1,5 +1,4 @@
 <?php
-include_once "/opt/fpp/www/common.php";
 include_once __DIR__ . '/watcherCommon.php';
 
 /**

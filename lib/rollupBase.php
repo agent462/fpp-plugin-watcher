@@ -6,7 +6,6 @@
  * Used by both ping metrics and multi-sync ping metrics.
  */
 
-include_once "/opt/fpp/www/common.php";
 include_once __DIR__ . "/watcherCommon.php";
 
 /**
@@ -129,40 +128,7 @@ function saveRollupStateGeneric($stateFile, $state) {
  * @return array Array of metric entries
  */
 function readMetricsFileGeneric($metricsFile, $sinceTimestamp = 0) {
-    if (!file_exists($metricsFile)) {
-        return [];
-    }
-
-    $metrics = [];
-    $fp = fopen($metricsFile, 'r');
-
-    if (!$fp) {
-        return [];
-    }
-
-    if (flock($fp, LOCK_SH)) {
-        while (($line = fgets($fp)) !== false) {
-            if (preg_match('/\[.*?\]\s+(.+)$/', $line, $matches)) {
-                $jsonData = trim($matches[1]);
-                $entry = json_decode($jsonData, true);
-
-                if ($entry && isset($entry['timestamp'])) {
-                    if ($entry['timestamp'] > $sinceTimestamp) {
-                        $metrics[] = $entry;
-                    }
-                }
-            }
-        }
-        flock($fp, LOCK_UN);
-    }
-
-    fclose($fp);
-
-    usort($metrics, function($a, $b) {
-        return $a['timestamp'] - $b['timestamp'];
-    });
-
-    return $metrics;
+    return readJsonLinesFile($metricsFile, $sinceTimestamp);
 }
 
 /**
@@ -323,9 +289,7 @@ function readRollupDataGeneric($rollupFile, $tier, $tiers, $startTime = null, $e
 
     fclose($fp);
 
-    usort($data, function($a, $b) {
-        return $a['timestamp'] - $b['timestamp'];
-    });
+    sortByTimestamp($data);
 
     return [
         'success' => true,
