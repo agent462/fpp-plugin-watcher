@@ -45,6 +45,7 @@ sudo systemctl restart fppd
 - **remoteControlUI.php**: Remote FPP system control panel
 
 ### Library Files (/lib/)
+- **uiCommon.php**: Shared PHP functions for UI pages (CSS/JS includes, access checks)
 - **watcherCommon.php**: Constants, logging, network interface detection, FPP API wrappers
 - **config.php**: Configuration reading/writing, collectd service management
 - **metrics.php**: System metrics from collectd RRD files
@@ -56,6 +57,10 @@ sudo systemctl restart fppd
 - **resetNetworkAdapter.php**: Network adapter reset via FPP API
 - **remoteControl.php**: Remote FPP instance control (restart, reboot, upgrade)
 - **updateCheck.php**: GitHub version checking for plugin updates
+
+### Shared UI Assets
+- **js/commonUI.js**: Shared JavaScript utilities for all UI pages
+- **css/commonUI.css**: Shared CSS styles for dashboard pages
 
 ### Scripts (/scripts/)
 - **postStart.sh**: Plugin startup (manages collectd, launches connectivityCheck.php)
@@ -73,6 +78,53 @@ sudo systemctl restart fppd
 - Keep api.php simple; helper functions go in lib files
 - Use `watcher` prefix for JS functions and CSS classes to avoid conflicts
 - Concise comments only
+
+### UI Page Development
+
+All UI pages should use the shared utilities in `lib/uiCommon.php` and `js/commonUI.js`.
+
+**PHP Setup (top of file):**
+```php
+<?php
+include_once __DIR__ . '/lib/config.php';
+include_once __DIR__ . '/lib/watcherCommon.php';
+include_once __DIR__ . '/lib/uiCommon.php';
+
+$config = readPluginConfig();
+$localSystem = apiCall('GET', 'http://127.0.0.1/api/fppd/status', [], true, 5) ?: [];
+$access = checkDashboardAccess($config, $localSystem, 'featureEnabledKey');
+
+renderCSSIncludes(true);  // true = include Chart.js
+renderCommonJS();
+?>
+```
+
+**Access Control Pattern:**
+```php
+<?php if (!renderAccessError($access)): ?>
+    <!-- Dashboard content here -->
+<?php endif; ?>
+```
+
+**Available PHP Functions (lib/uiCommon.php):**
+- `renderCSSIncludes($includeChartJs)` - Renders CSS and optional Chart.js includes
+- `renderCommonJS()` - Renders commonUI.js script tag
+- `checkDashboardAccess($config, $localSystem, $enabledKey)` - Checks if feature is enabled and in player mode
+- `renderAccessError($access)` - Shows error message if access denied, returns true if error shown
+- `renderEmptyMessage($icon, $title, $message)` - Renders a centered empty state message
+
+**Available JS Functions (js/commonUI.js):**
+- `escapeHtml(text)` - XSS-safe HTML escaping
+- `withButtonLoading(btn, iconClass, asyncFn)` - Wraps async function with button loading state
+- `showElement(id)` / `hideElement(id)` - Show/hide elements by ID
+- `fetchJson(url, timeout)` - Fetch JSON with error handling
+- `CHART_COLORS` - Consistent color palette object
+- `buildChartOptions(hours, options)` - Build Chart.js options with time axis
+- `createDataset(label, data, color, options)` - Create Chart.js dataset
+- `mapChartData(response, valueKey)` - Map API response to chart data points
+- `updateOrCreateChart(charts, key, canvasId, type, datasets, options)` - Update or create chart
+- `getChartColor(index)` - Get color from palette by index
+- `formatBytes(bytes)` / `formatLatency(ms)` / `formatPercent(value)` - Formatters
 
 ### FPP Plugin Conventions
 - Include `/opt/fpp/www/common.php` for FPP functions (`json()`, `WriteSettingToFile()`, etc.)

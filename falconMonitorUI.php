@@ -1,22 +1,17 @@
 <?php
 /**
- * Falcon Controller Monitor UI
- *
- * Dashboard for monitoring multiple Falcon pixel controllers
- * Displays status, temperatures, voltages, and configuration
+ * Falcon Controller Monitor UI - Dashboard for Falcon pixel controllers
  */
-
-// Include FPP common functions
 include_once '/opt/fpp/www/common.php';
-
-// Get configured Falcon controllers from plugin settings
 include_once __DIR__ . '/lib/config.php';
+include_once __DIR__ . '/lib/uiCommon.php';
+
 $watcherConfig = readPluginConfig();
 $falconHosts = !empty($watcherConfig['falconControllers']) ? $watcherConfig['falconControllers'] : '';
+
+renderCSSIncludes(false);
+renderCommonJS();
 ?>
-<link rel="stylesheet" href="/css/fpp-bootstrap/dist-new/fpp-bootstrap-5-3.css">
-<link rel="stylesheet" href="/css/fpp.css">
-<link rel="stylesheet" href="/plugin.php?plugin=fpp-plugin-watcher&file=css/commonUI.css">
 
 <div class="metricsContainer">
     <h2 style="margin-bottom: 1.5rem; color: #212529;">
@@ -118,30 +113,11 @@ const configuredHosts = <?php
 // Helpers
 // =============================================================================
 
-function escapeHtml(text) {
-    if (text === null || text === undefined) return '';
-    const map = { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#039;' };
-    return String(text).replace(/[&<>"']/g, m => map[m]);
-}
-
 function formatTemperature(celsius) {
     if (useFahrenheit) {
         return ((celsius * 9/5) + 32).toFixed(1) + '°F';
     }
     return celsius.toFixed(1) + '°C';
-}
-
-// Wraps an async function with button loading state management
-async function withButtonLoading(btn, originalIconClass, asyncFn) {
-    const icon = btn?.querySelector('i');
-    if (icon) icon.className = 'fas fa-spinner fa-spin';
-    if (btn) btn.disabled = true;
-    try {
-        return await asyncFn();
-    } finally {
-        if (icon) icon.className = originalIconClass;
-        if (btn) btn.disabled = false;
-    }
 }
 
 // =============================================================================

@@ -1,31 +1,15 @@
 <?php
-// Load configuration to check if control UI is enabled
 include_once __DIR__ . '/lib/config.php';
 include_once __DIR__ . '/lib/watcherCommon.php';
+include_once __DIR__ . '/lib/uiCommon.php';
+
 $config = readPluginConfig();
+$localSystem = apiCall('GET', 'http://127.0.0.1/api/fppd/status', [], true, 5) ?: [];
+$access = checkDashboardAccess($config, $localSystem, 'controlUIEnabled');
+$remoteSystems = $access['show'] ? getMultiSyncRemoteSystems() : [];
 
-// Fetch local system status from FPP API
-$localSystem = apiCall('GET', 'http://127.0.0.1/api/fppd/status', [], true, 5);
-if ($localSystem === false) {
-    $localSystem = [];
-}
-
-// Check conditions
-$isEnabled = !empty($config['controlUIEnabled']);
-$isPlayerMode = ($localSystem['mode_name'] ?? '') === 'player';
-$showDashboard = $isEnabled && $isPlayerMode;
-
-// Get remote systems if enabled
-$remoteSystems = [];
-if ($showDashboard) {
-    $remoteSystems = getMultiSyncRemoteSystems();
-}
+renderCSSIncludes(false);
 ?>
-
-<link rel="stylesheet" href="/css/fpp-bootstrap/dist-new/fpp-bootstrap-5-3.css">
-<link rel="stylesheet" href="/css/fpp.css">
-<link rel="stylesheet" href="/plugin.php?plugin=fpp-plugin-watcher&file=css/commonUI.css&nopage=1">
-
 <style>
     .controlCardsGrid {
         display: grid;
@@ -100,17 +84,8 @@ if ($showDashboard) {
         <i class="fas fa-gamepad"></i> Remote System Control
     </h2>
 
-    <?php if (!$isEnabled): ?>
-    <div class="empty-message">
-        <h3><i class="fas fa-exclamation-circle"></i> Remote Control Disabled</h3>
-        <p>This feature is not enabled. Go to <a href="plugin.php?plugin=fpp-plugin-watcher&page=configUI.php">Watcher Config</a> to enable it.</p>
-    </div>
-    <?php elseif (!$isPlayerMode): ?>
-    <div class="empty-message">
-        <h3><i class="fas fa-info-circle"></i> Player Mode Required</h3>
-        <p>This feature is only available when FPP is in Player mode. Current mode: <?php echo htmlspecialchars($localSystem['mode_name'] ?? 'unknown'); ?></p>
-    </div>
-    <?php elseif (empty($remoteSystems)): ?>
+    <?php if (!renderAccessError($access)): ?>
+    <?php if (empty($remoteSystems)): ?>
     <div class="empty-message">
         <i class="fas fa-server"></i>
         <h3>No Remote Systems Found</h3>
@@ -264,9 +239,10 @@ if ($showDashboard) {
     </div>
 
     <?php endif; ?>
+    <?php endif; ?>
 </div>
 
-<?php if ($showDashboard && !empty($remoteSystems)): ?>
+<?php if ($access['show'] && !empty($remoteSystems)): ?>
 <script>
 const remoteAddresses = <?php echo json_encode(array_column($remoteSystems, 'address')); ?>;
 const remoteHostnames = <?php echo json_encode(array_combine(array_column($remoteSystems, 'address'), array_column($remoteSystems, 'hostname'))); ?>;
@@ -420,7 +396,7 @@ async function updateSyncStatus() {
 
 function startSyncChecking() {
     if (syncCheckInterval) return;
-    syncCheckInterval = setInterval(updateSyncStatus, 1000);
+    syncCheckInterval = setInterval(updateSyncStatus, 3000);
 }
 
 function stopSyncChecking() {

@@ -7,6 +7,7 @@
     <link rel="stylesheet" href="/css/fpp-bootstrap/dist-new/fpp-bootstrap-5-3.css">
     <link rel="stylesheet" href="/css/fpp.css">
     <link rel="stylesheet" href="/plugin.php?plugin=fpp-plugin-watcher&file=css/configUI.css&nopage=1">
+    <script src="/plugin.php?plugin=fpp-plugin-watcher&file=js/commonUI.js&nopage=1"></script>
 </head>
 <body>
 
@@ -475,8 +476,8 @@ if ($isPlayerMode) {
             const div = document.createElement('div');
             div.className = 'testHostItem';
             div.innerHTML = `
-                <span><strong>${EscapeHtml(host)}</strong></span>
-                <input type="hidden" name="testHosts[]" value="${EscapeHtml(host)}">
+                <span><strong>${escapeHtml(host)}</strong></span>
+                <input type="hidden" name="testHosts[]" value="${escapeHtml(host)}">
                 <button type="button" class="buttons btn-danger btn-sm" onclick="RemoveTestHost(this)">
                     <i class="fas fa-trash"></i> Remove
                 </button>
@@ -496,18 +497,6 @@ if ($isPlayerMode) {
             if (container.children.length === 0) {
                 container.innerHTML = '<div style="padding: 1rem; text-align: center; color: #6c757d;">No test hosts configured. Add at least one.</div>';
             }
-        }
-
-        // Escape HTML to prevent XSS
-        function EscapeHtml(text) {
-            const map = {
-                '&': '&amp;',
-                '<': '&lt;',
-                '>': '&gt;',
-                '"': '&quot;',
-                "'": '&#039;'
-            };
-            return text.replace(/[&<>"']/g, m => map[m]);
         }
 
         // Allow Enter key to add test host

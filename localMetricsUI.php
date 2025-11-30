@@ -1,34 +1,24 @@
 <?php
-// Load configuration to get the default network adapter
 include_once __DIR__ . '/lib/config.php';
+include_once __DIR__ . '/lib/uiCommon.php';
 $config = readPluginConfig();
-$configuredAdapter = isset($config['networkAdapter']) ? $config['networkAdapter'] : 'default';
+$configuredAdapter = $config['networkAdapter'] ?? 'default';
+$defaultAdapter = $configuredAdapter === 'default' ? detectActiveNetworkInterface() : $configuredAdapter;
 
-// If set to 'default', auto-detect the active interface
-if ($configuredAdapter === 'default') {
-$defaultAdapter = detectActiveNetworkInterface();
-} else {
-$defaultAdapter = $configuredAdapter;
-}
+renderCSSIncludes(true);
+renderCommonJS();
 ?>
-
-<link rel="stylesheet" href="/css/fpp-bootstrap/dist-new/fpp-bootstrap-5-3.css">
-<link rel="stylesheet" href="/css/fpp.css">
-<link rel="stylesheet" href="/plugin.php?plugin=fpp-plugin-watcher&file=css/commonUI.css&nopage=1">
-<script>
-    window.config = window.config || {};
-    window.config.defaultAdapter = <?php echo json_encode($defaultAdapter); ?>;
-</script>
-<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
-<script src="https://cdn.jsdelivr.net/npm/chartjs-adapter-date-fns@3.0.0/dist/chartjs-adapter-date-fns.bundle.min.js"></script>
+<script>window.config = { defaultAdapter: <?php echo json_encode($defaultAdapter); ?> };</script>
 
 <div class="metricsContainer">
-    <h2 style="margin-bottom: 1.5rem; color: #212529;">
-        <i class="fas fa-chart-area"></i> System Metrics Dashboard
-    </h2>
+    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1.5rem;">
+        <h2 style="margin: 0; color: #212529;">
+            <i class="fas fa-chart-area"></i> System Metrics Dashboard
+        </h2>
+        <span id="lastUpdate" style="font-size: 0.875rem; color: #6c757d;"></span>
+    </div>
 
     <div id="metricsContent">
-        <!-- Time Range Selector -->
         <div class="chartControls" style="margin-bottom: 1.5rem;">
             <div class="controlGroup">
                 <label for="timeRange">Time Range:</label>
@@ -49,927 +39,266 @@ $defaultAdapter = $configuredAdapter;
 
         <!-- CPU Usage Chart -->
         <div class="chartCard" id="cpuCard">
-            <div class="chartLoading" id="cpuLoading">
-                <i class="fas fa-spinner fa-spin"></i>
-                <p>Loading CPU data...</p>
-            </div>
-            <div class="chartTitle">
-                <span><i class="fas fa-microchip"></i> CPU Usage (Averaged Across All Cores)</span>
-            </div>
+            <div class="chartLoading" id="cpuLoading"><i class="fas fa-spinner fa-spin"></i><p>Loading CPU data...</p></div>
+            <div class="chartTitle"><span><i class="fas fa-microchip"></i> CPU Usage (Averaged Across All Cores)</span></div>
             <canvas id="cpuChart" style="max-height: 400px;"></canvas>
         </div>
 
         <!-- Load Average Chart -->
         <div class="chartCard" id="loadCard">
-            <div class="chartLoading" id="loadLoading">
-                <i class="fas fa-spinner fa-spin"></i>
-                <p>Loading load average data...</p>
-            </div>
-            <div class="chartTitle">
-                <span><i class="fas fa-tachometer-alt"></i> Load Average</span>
-            </div>
+            <div class="chartLoading" id="loadLoading"><i class="fas fa-spinner fa-spin"></i><p>Loading load average data...</p></div>
+            <div class="chartTitle"><span><i class="fas fa-tachometer-alt"></i> Load Average</span></div>
             <canvas id="loadChart" style="max-height: 400px;"></canvas>
         </div>
 
-        <!-- Stats Bar -->
+        <!-- Memory Stats Bar -->
         <div class="statsBar">
-            <div class="statItem">
-                <div class="statLabel">Current Free Memory</div>
-                <div class="statValue" id="currentMemory">-- MB</div>
-            </div>
-            <div class="statItem">
-                <div class="statLabel">Average (24h)</div>
-                <div class="statValue" id="avgMemory">-- MB</div>
-            </div>
-            <div class="statItem">
-                <div class="statLabel">Minimum (24h)</div>
-                <div class="statValue" id="minMemory">-- MB</div>
-            </div>
-            <div class="statItem">
-                <div class="statLabel">Maximum (24h)</div>
-                <div class="statValue" id="maxMemory">-- MB</div>
-            </div>
+            <div class="statItem"><div class="statLabel">Current Free Memory</div><div class="statValue" id="currentMemory">-- MB</div></div>
+            <div class="statItem"><div class="statLabel">Average (24h)</div><div class="statValue" id="avgMemory">-- MB</div></div>
+            <div class="statItem"><div class="statLabel">Minimum (24h)</div><div class="statValue" id="minMemory">-- MB</div></div>
+            <div class="statItem"><div class="statLabel">Maximum (24h)</div><div class="statValue" id="maxMemory">-- MB</div></div>
         </div>
 
-        <!-- Free Memory Chart -->
+        <!-- Memory Chart -->
         <div class="chartCard" id="memoryCard">
-            <div class="chartLoading" id="memoryLoading">
-                <i class="fas fa-spinner fa-spin"></i>
-                <p>Loading memory data...</p>
-            </div>
-            <div class="chartTitle">
-                <span><i class="fas fa-memory"></i> Free Memory</span>
-            </div>
+            <div class="chartLoading" id="memoryLoading"><i class="fas fa-spinner fa-spin"></i><p>Loading memory data...</p></div>
+            <div class="chartTitle"><span><i class="fas fa-memory"></i> Free Memory</span></div>
             <canvas id="memoryChart" style="max-height: 400px;"></canvas>
         </div>
 
-        <!-- Disk Status + Chart -->
+        <!-- Disk Chart -->
         <div class="chartCard" id="diskCard">
-            <div class="chartLoading" id="diskLoading">
-                <i class="fas fa-spinner fa-spin"></i>
-                <p>Loading disk data...</p>
-            </div>
-            <div class="chartTitle">
-                <span><i class="fas fa-hdd"></i> Disk Free Space (Root)</span>
-            </div>
-            <div id="diskStatusBar" class="systemStatusBar" style="display: none; background: #f8f9fa; padding: 1rem; border-radius: 6px; margin-bottom: 1.5rem; border: 1px solid #e9ecef;">
-                <!-- Disk status will be populated here -->
-            </div>
+            <div class="chartLoading" id="diskLoading"><i class="fas fa-spinner fa-spin"></i><p>Loading disk data...</p></div>
+            <div class="chartTitle"><span><i class="fas fa-hdd"></i> Disk Free Space (Root)</span></div>
+            <div id="diskStatusBar" class="systemStatusBar" style="display: none; background: #f8f9fa; padding: 1rem; border-radius: 6px; margin-bottom: 1.5rem; border: 1px solid #e9ecef;"></div>
             <canvas id="diskChart" style="max-height: 400px;"></canvas>
         </div>
 
-        <!-- Network Interface Bandwidth Chart -->
+        <!-- Network Chart -->
         <div class="chartCard" id="networkCard">
-            <div class="chartLoading" id="networkLoading">
-                <i class="fas fa-spinner fa-spin"></i>
-                <p>Loading network data...</p>
-            </div>
-            <div class="chartTitle">
-                <span><i class="fas fa-network-wired"></i> Network Bandwidth</span>
-            </div>
+            <div class="chartLoading" id="networkLoading"><i class="fas fa-spinner fa-spin"></i><p>Loading network data...</p></div>
+            <div class="chartTitle"><span><i class="fas fa-network-wired"></i> Network Bandwidth</span></div>
             <div class="chartControls">
                 <div class="controlGroup">
                     <label for="interfaceSelect">Interface:</label>
-                    <select id="interfaceSelect" onchange="refreshMetric('network');">
-                        <option value="eth0">eth0</option>
-                    </select>
+                    <select id="interfaceSelect" onchange="refreshMetric('network');"><option value="eth0">eth0</option></select>
                 </div>
             </div>
             <canvas id="networkChart" style="max-height: 400px;"></canvas>
         </div>
 
-        <!-- Temperature Status + Chart -->
+        <!-- Temperature Chart -->
         <div class="chartCard" id="thermalCard" style="display: none;">
-            <div class="chartLoading" id="thermalLoading">
-                <i class="fas fa-spinner fa-spin"></i>
-                <p>Loading temperature data...</p>
-            </div>
-            <div class="chartTitle">
-                <span><i class="fas fa-thermometer-half"></i> Temperature (Thermal Zones)</span>
-            </div>
-            <div id="temperatureStatusBar" class="systemStatusBar" style="display: none; background: #f8f9fa; padding: 1rem; border-radius: 6px; margin-bottom: 1.5rem; border: 1px solid #e9ecef;">
-                <!-- Temperature status will be populated here -->
-            </div>
+            <div class="chartLoading" id="thermalLoading"><i class="fas fa-spinner fa-spin"></i><p>Loading temperature data...</p></div>
+            <div class="chartTitle"><span><i class="fas fa-thermometer-half"></i> Temperature (Thermal Zones)</span></div>
+            <div id="temperatureStatusBar" class="systemStatusBar" style="display: none; background: #f8f9fa; padding: 1rem; border-radius: 6px; margin-bottom: 1.5rem; border: 1px solid #e9ecef;"></div>
             <canvas id="thermalChart" style="max-height: 400px;"></canvas>
         </div>
 
-        <!-- Wireless Metrics Chart -->
+        <!-- Wireless Chart -->
         <div class="chartCard" id="wirelessCard" style="display: none;">
-            <div class="chartLoading" id="wirelessLoading">
-                <i class="fas fa-spinner fa-spin"></i>
-                <p>Loading wireless data...</p>
-            </div>
-            <div class="chartTitle">
-                <span><i class="fas fa-wifi"></i> Wireless Signal Quality</span>
-            </div>
+            <div class="chartLoading" id="wirelessLoading"><i class="fas fa-spinner fa-spin"></i><p>Loading wireless data...</p></div>
+            <div class="chartTitle"><span><i class="fas fa-wifi"></i> Wireless Signal Quality</span></div>
             <canvas id="wirelessChart" style="max-height: 400px;"></canvas>
         </div>
     </div>
 
-    <button class="refreshButton" onclick="loadAllMetrics()" title="Refresh Data">
-        <i class="fas fa-sync-alt"></i>
-    </button>
+    <button class="refreshButton" onclick="loadAllMetrics()" title="Refresh Data"><i class="fas fa-sync-alt"></i></button>
 </div>
 
-    <script>
-    const charts = {};
-    let isRefreshing = false;
+<script>
+const charts = {};
+let isRefreshing = false;
+let useFahrenheit = false;
 
-    async function fetchJson(url) {
-        const response = await fetch(url);
-        return response.json();
-    }
+const getSelectedHours = () => document.getElementById('timeRange').value;
+const getDefaultAdapter = () => window.config?.defaultAdapter || 'default';
+const getSelectedInterface = () => document.getElementById('interfaceSelect')?.value || getDefaultAdapter();
 
-    function getSelectedHours() {
-        return document.getElementById('timeRange').value;
-    }
+// Temperature helpers
+const formatTemp = c => useFahrenheit ? `${(c * 9/5 + 32).toFixed(1)}°F` : `${c.toFixed(1)}°C`;
+const getTempStatus = c => c < 40 ? { text: 'Cool', color: '#38ef7d', icon: '❄️' }
+    : c < 60 ? { text: 'Normal', color: '#28a745', icon: '✅' }
+    : c < 80 ? { text: 'Warm', color: '#ffc107', icon: '⚠️' }
+    : { text: 'Hot', color: '#f5576c', icon: '🔥' };
 
-    function getDefaultAdapter() {
-        return (window.config && window.config.defaultAdapter) ? window.config.defaultAdapter : 'default';
-    }
-
-    function getSelectedInterface() {
-        const select = document.getElementById('interfaceSelect');
-        return select && select.value ? select.value : getDefaultAdapter();
-    }
-
-    // Get time config (unit + formats) for chart time axes
-    function getTimeConfig(hours) {
-        let unit = 'week';
-        if (hours <= 1) unit = 'minute';
-        else if (hours <= 24) unit = 'hour';
-        else if (hours <= 168) unit = 'day';
-
-        const formats = {
-            minute: 'HH:mm',
-            hour: 'MMM d, HH:mm',
-            day: 'MMM d',
-            week: 'MMM d, yyyy'
-        };
-
-        return { unit, formats };
-    }
-
-    function buildChartOptions(hours, chartOptions = {}) {
-        const timeConfig = getTimeConfig(hours);
-        const {
-            yLabel = 'Value',
-            beginAtZero = false,
-            yMax,
-            yTickFormatter = (value) => value,
-            tooltipLabel = (context) => `${context.dataset.label}: ${context.parsed.y}`
-        } = chartOptions;
-
-        return {
-            responsive: true,
-            maintainAspectRatio: true,
-            interaction: {
-                mode: 'nearest',
-                axis: 'x',
-                intersect: false
-            },
-            plugins: {
-                legend: {
-                    display: true,
-                    position: 'top'
-                },
-                tooltip: {
-                    callbacks: {
-                        title: function(context) {
-                            const date = new Date(context[0].parsed.x);
-                            return date.toLocaleString();
-                        },
-                        label: tooltipLabel
-                    }
-                }
-            },
-            scales: {
-                x: {
-                    type: 'time',
-                    time: {
-                        unit: timeConfig.unit,
-                        displayFormats: timeConfig.formats,
-                        tooltipFormat: 'MMM d, yyyy HH:mm:ss'
-                    },
-                    title: {
-                        display: true,
-                        text: 'Time',
-                        font: {
-                            size: 14,
-                            weight: 'bold'
-                        }
-                    },
-                    grid: {
-                        display: true,
-                        color: 'rgba(0, 0, 0, 0.05)'
-                    }
-                },
-                y: {
-                    beginAtZero,
-                    ...(yMax !== undefined ? { max: yMax } : {}),
-                    title: {
-                        display: true,
-                        text: yLabel,
-                        font: {
-                            size: 14,
-                            weight: 'bold'
-                        }
-                    },
-                    grid: {
-                        display: true,
-                        color: 'rgba(0, 0, 0, 0.05)'
-                    },
-                    ticks: {
-                        callback: yTickFormatter
-                    }
-                }
-            }
-        };
-    }
-
-    function renderChart(key, canvasId, datasets, hours, chartOptions = {}) {
-        const ctx = document.getElementById(canvasId).getContext('2d');
-        const options = buildChartOptions(hours, chartOptions);
-
-        if (charts[key]) {
-            charts[key].data.datasets = datasets;
-            charts[key].options = options;
-            charts[key].update('none');
+// System status display
+async function loadSystemStatus() {
+    try {
+        const cached = localStorage.getItem('temperatureInF');
+        if (cached !== null) {
+            useFahrenheit = cached === 'true';
         } else {
-            charts[key] = new Chart(ctx, {
-                type: 'line',
-                data: { datasets },
-                options
-            });
+            try {
+                const { value } = await fetchJson('/api/settings/temperatureInF');
+                useFahrenheit = value === '1' || value === 1;
+                localStorage.setItem('temperatureInF', useFahrenheit);
+            } catch { useFahrenheit = false; }
         }
-    }
+        const status = await fetchJson('/api/system/status');
+        updateTemperatureStatus(status);
+        updateDiskStatus(status);
+    } catch (e) { console.error('Error loading system status:', e); }
+}
 
-    let useFahrenheit = false;
+function updateTemperatureStatus(status) {
+    const container = document.getElementById('temperatureStatusBar');
+    const sensors = status.sensors?.filter(s => s.valueType === 'Temperature') || [];
+    if (!sensors.length) { container.style.display = 'none'; return; }
 
-    // Fetch system status for real-time temperature and disk info
-    async function loadSystemStatus() {
-        try {
-            // Check for cached temperature preference
-            const cachedTempSetting = localStorage.getItem('temperatureInF');
-            if (cachedTempSetting !== null) {
-                useFahrenheit = (cachedTempSetting === "true" || cachedTempSetting === true);
-            } else {
-                try {
-                    const tempSettingResponse = await fetch('/api/settings/temperatureInF');
-                    const tempSettingData = await tempSettingResponse.json();
-                    useFahrenheit = (tempSettingData.value === "1" || tempSettingData.value === 1);
-                    localStorage.setItem('temperatureInF', useFahrenheit);
-                } catch (e) {
-                    useFahrenheit = false;
-                }
-            }
-
-            const response = await fetch('/api/system/status');
-            const status = await response.json();
-
-            updateTemperatureStatus(status);
-            updateDiskStatus(status);
-        } catch (error) {
-            console.error('Error loading system status:', error);
-        }
-    }
-
-    function formatTemperature(celsius) {
-        if (useFahrenheit) {
-            const fahrenheit = (celsius * 9/5) + 32;
-            return `${fahrenheit.toFixed(1)}°F`;
-        }
-        return `${celsius.toFixed(1)}°C`;
-    }
-
-    function getTempStatus(tempCelsius) {
-        if (tempCelsius < 40) return { text: 'Cool', color: '#38ef7d', icon: '❄️' };
-        if (tempCelsius < 60) return { text: 'Normal', color: '#28a745', icon: '✅' };
-        if (tempCelsius < 80) return { text: 'Warm', color: '#ffc107', icon: '⚠️' };
-        return { text: 'Hot', color: '#f5576c', icon: '🔥' };
-    }
-
-    function updateTemperatureStatus(status) {
-        const container = document.getElementById('temperatureStatusBar');
-        if (!status.sensors || status.sensors.length === 0) {
-            container.style.display = 'none';
-            return;
-        }
-
-        const tempSensors = status.sensors.filter(s => s.valueType === 'Temperature');
-        if (tempSensors.length === 0) {
-            container.style.display = 'none';
-            return;
-        }
-
-        let html = '';
-        const minTemp = formatTemperature(0);
-        const maxTemp = formatTemperature(100);
-
-        tempSensors.forEach((sensor, index) => {
-            const tempCelsius = parseFloat(sensor.value) || 0;
-            const tempStatus = getTempStatus(tempCelsius);
-            const maxTempCelsius = 100;
-            const tempPercent = Math.min((tempCelsius / maxTempCelsius) * 100, 100);
-            const label = sensor.label.replace(':', '').trim();
-            const isLast = index === tempSensors.length - 1;
-            const displayTemp = formatTemperature(tempCelsius);
-
-            html += `
-                <div style="${isLast ? '' : 'margin-bottom: 1.5rem;'}">
-                    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.5rem;">
-                        <div style="display: flex; align-items: center; gap: 0.5rem;">
-                            <i class="fas fa-thermometer-half" style="color: ${tempStatus.color};"></i>
-                            <strong>${label}</strong>
-                        </div>
-                        <span style="font-size: 1.5rem; font-weight: bold; color: ${tempStatus.color};">
-                            ${displayTemp}
-                        </span>
-                    </div>
-                    <div class="progressBar" style="background-color: #e9ecef; height: 24px; border-radius: 4px; overflow: hidden;">
-                        <div style="width: ${tempPercent}%; height: 100%; background: ${tempStatus.color}; display: flex; align-items: center; justify-content: center; color: white; font-size: 0.875rem; font-weight: 500;">
-                            ${displayTemp}
-                        </div>
-                    </div>
-                    <div style="display: flex; justify-content: space-between; margin-top: 0.5rem; font-size: 0.75rem; color: #6c757d;">
-                        <span>${minTemp}</span>
-                        <span>Status: ${tempStatus.icon} ${tempStatus.text}</span>
-                        <span>${maxTemp}</span>
-                    </div>
+    container.innerHTML = sensors.map((sensor, i) => {
+        const temp = parseFloat(sensor.value) || 0;
+        const st = getTempStatus(temp);
+        const pct = Math.min(temp, 100);
+        const label = sensor.label.replace(':', '').trim();
+        const display = formatTemp(temp);
+        return `<div${i < sensors.length - 1 ? ' style="margin-bottom: 1.5rem;"' : ''}>
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.5rem;">
+                <div style="display: flex; align-items: center; gap: 0.5rem;">
+                    <i class="fas fa-thermometer-half" style="color: ${st.color};"></i><strong>${escapeHtml(label)}</strong>
                 </div>
-            `;
-        });
-
-        container.innerHTML = html;
-        container.style.display = 'block';
-    }
-
-    function formatBytes(bytes) {
-        if (bytes === 0) return '0 Bytes';
-        const k = 1024;
-        const sizes = ['Bytes', 'KB', 'MB', 'GB', 'TB'];
-        const i = Math.floor(Math.log(bytes) / Math.log(k));
-        return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
-    }
-
-    function updateDiskStatus(status) {
-        const container = document.getElementById('diskStatusBar');
-        if (!status.advancedView?.Utilization?.Disk?.Root) {
-            container.style.display = 'none';
-            return;
-        }
-
-        const diskInfo = status.advancedView.Utilization.Disk.Root;
-        const freeBytes = diskInfo.Free || 0;
-        const totalBytes = diskInfo.Total || 1;
-        const usedBytes = totalBytes - freeBytes;
-        const usedPercent = (usedBytes / totalBytes) * 100;
-
-        let progressColor = '#38ef7d';
-        if (usedPercent > 90) {
-            progressColor = '#f5576c';
-        } else if (usedPercent > 75) {
-            progressColor = '#ffc107';
-        }
-
-        const html = `
-            <div>
-                <div style="display: flex; justify-content: space-between; margin-bottom: 0.5rem;">
-                    <strong>Root Filesystem</strong>
-                    <span style="font-weight: 500;">${formatBytes(usedBytes)} / ${formatBytes(totalBytes)}</span>
-                </div>
-                <div class="progressBar" style="background-color: #e9ecef; height: 24px; border-radius: 4px; overflow: hidden;">
-                    <div style="width: ${usedPercent}%; height: 100%; background: ${progressColor}; display: flex; align-items: center; justify-content: center; color: white; font-size: 0.875rem; font-weight: 500;">
-                        ${usedPercent.toFixed(1)}% Used
-                    </div>
-                </div>
-                <div style="margin-top: 0.5rem; font-size: 0.875rem; color: #6c757d;">
-                    <i class="fas fa-check-circle" style="color: #28a745;"></i> Available: ${formatBytes(freeBytes)}
-                </div>
+                <span style="font-size: 1.5rem; font-weight: bold; color: ${st.color};">${display}</span>
             </div>
-        `;
+            <div class="progressBar" style="background-color: #e9ecef; height: 24px; border-radius: 4px; overflow: hidden;">
+                <div style="width: ${pct}%; height: 100%; background: ${st.color}; display: flex; align-items: center; justify-content: center; color: white; font-size: 0.875rem; font-weight: 500;">${display}</div>
+            </div>
+            <div style="display: flex; justify-content: space-between; margin-top: 0.5rem; font-size: 0.75rem; color: #6c757d;">
+                <span>${formatTemp(0)}</span><span>Status: ${st.icon} ${st.text}</span><span>${formatTemp(100)}</span>
+            </div>
+        </div>`;
+    }).join('');
+    container.style.display = 'block';
+}
 
-        container.innerHTML = html;
-        container.style.display = 'block';
-    }
+function updateDiskStatus(status) {
+    const container = document.getElementById('diskStatusBar');
+    const disk = status.advancedView?.Utilization?.Disk?.Root;
+    if (!disk) { container.style.display = 'none'; return; }
 
-    const METRIC_DEFINITIONS = [
-        {
-            key: 'memory',
-            canvasId: 'memoryChart',
-            loadingId: 'memoryLoading',
-            url: (hours) => `/api/plugin/fpp-plugin-watcher/metrics/memory/free?hours=${hours}`,
-            prepare: (payload) => {
-                if (!payload || !payload.success || !payload.data || payload.data.length === 0) {
-                    console.error('No memory data available');
-                    return null;
-                }
+    const { Free: free = 0, Total: total = 1 } = disk;
+    const used = total - free, pct = (used / total) * 100;
+    const color = pct > 90 ? '#f5576c' : pct > 75 ? '#ffc107' : '#38ef7d';
 
-                const validData = payload.data.filter(d => d.free_mb !== null);
-                if (validData.length === 0) {
-                    console.error('No memory data available');
-                    return null;
-                }
+    container.innerHTML = `<div>
+        <div style="display: flex; justify-content: space-between; margin-bottom: 0.5rem;">
+            <strong>Root Filesystem</strong><span style="font-weight: 500;">${formatBytes(used)} / ${formatBytes(total)}</span>
+        </div>
+        <div class="progressBar" style="background-color: #e9ecef; height: 24px; border-radius: 4px; overflow: hidden;">
+            <div style="width: ${pct}%; height: 100%; background: ${color}; display: flex; align-items: center; justify-content: center; color: white; font-size: 0.875rem; font-weight: 500;">${pct.toFixed(1)}% Used</div>
+        </div>
+        <div style="margin-top: 0.5rem; font-size: 0.875rem; color: #6c757d;">
+            <i class="fas fa-check-circle" style="color: #28a745;"></i> Available: ${formatBytes(free)}
+        </div>
+    </div>`;
+    container.style.display = 'block';
+}
 
-                const memoryValues = validData.map(d => d.free_mb);
-                const currentMemory = memoryValues[memoryValues.length - 1];
-                const avgMemory = memoryValues.reduce((a, b) => a + b, 0) / memoryValues.length;
-                const minMemory = Math.min(...memoryValues);
-                const maxMemory = Math.max(...memoryValues);
+// Metric definitions
+const METRIC_DEFS = [
+    { key: 'memory', canvasId: 'memoryChart', loadingId: 'memoryLoading',
+        url: h => `/api/plugin/fpp-plugin-watcher/metrics/memory/free?hours=${h}`,
+        prepare: p => {
+            if (!p?.success || !p.data?.length) return null;
+            const vals = p.data.filter(d => d.free_mb !== null).map(d => d.free_mb);
+            if (!vals.length) return null;
+            document.getElementById('currentMemory').textContent = vals.at(-1).toFixed(1) + ' MB';
+            document.getElementById('avgMemory').textContent = (vals.reduce((a, b) => a + b) / vals.length).toFixed(1) + ' MB';
+            document.getElementById('minMemory').textContent = Math.min(...vals).toFixed(1) + ' MB';
+            document.getElementById('maxMemory').textContent = Math.max(...vals).toFixed(1) + ' MB';
+            return { datasets: [createDataset('Free Memory (MB)', mapChartData(p, 'free_mb'), 'purple')],
+                opts: { yLabel: 'Free Memory (MB)', yTickFormatter: v => v.toFixed(0) + ' MB', tooltipLabel: c => 'Free Memory: ' + c.parsed.y.toFixed(2) + ' MB' } };
+        } },
+    { key: 'cpu', canvasId: 'cpuChart', loadingId: 'cpuLoading',
+        url: h => `/api/plugin/fpp-plugin-watcher/metrics/cpu/average?hours=${h}`,
+        prepare: p => !p?.success || !p.data?.length ? null : {
+            datasets: [createDataset('CPU Usage (%)', mapChartData(p, 'cpu_usage'), 'red')],
+            opts: { yLabel: 'CPU Usage (%)', beginAtZero: true, yMax: 100, yTickFormatter: v => v.toFixed(0) + '%', tooltipLabel: c => 'CPU Usage: ' + c.parsed.y.toFixed(2) + '%' } } },
+    { key: 'load', canvasId: 'loadChart', loadingId: 'loadLoading',
+        url: h => `/api/plugin/fpp-plugin-watcher/metrics/load/average?hours=${h}`,
+        prepare: p => !p?.success || !p.data?.length ? null : {
+            datasets: [
+                createDataset('1 min', mapChartData(p, 'shortterm'), 'coral', { fill: false }),
+                createDataset('5 min', mapChartData(p, 'midterm'), 'orange', { fill: false }),
+                createDataset('15 min', mapChartData(p, 'longterm'), 'teal', { fill: false })
+            ],
+            opts: { yLabel: 'Load Average', beginAtZero: true, yTickFormatter: v => v.toFixed(2), tooltipLabel: c => c.dataset.label + ' Load: ' + c.parsed.y.toFixed(2) } } },
+    { key: 'disk', canvasId: 'diskChart', loadingId: 'diskLoading',
+        url: h => `/api/plugin/fpp-plugin-watcher/metrics/disk/free?hours=${h}`,
+        prepare: p => !p?.success || !p.data?.length ? null : {
+            datasets: [createDataset('Free Space (GB)', mapChartData(p, 'free_gb'), 'green')],
+            opts: { yLabel: 'Free Space (GB)', yTickFormatter: v => v.toFixed(1) + ' GB', tooltipLabel: c => 'Free Space: ' + c.parsed.y.toFixed(2) + ' GB' } } },
+    { key: 'network', canvasId: 'networkChart', loadingId: 'networkLoading',
+        url: h => `/api/plugin/fpp-plugin-watcher/metrics/interface/bandwidth?interface=${getSelectedInterface()}&hours=${h}`,
+        prepare: p => !p?.success || !p.data?.length ? null : {
+            datasets: [createDataset('Download (RX)', mapChartData(p, 'rx_kbps'), 'blue'), createDataset('Upload (TX)', mapChartData(p, 'tx_kbps'), 'pink')],
+            opts: { yLabel: 'Bandwidth (Kbps)', beginAtZero: true, yTickFormatter: v => v.toFixed(0) + ' Kbps', tooltipLabel: c => c.dataset.label + ': ' + c.parsed.y.toFixed(2) + ' Kbps' } } },
+    { key: 'thermal', canvasId: 'thermalChart', cardId: 'thermalCard', loadingId: 'thermalLoading',
+        url: h => `/api/plugin/fpp-plugin-watcher/metrics/thermal?hours=${h}`,
+        prepare: p => {
+            if (!p?.success || !p.data?.length || !p.zones?.length) return { hidden: true };
+            const colorKeys = ['coral', 'blue', 'yellow', 'teal', 'indigo', 'orange', 'green', 'pink'];
+            return { datasets: p.zones.map((z, i) => createDataset(z, mapChartData(p, z), colorKeys[i % colorKeys.length], { fill: false })),
+                opts: { yLabel: 'Temperature (°C)', yTickFormatter: v => v.toFixed(0) + '°C', tooltipLabel: c => c.dataset.label + ': ' + c.parsed.y.toFixed(1) + '°C' } }; } },
+    { key: 'wireless', canvasId: 'wirelessChart', cardId: 'wirelessCard', loadingId: 'wirelessLoading',
+        url: h => `/api/plugin/fpp-plugin-watcher/metrics/wireless?hours=${h}`,
+        prepare: p => {
+            if (!p?.success || !p.data?.length || !p.interfaces?.length) return { hidden: true };
+            const colorMap = { signal_quality: 'teal', signal_power: 'coral', signal_noise: 'orange' };
+            const datasets = [];
+            (p.available_metrics || {})[p.interfaces[0]]?.forEach(metric => {
+                const key = `${p.interfaces[0]}_${metric}`;
+                const label = metric.replace('signal_', '').replace('_', ' ').replace(/^./, c => c.toUpperCase());
+                datasets.push(createDataset(`${p.interfaces[0]} - ${label}`, mapChartData(p, key), colorMap[metric] || 'teal', { fill: false }));
+            });
+            return datasets.length ? { datasets, opts: { yLabel: 'Signal Metrics', yTickFormatter: v => v.toFixed(0), tooltipLabel: c => c.dataset.label + ': ' + c.parsed.y.toFixed(1) } } : { hidden: true }; } }
+];
 
-                document.getElementById('currentMemory').textContent = currentMemory.toFixed(1) + ' MB';
-                document.getElementById('avgMemory').textContent = avgMemory.toFixed(1) + ' MB';
-                document.getElementById('minMemory').textContent = minMemory.toFixed(1) + ' MB';
-                document.getElementById('maxMemory').textContent = maxMemory.toFixed(1) + ' MB';
-
-                const chartData = payload.data.map(entry => ({
-                    x: entry.timestamp * 1000,
-                    y: entry.free_mb
-                }));
-
-                return {
-                    datasets: [{
-                        label: 'Free Memory (MB)',
-                        data: chartData,
-                        borderColor: 'rgb(102, 126, 234)',
-                        backgroundColor: 'rgba(102, 126, 234, 0.1)',
-                        borderWidth: 2,
-                        fill: true,
-                        tension: 0.4,
-                        pointRadius: 0,
-                        pointHoverRadius: 5
-                    }],
-                    chartOptions: {
-                        yLabel: 'Free Memory (MB)',
-                        beginAtZero: false,
-                        yTickFormatter: (value) => value.toFixed(0) + ' MB',
-                        tooltipLabel: (context) => 'Free Memory: ' + context.parsed.y.toFixed(2) + ' MB'
-                    }
-                };
-            }
-        },
-        {
-            key: 'cpu',
-            canvasId: 'cpuChart',
-            loadingId: 'cpuLoading',
-            url: (hours) => `/api/plugin/fpp-plugin-watcher/metrics/cpu/average?hours=${hours}`,
-            prepare: (payload) => {
-                if (!payload || !payload.success || !payload.data || payload.data.length === 0) {
-                    console.error('No CPU data available');
-                    return null;
-                }
-
-                const chartData = payload.data.map(entry => ({
-                    x: entry.timestamp * 1000,
-                    y: entry.cpu_usage
-                }));
-
-                return {
-                    datasets: [{
-                        label: 'CPU Usage (%)',
-                        data: chartData,
-                        borderColor: 'rgb(245, 87, 108)',
-                        backgroundColor: 'rgba(245, 87, 108, 0.1)',
-                        borderWidth: 2,
-                        fill: true,
-                        tension: 0.4,
-                        pointRadius: 0,
-                        pointHoverRadius: 5
-                    }],
-                    chartOptions: {
-                        yLabel: 'CPU Usage (%)',
-                        beginAtZero: true,
-                        yMax: 100,
-                        yTickFormatter: (value) => value.toFixed(0) + '%',
-                        tooltipLabel: (context) => 'CPU Usage: ' + context.parsed.y.toFixed(2) + '%'
-                    }
-                };
-            }
-        },
-        {
-            key: 'load',
-            canvasId: 'loadChart',
-            loadingId: 'loadLoading',
-            url: (hours) => `/api/plugin/fpp-plugin-watcher/metrics/load/average?hours=${hours}`,
-            prepare: (payload) => {
-                if (!payload || !payload.success || !payload.data || payload.data.length === 0) {
-                    console.error('No load average data available');
-                    return null;
-                }
-
-                const shortTermData = payload.data.map(entry => ({
-                    x: entry.timestamp * 1000,
-                    y: entry.shortterm
-                }));
-
-                const midTermData = payload.data.map(entry => ({
-                    x: entry.timestamp * 1000,
-                    y: entry.midterm
-                }));
-
-                const longTermData = payload.data.map(entry => ({
-                    x: entry.timestamp * 1000,
-                    y: entry.longterm
-                }));
-
-                return {
-                    datasets: [
-                        {
-                            label: '1 min',
-                            data: shortTermData,
-                            borderColor: 'rgb(255, 99, 132)',
-                            backgroundColor: 'rgba(255, 99, 132, 0.1)',
-                            borderWidth: 2,
-                            fill: false,
-                            tension: 0.4,
-                            pointRadius: 0,
-                            pointHoverRadius: 5
-                        },
-                        {
-                            label: '5 min',
-                            data: midTermData,
-                            borderColor: 'rgb(255, 159, 64)',
-                            backgroundColor: 'rgba(255, 159, 64, 0.1)',
-                            borderWidth: 2,
-                            fill: false,
-                            tension: 0.4,
-                            pointRadius: 0,
-                            pointHoverRadius: 5
-                        },
-                        {
-                            label: '15 min',
-                            data: longTermData,
-                            borderColor: 'rgb(75, 192, 192)',
-                            backgroundColor: 'rgba(75, 192, 192, 0.1)',
-                            borderWidth: 2,
-                            fill: false,
-                            tension: 0.4,
-                            pointRadius: 0,
-                            pointHoverRadius: 5
-                        }
-                    ],
-                    chartOptions: {
-                        yLabel: 'Load Average',
-                        beginAtZero: true,
-                        yTickFormatter: (value) => value.toFixed(2),
-                        tooltipLabel: (context) => context.dataset.label + ' Load: ' + context.parsed.y.toFixed(2)
-                    }
-                };
-            }
-        },
-        {
-            key: 'disk',
-            canvasId: 'diskChart',
-            loadingId: 'diskLoading',
-            url: (hours) => `/api/plugin/fpp-plugin-watcher/metrics/disk/free?hours=${hours}`,
-            prepare: (payload) => {
-                if (!payload || !payload.success || !payload.data || payload.data.length === 0) {
-                    console.error('No disk data available');
-                    return null;
-                }
-
-                const chartData = payload.data.map(entry => ({
-                    x: entry.timestamp * 1000,
-                    y: entry.free_gb
-                }));
-
-                return {
-                    datasets: [{
-                        label: 'Free Space (GB)',
-                        data: chartData,
-                        borderColor: 'rgb(56, 239, 125)',
-                        backgroundColor: 'rgba(56, 239, 125, 0.1)',
-                        borderWidth: 2,
-                        fill: true,
-                        tension: 0.4,
-                        pointRadius: 0,
-                        pointHoverRadius: 5
-                    }],
-                    chartOptions: {
-                        yLabel: 'Free Space (GB)',
-                        beginAtZero: false,
-                        yTickFormatter: (value) => value.toFixed(1) + ' GB',
-                        tooltipLabel: (context) => 'Free Space: ' + context.parsed.y.toFixed(2) + ' GB'
-                    }
-                };
-            }
-        },
-        {
-            key: 'network',
-            canvasId: 'networkChart',
-            loadingId: 'networkLoading',
-            url: (hours) => `/api/plugin/fpp-plugin-watcher/metrics/interface/bandwidth?interface=${getSelectedInterface()}&hours=${hours}`,
-            prepare: (payload) => {
-                if (!payload || !payload.success || !payload.data || payload.data.length === 0) {
-                    console.error('No network data available');
-                    return null;
-                }
-
-                const rxData = payload.data.map(entry => ({
-                    x: entry.timestamp * 1000,
-                    y: entry.rx_kbps
-                }));
-
-                const txData = payload.data.map(entry => ({
-                    x: entry.timestamp * 1000,
-                    y: entry.tx_kbps
-                }));
-
-                return {
-                    datasets: [
-                        {
-                            label: 'Download (RX)',
-                            data: rxData,
-                            borderColor: 'rgb(79, 172, 254)',
-                            backgroundColor: 'rgba(79, 172, 254, 0.1)',
-                            borderWidth: 2,
-                            fill: true,
-                            tension: 0.4,
-                            pointRadius: 0,
-                            pointHoverRadius: 5
-                        },
-                        {
-                            label: 'Upload (TX)',
-                            data: txData,
-                            borderColor: 'rgb(240, 147, 251)',
-                            backgroundColor: 'rgba(240, 147, 251, 0.1)',
-                            borderWidth: 2,
-                            fill: true,
-                            tension: 0.4,
-                            pointRadius: 0,
-                            pointHoverRadius: 5
-                        }
-                    ],
-                    chartOptions: {
-                        yLabel: 'Bandwidth (Kbps)',
-                        beginAtZero: true,
-                        yTickFormatter: (value) => value.toFixed(0) + ' Kbps',
-                        tooltipLabel: (context) => context.dataset.label + ': ' + context.parsed.y.toFixed(2) + ' Kbps'
-                    }
-                };
-            }
-        },
-        {
-            key: 'thermal',
-            canvasId: 'thermalChart',
-            cardId: 'thermalCard',
-            loadingId: 'thermalLoading',
-            url: (hours) => `/api/plugin/fpp-plugin-watcher/metrics/thermal?hours=${hours}`,
-            prepare: (payload) => {
-                if (!payload || !payload.success || !payload.data || payload.data.length === 0 || !payload.zones || payload.zones.length === 0) {
-                    return { hidden: true };
-                }
-
-                const zoneColors = [
-                    { border: 'rgb(255, 99, 132)', bg: 'rgba(255, 99, 132, 0.1)' },
-                    { border: 'rgb(54, 162, 235)', bg: 'rgba(54, 162, 235, 0.1)' },
-                    { border: 'rgb(255, 206, 86)', bg: 'rgba(255, 206, 86, 0.1)' },
-                    { border: 'rgb(75, 192, 192)', bg: 'rgba(75, 192, 192, 0.1)' },
-                    { border: 'rgb(153, 102, 255)', bg: 'rgba(153, 102, 255, 0.1)' },
-                    { border: 'rgb(255, 159, 64)', bg: 'rgba(255, 159, 64, 0.1)' },
-                    { border: 'rgb(201, 203, 207)', bg: 'rgba(201, 203, 207, 0.1)' },
-                    { border: 'rgb(83, 102, 255)', bg: 'rgba(83, 102, 255, 0.1)' }
-                ];
-
-                const datasets = payload.zones.map((zone, index) => {
-                    const zoneData = payload.data.map(entry => ({
-                        x: entry.timestamp * 1000,
-                        y: entry[zone]
-                    }));
-
-                    const colorIndex = index % zoneColors.length;
-                    return {
-                        label: zone,
-                        data: zoneData,
-                        borderColor: zoneColors[colorIndex].border,
-                        backgroundColor: zoneColors[colorIndex].bg,
-                        borderWidth: 2,
-                        fill: false,
-                        tension: 0.4,
-                        pointRadius: 0,
-                        pointHoverRadius: 5
-                    };
-                });
-
-                return {
-                    datasets,
-                    chartOptions: {
-                        yLabel: 'Temperature (°C)',
-                        beginAtZero: false,
-                        yTickFormatter: (value) => value.toFixed(0) + '°C',
-                        tooltipLabel: (context) => context.dataset.label + ': ' + context.parsed.y.toFixed(1) + '°C'
-                    }
-                };
-            }
-        },
-        {
-            key: 'wireless',
-            canvasId: 'wirelessChart',
-            cardId: 'wirelessCard',
-            loadingId: 'wirelessLoading',
-            url: (hours) => `/api/plugin/fpp-plugin-watcher/metrics/wireless?hours=${hours}`,
-            prepare: (payload) => {
-                if (!payload || !payload.success || !payload.data || payload.data.length === 0 || !payload.interfaces || payload.interfaces.length === 0) {
-                    return { hidden: true };
-                }
-
-                const metricColors = {
-                    signal_quality: { border: 'rgb(75, 192, 192)', bg: 'rgba(75, 192, 192, 0.1)' },
-                    signal_power: { border: 'rgb(255, 99, 132)', bg: 'rgba(255, 99, 132, 0.1)' },
-                    signal_noise: { border: 'rgb(255, 159, 64)', bg: 'rgba(255, 159, 64, 0.1)' }
-                };
-
-                const interfaceColorOffsets = [
-                    { border: '', bg: '' },
-                    { border: 'rgb(153, 102, 255)', bg: 'rgba(153, 102, 255, 0.1)' },
-                    { border: 'rgb(54, 162, 235)', bg: 'rgba(54, 162, 235, 0.1)' },
-                    { border: 'rgb(201, 203, 207)', bg: 'rgba(201, 203, 207, 0.1)' }
-                ];
-
-                const datasets = [];
-                const availableMetrics = payload.available_metrics || {};
-
-                payload.interfaces.forEach((iface, ifaceIndex) => {
-                    if (availableMetrics[iface]) {
-                        availableMetrics[iface].forEach(metric => {
-                            const key = `${iface}_${metric}`;
-                            const metricData = payload.data.map(entry => ({
-                                x: entry.timestamp * 1000,
-                                y: entry[key]
-                            }));
-
-                            let color = metricColors[metric] || metricColors.signal_quality;
-                            if (ifaceIndex > 0 && ifaceIndex < interfaceColorOffsets.length && interfaceColorOffsets[ifaceIndex].border) {
-                                color = interfaceColorOffsets[ifaceIndex];
-                            }
-
-                            let metricLabel = metric.replace('signal_', '').replace('_', ' ');
-                            metricLabel = metricLabel.charAt(0).toUpperCase() + metricLabel.slice(1);
-
-                            datasets.push({
-                                label: `${iface} - ${metricLabel}`,
-                                data: metricData,
-                                borderColor: color.border,
-                                backgroundColor: color.bg,
-                                borderWidth: 2,
-                                fill: false,
-                                tension: 0.4,
-                                pointRadius: 0,
-                                pointHoverRadius: 5
-                            });
-                        });
-                    }
-                });
-
-                if (datasets.length === 0) {
-                    return { hidden: true };
-                }
-
-                return {
-                    datasets,
-                    chartOptions: {
-                        yLabel: 'Signal Metrics',
-                        beginAtZero: false,
-                        yTickFormatter: (value) => value.toFixed(0),
-                        tooltipLabel: (context) => context.dataset.label + ': ' + context.parsed.y.toFixed(1)
-                    }
-                };
-            }
+async function updateMetric(def, hours) {
+    setLoading(def.loadingId, true);
+    try {
+        const prepared = def.prepare(await fetchJson(def.url(hours)));
+        if (!prepared || prepared.hidden) {
+            if (def.cardId) document.getElementById(def.cardId).style.display = 'none';
+        } else {
+            if (def.cardId) document.getElementById(def.cardId).style.display = 'block';
+            updateOrCreateChart(charts, def.key, def.canvasId, 'line', prepared.datasets, buildChartOptions(hours, prepared.opts));
         }
-    ];
-
-    async function updateMetric(definition, hours) {
-        // Show loading state
-        if (definition.loadingId) {
-            const loadingEl = document.getElementById(definition.loadingId);
-            if (loadingEl) loadingEl.style.display = 'flex';
-        }
-
-        try {
-            const payload = await fetchJson(definition.url(hours));
-            const prepared = definition.prepare(payload);
-
-            if (!prepared || prepared.hidden) {
-                if (definition.cardId) {
-                    document.getElementById(definition.cardId).style.display = 'none';
-                }
-                // Hide loading even for hidden/empty data
-                if (definition.loadingId) {
-                    const loadingEl = document.getElementById(definition.loadingId);
-                    if (loadingEl) loadingEl.style.display = 'none';
-                }
-                return;
-            }
-
-            if (definition.cardId) {
-                document.getElementById(definition.cardId).style.display = 'block';
-            }
-
-            renderChart(definition.key, definition.canvasId, prepared.datasets, hours, prepared.chartOptions);
-
-            // Hide loading overlay after chart is rendered
-            if (definition.loadingId) {
-                const loadingEl = document.getElementById(definition.loadingId);
-                if (loadingEl) loadingEl.style.display = 'none';
-            }
-        } catch (error) {
-            console.error(`Error updating ${definition.key} chart:`, error);
-            if (definition.cardId) {
-                document.getElementById(definition.cardId).style.display = 'none';
-            }
-            // Hide loading on error
-            if (definition.loadingId) {
-                const loadingEl = document.getElementById(definition.loadingId);
-                if (loadingEl) loadingEl.style.display = 'none';
-            }
-        }
+    } catch (e) {
+        console.error(`Error updating ${def.key}:`, e);
+        if (def.cardId) document.getElementById(def.cardId).style.display = 'none';
     }
+    setLoading(def.loadingId, false);
+}
 
-    function refreshMetric(key) {
-        const definition = METRIC_DEFINITIONS.find(item => item.key === key);
-        if (definition) {
-            updateMetric(definition, getSelectedHours());
-        }
-    }
+const refreshMetric = key => { const def = METRIC_DEFS.find(d => d.key === key); if (def) updateMetric(def, getSelectedHours()); };
+const updateAllCharts = () => Promise.all(METRIC_DEFS.map(d => updateMetric(d, getSelectedHours())));
 
-    async function runMetricUpdates() {
-        const hours = getSelectedHours();
-        await Promise.all(METRIC_DEFINITIONS.map(def => updateMetric(def, hours)));
-    }
+async function loadInterfaces() {
+    try {
+        const { success, interfaces = [] } = await fetchJson('/api/plugin/fpp-plugin-watcher/metrics/interface/list');
+        if (!success || !interfaces.length) return;
+        const select = document.getElementById('interfaceSelect');
+        const current = select.options.length === 1 ? getDefaultAdapter() : select.value;
+        select.innerHTML = interfaces.map(i => `<option value="${escapeHtml(i)}">${escapeHtml(i)}</option>`).join('');
+        select.value = interfaces.includes(current) ? current : interfaces.includes(getDefaultAdapter()) ? getDefaultAdapter() : interfaces[0];
+    } catch (e) { console.error('Error loading interfaces:', e); }
+}
 
-    // Load available network interfaces
-    async function loadInterfaces() {
-        try {
-            const response = await fetch('/api/plugin/fpp-plugin-watcher/metrics/interface/list');
-            const data = await response.json();
+async function loadAllMetrics() {
+    if (isRefreshing) return;
+    isRefreshing = true;
+    const btn = document.querySelector('.refreshButton i');
+    if (btn) btn.style.animation = 'spin 1s linear infinite';
+    try {
+        loadInterfaces();
+        loadSystemStatus();
+        await updateAllCharts();
+        updateLastUpdateTime();
+    } catch (e) { console.error('Error loading metrics:', e); }
+    if (btn) btn.style.animation = '';
+    isRefreshing = false;
+}
 
-            if (data.success && data.interfaces && data.interfaces.length > 0) {
-                const select = document.getElementById('interfaceSelect');
-                const isInitialLoad = (select.options.length === 1);
-                const currentSelection = isInitialLoad ? getDefaultAdapter() : select.value;
-
-                select.innerHTML = '';
-                data.interfaces.forEach(iface => {
-                    const option = document.createElement('option');
-                    option.value = iface;
-                    option.textContent = iface;
-                    select.appendChild(option);
-                });
-
-                if (currentSelection && data.interfaces.includes(currentSelection)) {
-                    select.value = currentSelection;
-                } else if (data.interfaces.includes(getDefaultAdapter())) {
-                    select.value = getDefaultAdapter();
-                } else {
-                    select.value = data.interfaces[0];
-                }
-            }
-        } catch (error) {
-            console.error('Error loading interfaces:', error);
-        }
-    }
-
-    // Load all metrics
-    async function loadAllMetrics() {
-        if (isRefreshing) return;
-        isRefreshing = true;
-
-        try {
-            const refreshBtn = document.querySelector('.refreshButton i');
-            if (refreshBtn) {
-                refreshBtn.style.animation = 'spin 1s linear infinite';
-            }
-
-            // Start these in parallel - don't wait for interfaces before loading metrics
-            loadInterfaces();
-            loadSystemStatus();
-            // runMetricUpdates uses Promise.all internally, so charts update progressively
-            await runMetricUpdates();
-
-            if (refreshBtn) {
-                refreshBtn.style.animation = '';
-            }
-        } catch (error) {
-            console.error('Error loading metrics:', error);
-        } finally {
-            isRefreshing = false;
-        }
-    }
-
-    // Update all charts (called from time range selector)
-    async function updateAllCharts() {
-        await runMetricUpdates();
-    }
-
-    // Auto-refresh every 30 seconds
-    setInterval(() => {
-        if (!isRefreshing) {
-            loadAllMetrics();
-        }
-    }, 30000);
-
-    // Load data on page load
-    document.addEventListener('DOMContentLoaded', function() {
-        loadAllMetrics();
-    });
+setInterval(() => { if (!isRefreshing) loadAllMetrics(); }, 30000);
+document.addEventListener('DOMContentLoaded', loadAllMetrics);
 </script>
