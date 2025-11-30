@@ -237,8 +237,11 @@ const METRIC_DEFS = [
         prepare: p => {
             if (!p?.success || !p.data?.length || !p.zones?.length) return { hidden: true };
             const colorKeys = ['coral', 'blue', 'yellow', 'teal', 'indigo', 'orange', 'green', 'pink'];
-            return { datasets: p.zones.map((z, i) => createDataset(z, mapChartData(p, z), colorKeys[i % colorKeys.length], { fill: false })),
-                opts: { yLabel: 'Temperature (°C)', yTickFormatter: v => v.toFixed(0) + '°C', tooltipLabel: c => c.dataset.label + ': ' + c.parsed.y.toFixed(1) + '°C' } }; } },
+            const toF = c => c * 9/5 + 32;
+            const unit = useFahrenheit ? '°F' : '°C';
+            const convertData = (response, key) => mapChartData(response, key).map(d => ({ x: d.x, y: useFahrenheit ? toF(d.y) : d.y }));
+            return { datasets: p.zones.map((z, i) => createDataset(z, convertData(p, z), colorKeys[i % colorKeys.length], { fill: false })),
+                opts: { yLabel: `Temperature (${unit})`, yTickFormatter: v => v.toFixed(0) + unit, tooltipLabel: c => c.dataset.label + ': ' + c.parsed.y.toFixed(1) + unit } }; } },
     { key: 'wireless', canvasId: 'wirelessChart', cardId: 'wirelessCard', loadingId: 'wirelessLoading',
         url: h => `/api/plugin/fpp-plugin-watcher/metrics/wireless?hours=${h}`,
         prepare: p => {
@@ -254,7 +257,8 @@ const METRIC_DEFS = [
 ];
 
 async function updateMetric(def, hours) {
-    setLoading(def.loadingId, true);
+    const isInitialLoad = !charts[def.key];
+    if (isInitialLoad) setLoading(def.loadingId, true);
     try {
         const prepared = def.prepare(await fetchJson(def.url(hours)));
         if (!prepared || prepared.hidden) {
@@ -267,7 +271,7 @@ async function updateMetric(def, hours) {
         console.error(`Error updating ${def.key}:`, e);
         if (def.cardId) document.getElementById(def.cardId).style.display = 'none';
     }
-    setLoading(def.loadingId, false);
+    if (isInitialLoad) setLoading(def.loadingId, false);
 }
 
 const refreshMetric = key => { const def = METRIC_DEFS.find(d => d.key === key); if (def) updateMetric(def, getSelectedHours()); };
@@ -291,7 +295,7 @@ async function loadAllMetrics() {
     if (btn) btn.style.animation = 'spin 1s linear infinite';
     try {
         loadInterfaces();
-        loadSystemStatus();
+        await loadSystemStatus();
         await updateAllCharts();
         updateLastUpdateTime();
     } catch (e) { console.error('Error loading metrics:', e); }

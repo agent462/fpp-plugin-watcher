@@ -603,16 +603,23 @@ function getThermalMetrics($hoursBack = 24) {
         ];
     }
 
-    // Format data with rounded temperatures
+    // Format data with rounded temperatures, filtering out entries with all null values
     $formattedData = [];
     foreach ($result['data'] as $entry) {
         $dataPoint = ['timestamp' => $entry['timestamp']];
+        $hasValue = false;
         foreach ($zones as $zone) {
-            $dataPoint[$zone] = isset($entry[$zone]) && $entry[$zone] !== null
-                ? round($entry[$zone], 2)
-                : null;
+            if (isset($entry[$zone]) && $entry[$zone] !== null) {
+                $dataPoint[$zone] = round($entry[$zone], 2);
+                $hasValue = true;
+            } else {
+                $dataPoint[$zone] = null;
+            }
         }
-        $formattedData[] = $dataPoint;
+        // Only include entries that have at least one valid zone value
+        if ($hasValue) {
+            $formattedData[] = $dataPoint;
+        }
     }
 
     return [
@@ -680,16 +687,23 @@ function getWirelessMetrics($hoursBack = 24) {
         }
     }
 
-    // Format data with rounded values
+    // Format data with rounded values, filtering out entries with all null values
     $formattedData = [];
     foreach ($result['data'] as $entry) {
         $dataPoint = ['timestamp' => $entry['timestamp']];
+        $hasValue = false;
         foreach ($result['sources'] as $source) {
-            $dataPoint[$source] = isset($entry[$source]) && $entry[$source] !== null
-                ? round($entry[$source], 2)
-                : null;
+            if (isset($entry[$source]) && $entry[$source] !== null) {
+                $dataPoint[$source] = round($entry[$source], 2);
+                $hasValue = true;
+            } else {
+                $dataPoint[$source] = null;
+            }
         }
-        $formattedData[] = $dataPoint;
+        // Only include entries that have at least one valid source value
+        if ($hasValue) {
+            $formattedData[] = $dataPoint;
+        }
     }
 
     return [
