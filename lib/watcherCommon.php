@@ -12,6 +12,7 @@ define("WATCHERCONFIGFILELOCATION", $settings['configDirectory']."/plugin.".WATC
 define("WATCHERLOGFILE", $settings['logDirectory']."/".WATCHERPLUGINNAME.".log");
 define("WATCHERPINGMETRICSFILE", $settings['logDirectory']."/".WATCHERPLUGINNAME."-ping-metrics.log");
 define("WATCHERMULTISYNCPINGMETRICSFILE", $settings['logDirectory']."/".WATCHERPLUGINNAME."-multisync-ping-metrics.log");
+define("WATCHERRESETSTATEFILE", $settings['logDirectory']."/".WATCHERPLUGINNAME."-reset-state.json");
 define("WATCHERFPPUSER", 'fpp');
 define("WATCHERFPPGROUP", 'fpp');
 define("WATCHERDEFAULTSETTINGS",
@@ -390,5 +391,72 @@ function fetchJsonUrl($url, $timeout = 10, $headers = []) {
     }
 
     return json_decode($response, true);
+}
+
+/**
+ * Read the network adapter reset state
+ * Returns state array or null if no state file exists
+ */
+function readResetState() {
+    if (!file_exists(WATCHERRESETSTATEFILE)) {
+        return null;
+    }
+
+    $content = @file_get_contents(WATCHERRESETSTATEFILE);
+    if ($content === false) {
+        return null;
+    }
+
+    $state = json_decode($content, true);
+    return is_array($state) ? $state : null;
+}
+
+/**
+ * Write the network adapter reset state
+ */
+function writeResetState($adapter, $reason = 'Max failures reached') {
+    $state = [
+        'hasResetAdapter' => true,
+        'resetTimestamp' => time(),
+        'adapter' => $adapter,
+        'reason' => $reason
+    ];
+
+    $result = @file_put_contents(WATCHERRESETSTATEFILE, json_encode($state, JSON_PRETTY_PRINT));
+    if ($result !== false) {
+        ensureFppOwnership(WATCHERRESETSTATEFILE);
+    }
+
+    return $result !== false;
+}
+
+/**
+ * Clear the network adapter reset state
+ */
+function clearResetState() {
+    if (file_exists(WATCHERRESETSTATEFILE)) {
+        return @unlink(WATCHERRESETSTATEFILE);
+    }
+    return true;
+}
+
+/**
+ * Restart the connectivity check daemon
+ * Kills existing process and starts a new one
+ */
+function restartConnectivityDaemon() {
+    // Kill existing connectivity check process
+    exec("pkill -f 'connectivityCheck.php'", $output, $returnVar);
+
+    // Small delay to ensure process is terminated
+    usleep(500000); // 0.5 seconds
+
+    // Start new daemon in background
+    $cmd = '/usr/bin/php ' . WATCHERPLUGINDIR . 'connectivityCheck.php > /dev/null 2>&1 &';
+    exec($cmd, $output, $returnVar);
+
+    logMessage("Connectivity daemon restarted");
+
+    return true;
 }
 ?>

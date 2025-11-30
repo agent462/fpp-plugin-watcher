@@ -235,6 +235,19 @@ function getEndpointsfpppluginwatcher() {
         'callback' => 'fpppluginWatcherRemoteFPPUpgrade');
     array_push($result, $ep);
 
+    // Connectivity state endpoints
+    $ep = array(
+        'method' => 'GET',
+        'endpoint' => 'connectivity/state',
+        'callback' => 'fpppluginWatcherConnectivityState');
+    array_push($result, $ep);
+
+    $ep = array(
+        'method' => 'POST',
+        'endpoint' => 'connectivity/state/clear',
+        'callback' => 'fpppluginWatcherConnectivityStateClear');
+    array_push($result, $ep);
+
     return $result;
 }
 
@@ -903,5 +916,53 @@ function fpppluginWatcherRemoteFPPUpgrade() {
     }
 
     streamRemoteFPPUpgrade(trim($input['host']));
+}
+
+// GET /api/plugin/fpp-plugin-watcher/connectivity/state
+// Returns the current connectivity check reset state
+function fpppluginWatcherConnectivityState() {
+    $state = readResetState();
+
+    if ($state === null) {
+        /** @disregard P1010 */
+        return json([
+            'success' => true,
+            'hasResetAdapter' => false,
+            'message' => 'No reset has occurred'
+        ]);
+    }
+
+    /** @disregard P1010 */
+    return json([
+        'success' => true,
+        'hasResetAdapter' => true,
+        'resetTimestamp' => $state['resetTimestamp'] ?? null,
+        'resetTime' => isset($state['resetTimestamp']) ? date('Y-m-d H:i:s', $state['resetTimestamp']) : null,
+        'adapter' => $state['adapter'] ?? null,
+        'reason' => $state['reason'] ?? null
+    ]);
+}
+
+// POST /api/plugin/fpp-plugin-watcher/connectivity/state/clear
+// Clears the reset state and restarts the connectivity daemon
+function fpppluginWatcherConnectivityStateClear() {
+    $cleared = clearResetState();
+
+    if (!$cleared) {
+        /** @disregard P1010 */
+        return json([
+            'success' => false,
+            'error' => 'Failed to clear reset state'
+        ]);
+    }
+
+    logMessage("Reset state cleared via API, restarting connectivity daemon");
+    restartConnectivityDaemon();
+
+    /** @disregard P1010 */
+    return json([
+        'success' => true,
+        'message' => 'Reset state cleared and connectivity daemon restarted'
+    ]);
 }
 ?>

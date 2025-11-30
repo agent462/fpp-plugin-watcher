@@ -128,6 +128,9 @@ $gatewayInputValue = ($gatewaySuggestion && !$gatewayAlreadyConfigured) ? $gatew
 // Detect if this FPP instance is in player mode (for multisync metrics feature)
 $isPlayerMode = isPlayerMode();
 
+// Check for connectivity reset state
+$resetState = readResetState();
+
 // Count remote systems for display
 $remoteSystemCount = 0;
 if ($isPlayerMode) {
@@ -147,6 +150,29 @@ if ($isPlayerMode) {
         <?php if ($statusMessage): ?>
         <div class="statusMessage <?php echo htmlspecialchars($statusType); ?>">
             <?php echo htmlspecialchars($statusMessage); ?>
+        </div>
+        <?php endif; ?>
+
+        <?php if ($resetState && !empty($resetState['hasResetAdapter'])): ?>
+        <div class="settingsPanel" style="background: #fff3cd; border: 1px solid #ffc107; margin-bottom: 1.5rem;">
+            <div class="panelTitle" style="color: #856404;">
+                <i class="fas fa-exclamation-triangle"></i> Network Adapter Reset Occurred
+            </div>
+            <div class="row settingRow">
+                <div class="col-12">
+                    <p style="margin-bottom: 0.5rem;">
+                        The connectivity check daemon reset the network adapter <strong><?php echo htmlspecialchars($resetState['adapter'] ?? 'unknown'); ?></strong>
+                        on <strong><?php echo htmlspecialchars(date('Y-m-d H:i:s', $resetState['resetTimestamp'] ?? 0)); ?></strong>
+                        and has stopped monitoring to prevent a reset loop.
+                    </p>
+                    <p style="margin-bottom: 1rem; color: #666;">
+                        If your network is now stable, click the button below to clear this state and restart the connectivity daemon.
+                    </p>
+                    <button type="button" class="buttons btn-warning" id="clearResetStateBtn" onclick="clearResetState()">
+                        <i class="fas fa-redo"></i> Clear State &amp; Restart Daemon
+                    </button>
+                </div>
+            </div>
         </div>
         <?php endif; ?>
 
@@ -510,4 +536,34 @@ if ($isPlayerMode) {
                 }
             });
         });
+
+        // Clear reset state and restart daemon
+        async function clearResetState() {
+            const btn = document.getElementById('clearResetStateBtn');
+            const originalHtml = btn.innerHTML;
+            btn.disabled = true;
+            btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Clearing...';
+
+            try {
+                const response = await fetch('/api/plugin/fpp-plugin-watcher/connectivity/state/clear', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' }
+                });
+
+                const result = await response.json();
+
+                if (result.success) {
+                    // Reload page to reflect new state
+                    window.location.reload();
+                } else {
+                    alert('Failed to clear reset state: ' + (result.error || 'Unknown error'));
+                    btn.disabled = false;
+                    btn.innerHTML = originalHtml;
+                }
+            } catch (error) {
+                alert('Error clearing reset state: ' + error.message);
+                btn.disabled = false;
+                btn.innerHTML = originalHtml;
+            }
+        }
     </script>

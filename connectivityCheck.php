@@ -202,8 +202,15 @@ if (!$config['connectivityCheckEnabled']) {
 
 // Main monitoring loop
 $failureCount = 0;
-$hasResetAdapter = false;
 $lastPingStats = [];
+
+// Check for existing reset state from previous runs
+$resetState = readResetState();
+$hasResetAdapter = ($resetState !== null && !empty($resetState['hasResetAdapter']));
+if ($hasResetAdapter) {
+    $resetTime = date('Y-m-d H:i:s', $resetState['resetTimestamp'] ?? 0);
+    logMessage("Previous adapter reset detected from $resetTime - will exit if max failures reached again");
+}
 $lastRotationCheck = 0; // Track when rotation was last checked
 $lastRollupCheck = 0; // Track when rollup was last processed
 
@@ -286,6 +293,7 @@ while (true) {
             logMessage("Maximum failures reached. Resetting network adapter...");
             resetNetworkAdapter($actualNetworkAdapter);
             $hasResetAdapter = true;
+            writeResetState($actualNetworkAdapter, 'Max failures reached');
             $failureCount = 0;
             sleep(10);
         } elseif ($failureCount >= $config['maxFailures'] && $hasResetAdapter) {
