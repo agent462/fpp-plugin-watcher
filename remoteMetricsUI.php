@@ -25,8 +25,8 @@ if ($access['show']) renderCommonJS();
     .metricValue { font-size: 1.5rem; font-weight: 600; color: #212529; }
     .metricValue.warning { color: #ffc107; }
     .metricValue.danger { color: #dc3545; }
-    .chartsContainer { display: grid; grid-template-columns: repeat(auto-fit, minmax(400px, 1fr)); gap: 1rem; margin-top: 1rem; }
-    .chartWrapper { background: #f8f9fa; border-radius: 6px; padding: 1rem; }
+    .chartsContainer { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(400px, 100%), 1fr)); gap: 1rem; margin-top: 1rem; }
+    .chartWrapper { background: #f8f9fa; border-radius: 6px; padding: 1rem; overflow: hidden; }
     .miniChartTitle { font-size: 0.875rem; font-weight: 600; color: #495057; margin-bottom: 0.5rem; }
     .noDataMessage { text-align: center; color: #6c757d; padding: 2rem; }
     .summaryCards { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 1rem; margin-bottom: 2rem; }

@@ -1,15 +1,7 @@
-<!DOCTYPE html>
-<html>
-<head>
-    <meta charset="utf-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Watcher - Settings</title>
     <link rel="stylesheet" href="/css/fpp-bootstrap/dist-new/fpp-bootstrap-5-3.css">
     <link rel="stylesheet" href="/css/fpp.css">
     <link rel="stylesheet" href="/plugin.php?plugin=fpp-plugin-watcher&file=css/configUI.css&nopage=1">
     <script src="/plugin.php?plugin=fpp-plugin-watcher&file=js/commonUI.js&nopage=1"></script>
-</head>
-<body>
 
 <?php
 // Include FPP common functions and configuration
@@ -519,5 +511,3 @@ if ($isPlayerMode) {
             });
         });
     </script>
-</body>
-</html>
