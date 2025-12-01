@@ -371,8 +371,12 @@ async function processBulkOperation(hostsArray, operationFn, idPrefix, progressE
         const results = await Promise.allSettled(hostsArray.map(async (item) => {
             const address = Array.isArray(item) ? item[0] : item;
             const statusEl = document.getElementById(`${idPrefix}-status-${escapeId(address)}`);
+            const updateStatus = (icon, text, className = 'in-progress') => {
+                statusEl.className = `host-status ${className}`;
+                statusEl.innerHTML = `<i class="fas fa-${icon}"></i> ${text}`;
+            };
             try {
-                await operationFn(item);
+                await operationFn(item, updateStatus);
                 statusEl.className = 'host-status success';
                 statusEl.innerHTML = '<i class="fas fa-check"></i> Done';
                 return { success: true };
@@ -393,9 +397,13 @@ async function processBulkOperation(hostsArray, operationFn, idPrefix, progressE
             const statusEl = document.getElementById(`${idPrefix}-status-${escapeId(address)}`);
             statusEl.className = 'host-status in-progress';
             statusEl.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Processing...';
+            const updateStatus = (icon, text, className = 'in-progress') => {
+                statusEl.className = `host-status ${className}`;
+                statusEl.innerHTML = `<i class="fas fa-${icon}"></i> ${text}`;
+            };
 
             try {
-                await operationFn(item);
+                await operationFn(item, updateStatus);
                 statusEl.className = 'host-status success';
                 statusEl.innerHTML = '<i class="fas fa-check"></i> Done';
                 completed++;
@@ -923,16 +931,21 @@ const bulkConfig = {
         title: '<i class="fas fa-arrow-circle-up" style="color: #28a745;"></i> Upgrading Watcher',
         getHosts: () => hostsWithWatcherUpdates,
         parallel: true,
-        operation: async ([address]) => {
+        operation: async ([address], updateStatus) => {
+            updateStatus('spinner fa-spin', 'Updating...');
             const response = await fetch('/api/plugin/fpp-plugin-watcher/remote/upgrade', {
                 method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ host: address, plugin: 'fpp-plugin-watcher' })
             });
             const data = await response.json();
             if (!data.success) throw new Error(data.error);
-            // Restart FPPD after Watcher upgrade
+
+            updateStatus('spinner fa-spin', 'Restarting FPPD...');
             await fetch('/api/plugin/fpp-plugin-watcher/remote/restart', {
                 method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ host: address })
             });
+
+            updateStatus('hourglass-half', 'Waiting...');
+            await new Promise(resolve => setTimeout(resolve, 2000));
         },
         refreshDelay: 3000
     },
