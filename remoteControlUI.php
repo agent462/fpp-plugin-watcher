@@ -9,20 +9,6 @@ $access = checkDashboardAccess($config, $localSystem, 'controlUIEnabled');
 $remoteSystems = $access['show'] ? getMultiSyncRemoteSystems() : [];
 $localHostname = gethostname() ?: 'localhost';
 
-// Get primary IP address from FPP network API
-$localIP = '127.0.0.1';
-$networkInterfaces = apiCall('GET', 'http://127.0.0.1/api/network/interface', [], true, 5) ?: [];
-foreach ($networkInterfaces as $iface) {
-    if (isset($iface['operstate']) && $iface['operstate'] === 'UP' && !empty($iface['addr_info'])) {
-        foreach ($iface['addr_info'] as $addr) {
-            if (isset($addr['family']) && $addr['family'] === 'inet' && !empty($addr['local'])) {
-                $localIP = $addr['local'];
-                break 2;
-            }
-        }
-    }
-}
-
 renderCSSIncludes(false);
 ?>
 <style>
@@ -76,6 +62,7 @@ renderCSSIncludes(false);
     .infoLabel { font-size: 0.7rem; color: #6c757d; text-transform: uppercase; font-weight: 500; margin-bottom: 0.15rem; }
     .infoValue { font-size: 0.9rem; font-weight: 500; color: #212529; }
     .version-update { font-size: 0.75rem; color: #007bff; font-weight: normal; }
+    .version-major { font-size: 0.75rem; color: #856404; font-weight: normal; cursor: help; }
     .controlActions { display: flex; flex-direction: column; gap: 1.25rem; }
     .actionRow { display: flex; align-items: center; justify-content: space-between; gap: 0.75rem; }
     .actionLabel { font-size: 0.85rem; color: #495057; font-weight: 500; }
@@ -166,9 +153,41 @@ renderCSSIncludes(false);
     .status-indicator--low-storage { background: #fff3cd; color: #856404; }
     .status-indicator--high-cpu { background: #fff3cd; color: #856404; }
     .status-indicator--low-memory { background: #fff3cd; color: #856404; }
+    .status-indicator--major-upgrade { background: #fff3cd; color: #856404; cursor: help; }
     /* Localhost card styling */
     .controlCard.localhost .cardHeader { background: #2c3e50; }
     .controlCard.localhost .hostname::before { content: '\f015'; font-family: 'Font Awesome 5 Free'; font-weight: 900; margin-right: 0.5rem; }
+    /* FPP Upgrade Accordion */
+    .fpp-upgrade-summary { background: #f8f9fa; border-radius: 6px; padding: 0.75rem 1rem; margin-bottom: 1rem; display: flex; justify-content: space-between; align-items: center; }
+    .fpp-upgrade-summary-text { font-size: 0.9rem; color: #495057; }
+    .fpp-upgrade-summary-text strong { color: #212529; }
+    .fpp-upgrade-actions { display: flex; gap: 0.5rem; }
+    .fpp-upgrade-actions button { background: none; border: 1px solid #dee2e6; border-radius: 4px; padding: 0.25rem 0.5rem; font-size: 0.75rem; cursor: pointer; color: #6c757d; }
+    .fpp-upgrade-actions button:hover { background: #e9ecef; }
+    .fpp-accordion { display: flex; flex-direction: column; gap: 0.5rem; max-height: 60vh; overflow-y: auto; padding-bottom: 0.5rem; }
+    .fpp-accordion-item { border: 1px solid #dee2e6; border-radius: 8px; overflow: visible; }
+    .fpp-accordion-header { display: flex; align-items: center; padding: 0.75rem 1rem; background: #f8f9fa; cursor: pointer; user-select: none; transition: background 0.2s; border-radius: 8px; }
+    .fpp-accordion-header:hover { background: #e9ecef; }
+    .fpp-accordion-item.expanded .fpp-accordion-header { background: #e9ecef; border-bottom: 1px solid #dee2e6; border-radius: 8px 8px 0 0; }
+    .fpp-accordion-toggle { width: 20px; color: #6c757d; transition: transform 0.2s; }
+    .fpp-accordion-item.expanded .fpp-accordion-toggle { transform: rotate(90deg); }
+    .fpp-accordion-info { flex: 1; margin-left: 0.5rem; }
+    .fpp-accordion-hostname { font-weight: 600; color: #212529; }
+    .fpp-accordion-address { font-size: 0.8rem; color: #6c757d; margin-left: 0.5rem; }
+    .fpp-accordion-version { font-size: 0.75rem; color: #007bff; margin-left: 0.75rem; }
+    .fpp-accordion-status { display: flex; align-items: center; gap: 0.4rem; font-size: 0.8rem; padding: 0.25rem 0.6rem; border-radius: 12px; }
+    .fpp-accordion-status.pending { background: #e9ecef; color: #6c757d; }
+    .fpp-accordion-status.upgrading { background: #cce5ff; color: #004085; }
+    .fpp-accordion-status.success { background: #d4edda; color: #155724; }
+    .fpp-accordion-status.error { background: #f8d7da; color: #721c24; }
+    .fpp-accordion-body { display: none; border: 1px solid #dee2e6; border-top: none; border-radius: 0 0 8px 8px; margin-top: -1px; }
+    .fpp-accordion-item.expanded .fpp-accordion-body { display: block; }
+    .fpp-accordion-log { height: 250px; overflow-y: auto; background: #1e1e1e; color: #d4d4d4; font-family: 'Consolas', 'Monaco', monospace; font-size: 0.75rem; padding: 0.75rem; white-space: pre-wrap; word-break: break-word; margin: 0.5rem; border-radius: 4px; }
+    .fpp-accordion-log:empty::before { content: 'Waiting to start...'; color: #6c757d; font-style: italic; }
+    .fpp-accordion-checkbox { margin-right: 0.5rem; width: 18px; height: 18px; cursor: pointer; accent-color: #007bff; }
+    .fpp-accordion-item.excluded { opacity: 0.5; }
+    .fpp-accordion-item.excluded .fpp-accordion-header { background: #f8f9fa; }
+    .fpp-upgrade-selection { display: flex; gap: 0.25rem; margin-right: 0.75rem; padding-right: 0.75rem; border-right: 1px solid #dee2e6; }
 </style>
 
 <div class="metricsContainer">
@@ -225,10 +244,10 @@ renderCSSIncludes(false);
     <div id="controlContent" style="display: none;">
         <div class="controlCardsGrid" id="controlCardsGrid">
             <!-- Localhost Card -->
-            <div class="controlCard localhost" id="card-localhost" data-address="<?php echo htmlspecialchars($localIP); ?>" data-hostname="<?php echo htmlspecialchars($localHostname); ?>">
+            <div class="controlCard localhost" id="card-localhost" data-address="localhost" data-hostname="<?php echo htmlspecialchars($localHostname); ?>">
                 <div class="cardHeader">
                     <div class="hostname"><?php echo htmlspecialchars($localHostname); ?></div>
-                    <div class="address"><a href="http://<?php echo htmlspecialchars($localIP); ?>/" target="_blank"><?php echo htmlspecialchars($localIP); ?> (This System)</a></div>
+                    <div class="address" id="localhost-address"><a href="/" target="_blank">(This System)</a></div>
                 </div>
                 <div class="cardBody">
                     <div class="infoGrid">
@@ -258,7 +277,7 @@ renderCSSIncludes(false);
                     <div class="actionRow">
                         <span class="actionLabel"><i class="fas fa-vial"></i> Test Mode (Local Channels)</span>
                         <label class="toggleSwitch">
-                            <input type="checkbox" id="testmode-localhost" onchange="toggleLocalTestMode(this.checked)" disabled>
+                            <input type="checkbox" id="testmode-localhost" onchange="toggleTestMode('localhost', this.checked)" disabled>
                             <span class="toggleSlider"></span>
                         </label>
                     </div>
@@ -278,13 +297,22 @@ renderCSSIncludes(false);
                         <div class="updates-header">
                             <i class="fas fa-arrow-circle-up"></i> Updates Available
                         </div>
-                        <div class="update-row update-row--fpp" id="fpp-update-row-localhost">
+                        <div class="update-row update-row--fpp" id="fpp-crossversion-row-localhost">
                             <div class="update-info">
-                                <span class="update-name"><i class="fas fa-code-branch"></i> FPP</span>
-                                <span class="update-version" id="fpp-update-version-localhost"></span>
+                                <span class="update-name"><i class="fas fa-arrow-up"></i> FPP Upgrade</span>
+                                <span class="update-version" id="fpp-crossversion-version-localhost"></span>
                             </div>
-                            <button class="banner-btn" onclick="upgradeFPPSingle('localhost')" id="fpp-upgrade-btn-localhost">
+                            <button class="banner-btn" onclick="upgradeFPPCrossVersion('localhost')" id="fpp-crossversion-btn-localhost">
                                 <i class="fas fa-download"></i> Upgrade
+                            </button>
+                        </div>
+                        <div class="update-row update-row--fpp" id="fpp-branch-row-localhost">
+                            <div class="update-info">
+                                <span class="update-name"><i class="fas fa-code-branch"></i> FPP Branch</span>
+                                <span class="update-version" id="fpp-branch-version-localhost"></span>
+                            </div>
+                            <button class="banner-btn" onclick="upgradeFPPBranch('localhost')" id="fpp-branch-btn-localhost">
+                                <i class="fas fa-sync"></i> Update
                             </button>
                         </div>
                         <div id="upgrades-list-localhost"></div>
@@ -344,7 +372,7 @@ renderCSSIncludes(false);
                                 <strong>Connectivity Check Failed</strong>
                                 <span class="connectivity-alert-details" id="connectivity-details-<?php echo htmlspecialchars($system['address']); ?>"></span>
                             </div>
-                            <button class="connectivity-alert-btn" onclick="clearRemoteResetState('<?php echo htmlspecialchars($system['address']); ?>')" id="connectivity-clear-btn-<?php echo htmlspecialchars($system['address']); ?>">
+                            <button class="connectivity-alert-btn" onclick="clearResetState('<?php echo htmlspecialchars($system['address']); ?>')" id="connectivity-clear-btn-<?php echo htmlspecialchars($system['address']); ?>">
                                 <i class="fas fa-redo"></i> Clear
                             </button>
                         </div>
@@ -353,13 +381,22 @@ renderCSSIncludes(false);
                         <div class="updates-header">
                             <i class="fas fa-arrow-circle-up"></i> Updates Available
                         </div>
-                        <div class="update-row update-row--fpp" id="fpp-update-row-<?php echo htmlspecialchars($system['address']); ?>">
+                        <div class="update-row update-row--fpp" id="fpp-crossversion-row-<?php echo htmlspecialchars($system['address']); ?>">
                             <div class="update-info">
-                                <span class="update-name"><i class="fas fa-code-branch"></i> FPP</span>
-                                <span class="update-version" id="fpp-update-version-<?php echo htmlspecialchars($system['address']); ?>"></span>
+                                <span class="update-name"><i class="fas fa-arrow-up"></i> FPP Upgrade</span>
+                                <span class="update-version" id="fpp-crossversion-version-<?php echo htmlspecialchars($system['address']); ?>"></span>
                             </div>
-                            <button class="banner-btn" onclick="upgradeFPPSingle('<?php echo htmlspecialchars($system['address']); ?>')" id="fpp-upgrade-btn-<?php echo htmlspecialchars($system['address']); ?>">
+                            <button class="banner-btn" onclick="upgradeFPPCrossVersion('<?php echo htmlspecialchars($system['address']); ?>')" id="fpp-crossversion-btn-<?php echo htmlspecialchars($system['address']); ?>">
                                 <i class="fas fa-download"></i> Upgrade
+                            </button>
+                        </div>
+                        <div class="update-row update-row--fpp" id="fpp-branch-row-<?php echo htmlspecialchars($system['address']); ?>">
+                            <div class="update-info">
+                                <span class="update-name"><i class="fas fa-code-branch"></i> FPP Branch</span>
+                                <span class="update-version" id="fpp-branch-version-<?php echo htmlspecialchars($system['address']); ?>"></span>
+                            </div>
+                            <button class="banner-btn" onclick="upgradeFPPBranch('<?php echo htmlspecialchars($system['address']); ?>')" id="fpp-branch-btn-<?php echo htmlspecialchars($system['address']); ?>">
+                                <i class="fas fa-sync"></i> Update
                             </button>
                         </div>
                         <div id="upgrades-list-<?php echo htmlspecialchars($system['address']); ?>"></div>
@@ -402,18 +439,27 @@ renderCSSIncludes(false);
         </div>
     </div>
 
-    <!-- FPP Upgrade Modal (with streaming output) -->
+    <!-- FPP Upgrade Modal (with parallel streaming output) -->
     <div id="fppUpgradeModal" class="watcher-modal watcher-modal--dark" style="display: none;">
         <div class="modal-content modal-content--lg">
             <h4><i class="fas fa-code-branch" style="color: #007bff;"></i> Upgrade FPP</h4>
-            <div class="host-selector">
-                <label for="fppUpgradeHostSelect">Select system to upgrade:</label>
-                <select id="fppUpgradeHostSelect"></select>
+            <div class="fpp-upgrade-summary" id="fppUpgradeSummary">
+                <div class="fpp-upgrade-summary-text">
+                    <strong id="fppUpgradeCount">0</strong> systems ready to upgrade
+                </div>
+                <div class="fpp-upgrade-actions">
+                    <div class="fpp-upgrade-selection">
+                        <button onclick="fppSelectAll()"><i class="fas fa-check-square"></i> All</button>
+                        <button onclick="fppSelectNone()"><i class="fas fa-square"></i> None</button>
+                    </div>
+                    <button onclick="fppExpandAll()"><i class="fas fa-chevron-down"></i> Expand</button>
+                    <button onclick="fppCollapseAll()"><i class="fas fa-chevron-up"></i> Collapse</button>
+                </div>
             </div>
-            <div class="stream-output" id="fppUpgradeOutput">Select a system and click "Start Upgrade" to begin...</div>
+            <div class="fpp-accordion" id="fppAccordion"></div>
             <div class="modal-buttons modal-buttons--center">
-                <button class="btn btn--fixed btn-primary" id="fppUpgradeStartBtn" onclick="startFPPUpgrade()">
-                    <i class="fas fa-play"></i> Start Upgrade
+                <button class="btn btn--fixed btn-primary" id="fppUpgradeStartBtn" onclick="startAllFPPUpgrades()">
+                    <i class="fas fa-play"></i> Start All
                 </button>
                 <button class="btn btn--fixed btn-muted" id="fppUpgradeCloseBtn" onclick="closeFPPUpgradeModal()">Close</button>
             </div>
@@ -437,9 +483,64 @@ let hostsNeedingRestart = new Map();
 let hostsWithFPPUpdates = new Map();
 let hostsWithConnectivityFailure = new Map();
 let currentBulkType = null;
-let fppUpgradeAbortController = null;
 let syncCheckInterval = null;
+let latestFPPRelease = null; // Cached latest FPP release from GitHub
 const SYNC_THRESHOLD_SECONDS = 3; // hosts are out of sync if time differs by more than this
+
+// =============================================================================
+// FPP Release Version Check
+// =============================================================================
+
+async function fetchLatestFPPRelease() {
+    try {
+        const response = await fetch('/api/plugin/fpp-plugin-watcher/fpp/release');
+        if (!response.ok) return null;
+        const data = await response.json();
+        if (data.success) {
+            latestFPPRelease = data;
+            return data;
+        }
+    } catch (e) {
+        console.log('Failed to fetch latest FPP release:', e);
+    }
+    return null;
+}
+
+function parseFPPVersion(version) {
+    if (!version) return [0, 0];
+    const v = version.replace(/^v/, '');
+    const match = v.match(/^(\d+)\.(\d+)/);
+    return match ? [parseInt(match[1]), parseInt(match[2])] : [0, 0];
+}
+
+function compareFPPVersions(current, latest) {
+    const [curMajor, curMinor] = parseFPPVersion(current);
+    const [latMajor, latMinor] = parseFPPVersion(latest);
+    if (curMajor < latMajor) return -1;
+    if (curMajor > latMajor) return 1;
+    if (curMinor < latMinor) return -1;
+    if (curMinor > latMinor) return 1;
+    return 0;
+}
+
+function checkCrossVersionUpgrade(branch) {
+    if (!latestFPPRelease || !latestFPPRelease.latestVersion) return null;
+    const comparison = compareFPPVersions(branch, latestFPPRelease.latestVersion);
+    if (comparison < 0) {
+        // Check if this is a major version jump (e.g., v9.x to v10.x)
+        const [curMajor] = parseFPPVersion(branch);
+        const [latMajor] = parseFPPVersion(latestFPPRelease.latestVersion);
+        const isMajorUpgrade = latMajor > curMajor;
+
+        return {
+            available: true,
+            currentVersion: branch ? branch.replace(/^v/, '') : 'unknown',
+            latestVersion: latestFPPRelease.latestVersion,
+            isMajorUpgrade: isMajorUpgrade
+        };
+    }
+    return null;
+}
 
 // =============================================================================
 // Helper Functions
@@ -447,6 +548,10 @@ const SYNC_THRESHOLD_SECONDS = 3; // hosts are out of sync if time differs by mo
 
 function escapeId(address) {
     return address.replace(/\./g, '-');
+}
+
+function getHostname(address) {
+    return address === 'localhost' ? '<?php echo htmlspecialchars($localHostname); ?>' : (remoteHostnames[address] || address);
 }
 
 function updateBulkButton(buttonId, countId, map, minCount = 1) {
@@ -470,6 +575,43 @@ function buildHostListHtml(hostsMap, idPrefix, extraInfoFn = null) {
             </div>`;
     });
     return html;
+}
+
+// Parse system status response for utilization and IP
+function parseSystemStatus(sysStatus) {
+    const result = { fppLocalVersion: null, fppRemoteVersion: null, diskUtilization: null, cpuUtilization: null, memoryUtilization: null, ipAddress: null };
+    if (!sysStatus?.advancedView) return result;
+
+    result.fppLocalVersion = sysStatus.advancedView.LocalGitVersion || null;
+    result.fppRemoteVersion = sysStatus.advancedView.RemoteGitVersion || null;
+
+    // Get primary IP address
+    const ips = sysStatus.advancedView.IPs;
+    if (ips && typeof ips === 'object') {
+        // IPs is an object like { "eth0": "192.168.1.100", "wlan0": "192.168.1.101" }
+        // Prefer eth0, then wlan0, then first available
+        result.ipAddress = ips.eth0 || ips.wlan0 || Object.values(ips)[0] || null;
+    }
+
+    const utilization = sysStatus.advancedView.Utilization;
+    if (utilization) {
+        const diskInfo = utilization.Disk?.Root;
+        if (diskInfo?.Total > 0) {
+            result.diskUtilization = Math.round(((diskInfo.Total - diskInfo.Free) / diskInfo.Total) * 100);
+        }
+        if (typeof utilization.CPU === 'number') result.cpuUtilization = Math.round(utilization.CPU);
+        if (typeof utilization.Memory === 'number') result.memoryUtilization = Math.round(utilization.Memory);
+    }
+    return result;
+}
+
+// Expand FPP accordion item
+function expandFPPItem(address) {
+    const state = fppUpgradeStates.get(address);
+    if (state) {
+        state.expanded = true;
+        document.getElementById(`fpp-item-${escapeId(address)}`)?.classList.add('expanded');
+    }
 }
 
 async function processBulkOperation(hostsArray, operationFn, idPrefix, progressEl, parallel = false) {
@@ -633,104 +775,53 @@ function stopSyncChecking() {
 // Status Fetching
 // =============================================================================
 
-async function fetchRemoteStatus(address) {
+async function fetchSystemStatus(address) {
+    const isLocal = address === 'localhost';
     try {
-        const [statusResponse, versionResponse, updatesResponse, sysStatusResponse, connectivityResponse] = await Promise.all([
-            fetch(`/api/plugin/fpp-plugin-watcher/remote/status?host=${encodeURIComponent(address)}`),
-            fetch(`http://${address}/api/plugin/fpp-plugin-watcher/version`).catch(() => null),
-            fetch(`/api/plugin/fpp-plugin-watcher/remote/plugins/updates?host=${encodeURIComponent(address)}`).catch(() => null),
-            fetch(`http://${address}/api/system/status`).catch(() => null),
-            fetch(`/api/plugin/fpp-plugin-watcher/remote/connectivity/state?host=${encodeURIComponent(address)}`).catch(() => null)
-        ]);
-
-        const data = await statusResponse.json();
-        if (!data.success) {
-            return { success: false, address, error: data.error || 'Failed to fetch status' };
-        }
-
-        let watcherVersion = null;
-        if (versionResponse?.ok) {
-            try { watcherVersion = (await versionResponse.json()).version || null; } catch (e) {}
-        }
-
-        let pluginUpdates = [];
-        if (updatesResponse?.ok) {
-            try {
-                const updatesData = await updatesResponse.json();
-                if (updatesData.success && updatesData.updatesAvailable) {
-                    pluginUpdates = updatesData.updatesAvailable;
-                }
-            } catch (e) {}
-        }
-
-        let fppLocalVersion = null, fppRemoteVersion = null, diskUtilization = null, cpuUtilization = null, memoryUtilization = null;
-        if (sysStatusResponse?.ok) {
-            try {
-                const sysStatus = await sysStatusResponse.json();
-                fppLocalVersion = sysStatus.advancedView?.LocalGitVersion || null;
-                fppRemoteVersion = sysStatus.advancedView?.RemoteGitVersion || null;
-                const utilization = sysStatus.advancedView?.Utilization;
-                if (utilization) {
-                    const diskInfo = utilization.Disk?.Root;
-                    if (diskInfo?.Total > 0) {
-                        diskUtilization = Math.round(((diskInfo.Total - diskInfo.Free) / diskInfo.Total) * 100);
-                    }
-                    if (typeof utilization.CPU === 'number') {
-                        cpuUtilization = Math.round(utilization.CPU);
-                    }
-                    if (typeof utilization.Memory === 'number') {
-                        memoryUtilization = Math.round(utilization.Memory);
-                    }
-                }
-            } catch (e) {}
-        }
-
-        let connectivityState = null;
-        if (connectivityResponse?.ok) {
-            try {
-                const connData = await connectivityResponse.json();
-                if (connData.success && connData.hasResetAdapter) {
-                    connectivityState = connData;
-                }
-            } catch (e) {}
-        }
-
-        return { success: true, address, status: data.status, testMode: data.testMode, watcherVersion, pluginUpdates, fppLocalVersion, fppRemoteVersion, connectivityState, diskUtilization, cpuUtilization, memoryUtilization };
-    } catch (error) {
-        return { success: false, address, error: error.message };
-    }
-}
-
-async function fetchLocalStatus() {
-    try {
-        const [statusResponse, versionResponse, updatesResponse, sysStatusResponse, connectivityResponse] = await Promise.all([
-            fetch('/api/fppd/status'),
-            fetch('/api/plugin/fpp-plugin-watcher/version').catch(() => null),
-            fetch('/api/plugin/fpp-plugin-watcher/plugins/updates').catch(() => null),
-            fetch('/api/system/status').catch(() => null),
-            fetch('/api/plugin/fpp-plugin-watcher/connectivity/state').catch(() => null)
-        ]);
-
-        if (!statusResponse.ok) {
-            return { success: false, address: 'localhost', error: 'Failed to fetch local status' };
-        }
-
-        const fppStatus = await statusResponse.json();
-        // Build status object matching remote format
-        const status = {
-            platform: fppStatus.platform || '--',
-            branch: fppStatus.branch || '--',
-            mode_name: fppStatus.mode_name || '--',
-            rebootFlag: fppStatus.rebootFlag || 0,
-            restartFlag: fppStatus.restartFlag || 0
+        // Build URLs based on local vs remote
+        const urls = isLocal ? {
+            status: '/api/fppd/status',
+            version: '/api/plugin/fpp-plugin-watcher/version',
+            updates: '/api/plugin/fpp-plugin-watcher/plugins/updates',
+            sysStatus: '/api/system/status',
+            connectivity: '/api/plugin/fpp-plugin-watcher/connectivity/state'
+        } : {
+            status: `/api/plugin/fpp-plugin-watcher/remote/status?host=${encodeURIComponent(address)}`,
+            version: `http://${address}/api/plugin/fpp-plugin-watcher/version`,
+            updates: `/api/plugin/fpp-plugin-watcher/remote/plugins/updates?host=${encodeURIComponent(address)}`,
+            sysStatus: `http://${address}/api/system/status`,
+            connectivity: `/api/plugin/fpp-plugin-watcher/remote/connectivity/state?host=${encodeURIComponent(address)}`
         };
 
-        // Get test mode status
-        let testMode = { enabled: 0 };
-        if (fppStatus.status_name === 'testing') {
-            testMode.enabled = 1;
+        const [statusResponse, versionResponse, updatesResponse, sysStatusResponse, connectivityResponse] = await Promise.all([
+            fetch(urls.status),
+            fetch(urls.version).catch(() => null),
+            fetch(urls.updates).catch(() => null),
+            fetch(urls.sysStatus).catch(() => null),
+            fetch(urls.connectivity).catch(() => null)
+        ]);
+
+        // Parse status (different format for local vs remote)
+        let status, testMode;
+        if (isLocal) {
+            if (!statusResponse.ok) return { success: false, address, error: 'Failed to fetch status' };
+            const fppStatus = await statusResponse.json();
+            status = {
+                platform: fppStatus.platform || '--',
+                branch: fppStatus.branch || '--',
+                mode_name: fppStatus.mode_name || '--',
+                rebootFlag: fppStatus.rebootFlag || 0,
+                restartFlag: fppStatus.restartFlag || 0
+            };
+            testMode = { enabled: fppStatus.status_name === 'testing' ? 1 : 0 };
+        } else {
+            const data = await statusResponse.json();
+            if (!data.success) return { success: false, address, error: data.error || 'Failed to fetch status' };
+            status = data.status;
+            testMode = data.testMode;
         }
 
+        // Parse optional responses
         let watcherVersion = null;
         if (versionResponse?.ok) {
             try { watcherVersion = (await versionResponse.json()).version || null; } catch (e) {}
@@ -740,47 +831,26 @@ async function fetchLocalStatus() {
         if (updatesResponse?.ok) {
             try {
                 const updatesData = await updatesResponse.json();
-                if (updatesData.success && updatesData.updatesAvailable) {
-                    pluginUpdates = updatesData.updatesAvailable;
-                }
+                if (updatesData.success && updatesData.updatesAvailable) pluginUpdates = updatesData.updatesAvailable;
             } catch (e) {}
         }
 
-        let fppLocalVersion = null, fppRemoteVersion = null, diskUtilization = null, cpuUtilization = null, memoryUtilization = null;
+        let sysInfo = { fppLocalVersion: null, fppRemoteVersion: null, diskUtilization: null, cpuUtilization: null, memoryUtilization: null, ipAddress: null };
         if (sysStatusResponse?.ok) {
-            try {
-                const sysStatus = await sysStatusResponse.json();
-                fppLocalVersion = sysStatus.advancedView?.LocalGitVersion || null;
-                fppRemoteVersion = sysStatus.advancedView?.RemoteGitVersion || null;
-                const utilization = sysStatus.advancedView?.Utilization;
-                if (utilization) {
-                    const diskInfo = utilization.Disk?.Root;
-                    if (diskInfo?.Total > 0) {
-                        diskUtilization = Math.round(((diskInfo.Total - diskInfo.Free) / diskInfo.Total) * 100);
-                    }
-                    if (typeof utilization.CPU === 'number') {
-                        cpuUtilization = Math.round(utilization.CPU);
-                    }
-                    if (typeof utilization.Memory === 'number') {
-                        memoryUtilization = Math.round(utilization.Memory);
-                    }
-                }
-            } catch (e) {}
+            try { sysInfo = parseSystemStatus(await sysStatusResponse.json()); } catch (e) {}
         }
 
         let connectivityState = null;
         if (connectivityResponse?.ok) {
             try {
                 const connData = await connectivityResponse.json();
-                if (connData.success && connData.hasResetAdapter) {
-                    connectivityState = connData;
-                }
+                if (connData.success && connData.hasResetAdapter) connectivityState = connData;
             } catch (e) {}
         }
 
-        return { success: true, address: 'localhost', status, testMode, watcherVersion, pluginUpdates, fppLocalVersion, fppRemoteVersion, connectivityState, diskUtilization, cpuUtilization, memoryUtilization };
+        return { success: true, address, status, testMode, watcherVersion, pluginUpdates, connectivityState, ...sysInfo };
     } catch (error) {
-        return { success: false, address: 'localhost', error: error.message };
+        return { success: false, address, error: error.message };
     }
 }
 
@@ -796,8 +866,11 @@ function updateCardUI(address, data) {
     const rebootBtn = document.getElementById(`reboot-btn-${address}`);
     const updatesContainer = document.getElementById(`updates-container-${address}`);
     const upgradesList = document.getElementById(`upgrades-list-${address}`);
-    const fppUpdateRow = document.getElementById(`fpp-update-row-${address}`);
-    const fppUpdateVersion = document.getElementById(`fpp-update-version-${address}`);
+    // Separate rows for cross-version and branch updates
+    const fppCrossVersionRow = document.getElementById(`fpp-crossversion-row-${address}`);
+    const fppCrossVersionVersion = document.getElementById(`fpp-crossversion-version-${address}`);
+    const fppBranchRow = document.getElementById(`fpp-branch-row-${address}`);
+    const fppBranchVersion = document.getElementById(`fpp-branch-version-${address}`);
 
     // Clear all status classes
     card.classList.remove('offline', 'status-ok', 'status-warning', 'status-restart', 'status-update', 'status-testing');
@@ -814,17 +887,33 @@ function updateCardUI(address, data) {
         restartBtn.disabled = true;
         rebootBtn.disabled = true;
         updatesContainer.classList.remove('visible');
-        fppUpdateRow.classList.remove('visible');
+        fppCrossVersionRow.classList.remove('visible');
+        fppBranchRow.classList.remove('visible');
         document.getElementById(`connectivity-alert-${address}`)?.classList.remove('visible');
         hostsWithConnectivityFailure.delete(address);
         updateBulkButton('connectivityFailBtn', 'connectivityFailCount', hostsWithConnectivityFailure);
         return;
     }
-    const { status, testMode, pluginUpdates = [], fppLocalVersion, fppRemoteVersion, connectivityState, diskUtilization, cpuUtilization, memoryUtilization } = data;
+    const { status, testMode, pluginUpdates = [], fppLocalVersion, fppRemoteVersion, connectivityState, diskUtilization, cpuUtilization, memoryUtilization, ipAddress } = data;
     const isTestMode = testMode.enabled === 1;
     const needsReboot = status.rebootFlag === 1;
     const needsRestart = status.restartFlag === 1;
-    const fppUpdateAvailable = fppLocalVersion && fppRemoteVersion && fppRemoteVersion !== 'Unknown' && fppRemoteVersion !== '' && fppLocalVersion !== fppRemoteVersion;
+
+    // Update localhost address display with actual IP
+    if (address === 'localhost' && ipAddress) {
+        const addrEl = document.getElementById('localhost-address');
+        if (addrEl) addrEl.innerHTML = `<a href="http://${ipAddress}/" target="_blank">${ipAddress} (This System)</a>`;
+    }
+
+    // Check for same-branch updates (git version differs)
+    const sameBranchUpdate = fppLocalVersion && fppRemoteVersion && fppRemoteVersion !== 'Unknown' && fppRemoteVersion !== '' && fppLocalVersion !== fppRemoteVersion;
+
+    // Check for cross-version upgrades (e.g., v9.2 -> v9.3)
+    const crossVersionUpgrade = checkCrossVersionUpgrade(status.branch);
+
+    // Combined: any FPP update available
+    const fppUpdateAvailable = sameBranchUpdate || (crossVersionUpgrade && crossVersionUpgrade.available);
+
     const hasConnectivityFailure = connectivityState && connectivityState.hasResetAdapter;
     const hasPluginUpdates = pluginUpdates.length > 0;
     const hasLowStorage = diskUtilization !== null && diskUtilization >= 90;
@@ -845,16 +934,41 @@ function updateCardUI(address, data) {
     if (hasLowMemory) indicators.push(`<span class="status-indicator status-indicator--low-memory"><span class="dot"></span>Low Memory (${memoryUtilization}%)</span>`);
     if (hasLowStorage) indicators.push(`<span class="status-indicator status-indicator--low-storage"><span class="dot"></span>Low Storage (${diskUtilization}%)</span>`);
     if (isTestMode) indicators.push('<span class="status-indicator status-indicator--testing"><span class="dot"></span>Test Mode</span>');
-    if (fppUpdateAvailable) indicators.push('<span class="status-indicator status-indicator--update"><span class="dot"></span>FPP Update</span>');
+    // Show both indicators when both updates are available
+    if (crossVersionUpgrade && crossVersionUpgrade.available) {
+        if (crossVersionUpgrade.isMajorUpgrade) {
+            // Major upgrade - show as info/warning, not actionable
+            indicators.push(`<span class="status-indicator status-indicator--major-upgrade" title="Major version upgrade requires OS re-image"><span class="dot"></span>FPP v${crossVersionUpgrade.latestVersion}</span>`);
+        } else {
+            indicators.push(`<span class="status-indicator status-indicator--update"><span class="dot"></span>FPP v${crossVersionUpgrade.latestVersion}</span>`);
+        }
+    }
+    if (sameBranchUpdate) {
+        const branchDisplay = status.branch ? status.branch.replace(/^v/, '') : '';
+        indicators.push(`<span class="status-indicator status-indicator--update"><span class="dot"></span>${branchDisplay} Update</span>`);
+    }
     if (needsReboot) indicators.push('<span class="status-indicator status-indicator--reboot"><span class="dot"></span>Reboot Req</span>');
     else if (needsRestart) indicators.push('<span class="status-indicator status-indicator--restart"><span class="dot"></span>Restart Req</span>');
     statusEl.innerHTML = '<div class="status-indicators">' + indicators.join('') + '</div>';
 
-    // Update info
+    // Update info - show version upgrade info (show both when both available)
     platformEl.textContent = status.platform || '--';
-    versionEl.innerHTML = fppUpdateAvailable
-        ? `${status.branch || '--'} <span class="version-update">(${fppLocalVersion} → ${fppRemoteVersion})</span>`
-        : status.branch || '--';
+    let versionHtml = status.branch || '--';
+    let versionNotes = [];
+    if (crossVersionUpgrade && crossVersionUpgrade.available) {
+        if (crossVersionUpgrade.isMajorUpgrade) {
+            versionNotes.push(`<span class="version-major" title="Major version upgrade requires OS re-image">v${crossVersionUpgrade.latestVersion} re-image</span>`);
+        } else {
+            versionNotes.push(`<span class="version-update">v${crossVersionUpgrade.latestVersion}</span>`);
+        }
+    }
+    if (sameBranchUpdate) {
+        versionNotes.push(`<span class="version-update">branch update</span>`);
+    }
+    if (versionNotes.length > 0) {
+        versionHtml += ` (${versionNotes.join(', ')})`;
+    }
+    versionEl.innerHTML = versionHtml;
     modeEl.textContent = status.mode_name || '--';
     watcherEl.textContent = data.watcherVersion || 'Not installed';
 
@@ -867,7 +981,7 @@ function updateCardUI(address, data) {
     // Track Watcher updates
     const watcherUpdate = pluginUpdates.find(p => p.repoName === 'fpp-plugin-watcher');
     if (watcherUpdate) {
-        hostsWithWatcherUpdates.set(address, { hostname: remoteHostnames[address] || address, installedVersion: watcherUpdate.installedVersion, latestVersion: watcherUpdate.latestVersion });
+        hostsWithWatcherUpdates.set(address, { hostname: getHostname(address), installedVersion: watcherUpdate.installedVersion, latestVersion: watcherUpdate.latestVersion });
     } else {
         hostsWithWatcherUpdates.delete(address);
     }
@@ -875,22 +989,53 @@ function updateCardUI(address, data) {
 
     // Track restart/reboot needed
     if (needsReboot) {
-        hostsNeedingRestart.set(address, { hostname: remoteHostnames[address] || address, type: 'reboot' });
+        hostsNeedingRestart.set(address, { hostname: getHostname(address), type: 'reboot' });
     } else if (needsRestart) {
-        hostsNeedingRestart.set(address, { hostname: remoteHostnames[address] || address, type: 'restart' });
+        hostsNeedingRestart.set(address, { hostname: getHostname(address), type: 'restart' });
     } else {
         hostsNeedingRestart.delete(address);
     }
     updateBulkButton('restartAllBtn', 'restartAllCount', hostsNeedingRestart);
 
-    // Track FPP updates
-    if (fppUpdateAvailable) {
-        hostsWithFPPUpdates.set(address, { hostname: remoteHostnames[address] || address, localVersion: fppLocalVersion, remoteVersion: fppRemoteVersion });
-        fppUpdateRow.classList.add('visible');
-        fppUpdateVersion.textContent = `${fppLocalVersion} → ${fppRemoteVersion}`;
+    // Track FPP updates (both same-branch and cross-version, but NOT major version upgrades)
+    // Major version upgrades (e.g., v9.x to v10.x) require OS re-image and cannot be done via upgrade
+    const isMajorUpgrade = crossVersionUpgrade && crossVersionUpgrade.available && crossVersionUpgrade.isMajorUpgrade;
+    const hasCrossVersionUpgrade = crossVersionUpgrade && crossVersionUpgrade.available && !isMajorUpgrade;
+
+    // Show/hide cross-version upgrade row
+    if (hasCrossVersionUpgrade) {
+        fppCrossVersionRow.classList.add('visible');
+        fppCrossVersionVersion.textContent = `v${crossVersionUpgrade.currentVersion} → v${crossVersionUpgrade.latestVersion}`;
+    } else {
+        fppCrossVersionRow.classList.remove('visible');
+    }
+
+    // Show/hide same-branch update row
+    if (sameBranchUpdate) {
+        const branchDisplay = status.branch ? status.branch.replace(/^v/, '') : '';
+        fppBranchRow.classList.add('visible');
+        fppBranchVersion.textContent = `${branchDisplay}: ${fppLocalVersion.substring(0, 7)} → ${fppRemoteVersion.substring(0, 7)}`;
+    } else {
+        fppBranchRow.classList.remove('visible');
+    }
+
+    // Track for bulk modal - prefer cross-version if available, otherwise branch update
+    if (hasCrossVersionUpgrade) {
+        hostsWithFPPUpdates.set(address, {
+            hostname: getHostname(address),
+            localVersion: crossVersionUpgrade.currentVersion,
+            remoteVersion: crossVersionUpgrade.latestVersion,
+            isCrossVersion: true
+        });
+    } else if (sameBranchUpdate) {
+        hostsWithFPPUpdates.set(address, {
+            hostname: getHostname(address),
+            localVersion: fppLocalVersion,
+            remoteVersion: fppRemoteVersion,
+            isCrossVersion: false
+        });
     } else {
         hostsWithFPPUpdates.delete(address);
-        fppUpdateRow.classList.remove('visible');
     }
     updateBulkButton('fppUpgradeAllBtn', 'fppUpgradeAllCount', hostsWithFPPUpdates);
 
@@ -900,7 +1045,7 @@ function updateCardUI(address, data) {
     if (hasConnectivityFailure) {
         const resetTime = connectivityState.resetTime || 'Unknown time';
         const adapter = connectivityState.adapter || 'Unknown';
-        hostsWithConnectivityFailure.set(address, { hostname: remoteHostnames[address] || address, resetTime, adapter });
+        hostsWithConnectivityFailure.set(address, { hostname: getHostname(address), resetTime, adapter });
         connectivityDetails.textContent = `Adapter ${adapter} reset at ${resetTime}`;
         connectivityAlert.classList.add('visible');
     } else {
@@ -950,10 +1095,13 @@ async function refreshAllStatus() {
     document.getElementById('controlContent').style.display = 'block';
 
     try {
+        // Fetch latest FPP release first (for cross-version upgrade detection)
+        await fetchLatestFPPRelease();
+
         await Promise.all([
-            fetchLocalStatus().then(result => updateCardUI('localhost', result)),
+            fetchSystemStatus('localhost').then(result => updateCardUI('localhost', result)),
             ...remoteAddresses.map(addr =>
-                fetchRemoteStatus(addr).then(result => updateCardUI(result.address, result))
+                fetchSystemStatus(addr).then(result => updateCardUI(result.address, result))
             ),
             updateSyncStatus()
         ]);
@@ -970,15 +1118,17 @@ async function refreshAllStatus() {
 // =============================================================================
 
 async function toggleTestMode(address, enable) {
+    const isLocal = address === 'localhost';
     const toggle = document.getElementById(`testmode-${address}`);
     toggle.disabled = true;
 
     try {
-        let requestData;
+        // Get channel range
+        let channelRange = "1-8388608";
         if (enable) {
-            let channelRange = "1-8388608";
             try {
-                const infoResponse = await fetch(`http://${address}/api/system/info`);
+                const infoUrl = isLocal ? '/api/system/info' : `http://${address}/api/system/info`;
+                const infoResponse = await fetch(infoUrl);
                 if (infoResponse.ok) {
                     const info = await infoResponse.json();
                     if (info.channelRanges) {
@@ -989,19 +1139,28 @@ async function toggleTestMode(address, enable) {
                     }
                 }
             } catch (e) {}
-            requestData = { host: address, command: "Test Start", multisyncCommand: false, multisyncHosts: "", args: ["1000", "RGB Cycle", channelRange, "R-G-B"] };
-        } else {
-            requestData = { host: address, command: "Test Stop", multisyncCommand: false, multisyncHosts: "", args: [] };
         }
 
-        const response = await fetch('/api/plugin/fpp-plugin-watcher/remote/command', {
-            method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(requestData)
-        });
-        const data = await response.json();
-        if (!data.success) throw new Error(data.error || 'Failed to toggle test mode');
+        const command = enable ? 'Test Start' : 'Test Stop';
+        const args = enable ? ["1000", "RGB Cycle", channelRange, "R-G-B"] : [];
+
+        if (isLocal) {
+            const response = await fetch('/api/command', {
+                method: 'POST', headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ command, args })
+            });
+            if (!response.ok) throw new Error('Failed to toggle test mode');
+        } else {
+            const response = await fetch('/api/plugin/fpp-plugin-watcher/remote/command', {
+                method: 'POST', headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ host: address, command, multisyncCommand: false, multisyncHosts: "", args })
+            });
+            const data = await response.json();
+            if (!data.success) throw new Error(data.error || 'Failed to toggle test mode');
+        }
 
         setTimeout(async () => {
-            const result = await fetchRemoteStatus(address);
+            const result = await fetchSystemStatus(address);
             updateCardUI(address, result);
         }, 500);
     } catch (error) {
@@ -1013,23 +1172,29 @@ async function toggleTestMode(address, enable) {
 }
 
 async function restartFppd(address) {
+    const isLocal = address === 'localhost';
     const btn = document.getElementById(`restart-btn-${address}`);
     const originalHtml = btn.innerHTML;
     btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Restarting...';
     btn.disabled = true;
 
     try {
-        const response = await fetch('/api/plugin/fpp-plugin-watcher/remote/restart', {
-            method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ host: address })
-        });
-        const data = await response.json();
-        if (!data.success) throw new Error(data.error || 'Failed to restart FPPD');
+        if (isLocal) {
+            const response = await fetch('/api/fppd/restart', { method: 'GET' });
+            if (!response.ok) throw new Error('Failed to restart FPPD');
+        } else {
+            const response = await fetch('/api/plugin/fpp-plugin-watcher/remote/restart', {
+                method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ host: address })
+            });
+            const data = await response.json();
+            if (!data.success) throw new Error(data.error || 'Failed to restart FPPD');
+        }
 
         btn.innerHTML = '<i class="fas fa-check"></i> Restarted!';
         setTimeout(async () => {
             btn.innerHTML = originalHtml;
             btn.disabled = false;
-            const result = await fetchRemoteStatus(address);
+            const result = await fetchSystemStatus(address);
             updateCardUI(address, result);
         }, 3000);
     } catch (error) {
@@ -1053,13 +1218,8 @@ function closeConfirmDialog() {
 async function executeReboot() {
     if (!pendingReboot) return;
     const { address } = pendingReboot;
+    const isLocal = address === 'localhost';
     closeConfirmDialog();
-
-    // Handle localhost reboot separately
-    if (address === 'localhost') {
-        executeLocalReboot();
-        return;
-    }
 
     const btn = document.getElementById(`reboot-btn-${address}`);
     const originalHtml = btn.innerHTML;
@@ -1067,50 +1227,58 @@ async function executeReboot() {
     btn.disabled = true;
 
     try {
-        await fetch('/api/plugin/fpp-plugin-watcher/remote/reboot', {
-            method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ host: address })
-        });
+        if (isLocal) {
+            await fetch('/api/system/reboot', { method: 'GET' });
+        } else {
+            await fetch('/api/plugin/fpp-plugin-watcher/remote/reboot', {
+                method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ host: address })
+            });
+        }
 
-        const card = document.getElementById(`card-${address}`);
-        card.classList.add('offline');
-        document.getElementById(`status-${address}`).innerHTML = '<span class="status-indicator status-indicator--offline"><span class="dot"></span> Rebooting...</span>';
-
-        let attempts = 0;
-        const checkInterval = setInterval(async () => {
-            if (++attempts > 60) { clearInterval(checkInterval); btn.innerHTML = originalHtml; btn.disabled = false; return; }
-            const result = await fetchRemoteStatus(address);
-            if (result.success) { clearInterval(checkInterval); updateCardUI(address, result); btn.innerHTML = originalHtml; btn.disabled = false; }
-        }, 2000);
-    } catch (error) {
         document.getElementById(`card-${address}`).classList.add('offline');
         document.getElementById(`status-${address}`).innerHTML = '<span class="status-indicator status-indicator--offline"><span class="dot"></span> Rebooting...</span>';
-        btn.innerHTML = originalHtml;
-        btn.disabled = false;
+
+        // For remote hosts, poll for recovery; localhost will lose connection
+        if (!isLocal) {
+            let attempts = 0;
+            const checkInterval = setInterval(async () => {
+                if (++attempts > 60) { clearInterval(checkInterval); btn.innerHTML = originalHtml; btn.disabled = false; return; }
+                const result = await fetchSystemStatus(address);
+                if (result.success) { clearInterval(checkInterval); updateCardUI(address, result); btn.innerHTML = originalHtml; btn.disabled = false; }
+            }, 2000);
+        }
+    } catch (error) {
+        // For localhost, connection loss is expected
+        document.getElementById(`card-${address}`).classList.add('offline');
+        document.getElementById(`status-${address}`).innerHTML = '<span class="status-indicator status-indicator--offline"><span class="dot"></span> Rebooting...</span>';
+        if (!isLocal) { btn.innerHTML = originalHtml; btn.disabled = false; }
     }
 }
 
 document.getElementById('confirmRebootBtn').addEventListener('click', executeReboot);
 document.addEventListener('keydown', (e) => { if (e.key === 'Escape') { closeConfirmDialog(); closeBulkModal(); closeFPPUpgradeModal(); } });
 
-async function clearRemoteResetState(address) {
+async function clearResetState(address) {
+    const isLocal = address === 'localhost';
     const btn = document.getElementById(`connectivity-clear-btn-${address}`);
     const originalHtml = btn.innerHTML;
     btn.disabled = true;
     btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i>';
 
     try {
-        const response = await fetch('/api/plugin/fpp-plugin-watcher/remote/connectivity/state/clear', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ host: address })
-        });
-        const data = await response.json();
+        const url = isLocal
+            ? '/api/plugin/fpp-plugin-watcher/connectivity/state/clear'
+            : '/api/plugin/fpp-plugin-watcher/remote/connectivity/state/clear';
+        const options = isLocal
+            ? { method: 'POST' }
+            : { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ host: address }) };
 
+        const response = await fetch(url, options);
+        const data = await response.json();
         if (!data.success) throw new Error(data.error || 'Failed to clear reset state');
 
-        // Refresh this card's status
         setTimeout(async () => {
-            const result = await fetchRemoteStatus(address);
+            const result = await fetchSystemStatus(address);
             updateCardUI(address, result);
         }, 1000);
     } catch (error) {
@@ -1139,7 +1307,7 @@ async function upgradePlugin(address, pluginRepoName) {
 
         btn.innerHTML = '<i class="fas fa-check"></i> Done';
         if (item) setTimeout(() => { item.style.opacity = '0.5'; }, 500);
-        setTimeout(async () => { const result = await fetchRemoteStatus(address); updateCardUI(address, result); }, 3000);
+        setTimeout(async () => { const result = await fetchSystemStatus(address); updateCardUI(address, result); }, 3000);
     } catch (error) {
         btn.innerHTML = originalHtml;
         btn.disabled = false;
@@ -1148,120 +1316,12 @@ async function upgradePlugin(address, pluginRepoName) {
 }
 
 // =============================================================================
-// Local System Actions
+// Local System Actions (wrappers that call unified functions)
 // =============================================================================
 
-async function toggleLocalTestMode(enable) {
-    const toggle = document.getElementById('testmode-localhost');
-    toggle.disabled = true;
-
-    try {
-        let channelRange = "1-8388608";
-        try {
-            const infoResponse = await fetch('/api/system/info');
-            if (infoResponse.ok) {
-                const info = await infoResponse.json();
-                if (info.channelRanges) {
-                    const parts = info.channelRanges.split('-');
-                    if (parts.length === 2) {
-                        channelRange = `${parseInt(parts[0]) + 1}-${parseInt(parts[1]) + 1}`;
-                    }
-                }
-            }
-        } catch (e) {}
-
-        const command = enable ? 'Test Start' : 'Test Stop';
-        const args = enable ? ["1000", "RGB Cycle", channelRange, "R-G-B"] : [];
-        const response = await fetch('/api/command', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ command, args })
-        });
-
-        if (!response.ok) throw new Error('Failed to toggle test mode');
-
-        setTimeout(async () => {
-            const result = await fetchLocalStatus();
-            updateCardUI('localhost', result);
-        }, 500);
-    } catch (error) {
-        toggle.checked = !enable;
-        alert(`Failed to toggle test mode: ${error.message}`);
-    } finally {
-        toggle.disabled = false;
-    }
-}
-
-async function restartLocalFppd() {
-    const btn = document.getElementById('restart-btn-localhost');
-    const originalHtml = btn.innerHTML;
-    btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Restarting...';
-    btn.disabled = true;
-
-    try {
-        const response = await fetch('/api/fppd/restart', { method: 'GET' });
-        if (!response.ok) throw new Error('Failed to restart FPPD');
-
-        btn.innerHTML = '<i class="fas fa-check"></i> Restarted!';
-        setTimeout(async () => {
-            btn.innerHTML = originalHtml;
-            btn.disabled = false;
-            const result = await fetchLocalStatus();
-            updateCardUI('localhost', result);
-        }, 3000);
-    } catch (error) {
-        btn.innerHTML = originalHtml;
-        btn.disabled = false;
-        alert(`Failed to restart FPPD: ${error.message}`);
-    }
-}
-
-function confirmLocalReboot() {
-    pendingReboot = { address: 'localhost', hostname: '<?php echo htmlspecialchars($localHostname); ?>' };
-    document.getElementById('confirmMessage').textContent = 'Are you sure you want to reboot THIS system? You will lose connection temporarily.';
-    document.getElementById('confirmDialog').style.display = 'flex';
-}
-
-async function executeLocalReboot() {
-    const btn = document.getElementById('reboot-btn-localhost');
-    const originalHtml = btn.innerHTML;
-    btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Rebooting...';
-    btn.disabled = true;
-
-    try {
-        await fetch('/api/system/reboot', { method: 'GET' });
-        const card = document.getElementById('card-localhost');
-        card.classList.add('offline');
-        document.getElementById('status-localhost').innerHTML = '<span class="status-indicator status-indicator--offline"><span class="dot"></span> Rebooting...</span>';
-    } catch (error) {
-        // Expected - connection will be lost
-        const card = document.getElementById('card-localhost');
-        card.classList.add('offline');
-        document.getElementById('status-localhost').innerHTML = '<span class="status-indicator status-indicator--offline"><span class="dot"></span> Rebooting...</span>';
-    }
-}
-
-async function clearLocalResetState() {
-    const btn = document.getElementById('connectivity-clear-btn-localhost');
-    const originalHtml = btn.innerHTML;
-    btn.disabled = true;
-    btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i>';
-
-    try {
-        const response = await fetch('/api/plugin/fpp-plugin-watcher/connectivity/state/clear', { method: 'POST' });
-        const data = await response.json();
-        if (!data.success) throw new Error(data.error || 'Failed to clear reset state');
-
-        setTimeout(async () => {
-            const result = await fetchLocalStatus();
-            updateCardUI('localhost', result);
-        }, 1000);
-    } catch (error) {
-        btn.innerHTML = originalHtml;
-        btn.disabled = false;
-        alert(`Failed to clear reset state: ${error.message}`);
-    }
-}
+function restartLocalFppd() { restartFppd('localhost'); }
+function confirmLocalReboot() { confirmReboot('localhost', '<?php echo htmlspecialchars($localHostname); ?>'); }
+function clearLocalResetState() { clearResetState('localhost'); }
 
 // =============================================================================
 // Bulk Operations (Unified Modal)
@@ -1354,73 +1414,315 @@ function closeBulkModal() {
 }
 
 // =============================================================================
-// FPP Upgrade (Streaming Modal)
+// FPP Upgrade (Parallel Streaming Modal with Accordion)
 // =============================================================================
+
+let fppUpgradeStates = new Map(); // address → {status, abortController, expanded, selected}
+let fppUpgradeIsRunning = false;
 
 function showFPPUpgradeModal() {
     if (hostsWithFPPUpdates.size < 1) return;
 
     const modal = document.getElementById('fppUpgradeModal');
-    const hostSelect = document.getElementById('fppUpgradeHostSelect');
-    const outputEl = document.getElementById('fppUpgradeOutput');
+    const accordion = document.getElementById('fppAccordion');
     const startBtn = document.getElementById('fppUpgradeStartBtn');
     const closeBtn = document.getElementById('fppUpgradeCloseBtn');
 
-    let options = '';
+    // Reset state
+    fppUpgradeStates.clear();
+    fppUpgradeIsRunning = false;
+
+    // Build accordion items
+    let html = '';
     hostsWithFPPUpdates.forEach((info, addr) => {
-        options += `<option value="${addr}">${info.hostname} (${addr}) - ${info.localVersion} → ${info.remoteVersion}</option>`;
+        const safeId = escapeId(addr);
+        fppUpgradeStates.set(addr, { status: 'pending', abortController: null, expanded: false, selected: true });
+        html += `
+            <div class="fpp-accordion-item" id="fpp-item-${safeId}" data-address="${addr}">
+                <div class="fpp-accordion-header">
+                    <input type="checkbox" class="fpp-accordion-checkbox" id="fpp-check-${safeId}" checked onclick="event.stopPropagation(); toggleFPPSelection('${addr}')">
+                    <div class="fpp-accordion-toggle" onclick="toggleFPPAccordion('${addr}')"><i class="fas fa-chevron-right"></i></div>
+                    <div class="fpp-accordion-info" onclick="toggleFPPAccordion('${addr}')">
+                        <span class="fpp-accordion-hostname">${info.hostname}</span>
+                        <span class="fpp-accordion-address">${addr}</span>
+                        <span class="fpp-accordion-version">${info.localVersion} → ${info.remoteVersion}</span>
+                    </div>
+                    <div class="fpp-accordion-status pending" id="fpp-status-${safeId}">
+                        <i class="fas fa-clock"></i> Pending
+                    </div>
+                </div>
+                <div class="fpp-accordion-body">
+                    <div class="fpp-accordion-log" id="fpp-log-${safeId}"></div>
+                </div>
+            </div>`;
     });
-    hostSelect.innerHTML = options;
-    outputEl.textContent = 'Select a system and click "Start Upgrade" to begin...\n\nNote: FPP upgrades can take 5-15 minutes.\nIncludes: git pull, compile, and fppd restart.';
+
+    accordion.innerHTML = html;
+    updateFPPSummary();
     startBtn.disabled = false;
-    startBtn.innerHTML = '<i class="fas fa-play"></i> Start Upgrade';
+    startBtn.style.display = '';
+    startBtn.innerHTML = '<i class="fas fa-play"></i> Start Selected';
     closeBtn.disabled = false;
+    closeBtn.classList.remove('btn-success');
+    closeBtn.classList.add('btn-muted');
+    closeBtn.innerHTML = 'Close';
     modal.style.display = 'flex';
 }
 
-async function startFPPUpgrade() {
-    const hostSelect = document.getElementById('fppUpgradeHostSelect');
-    const outputEl = document.getElementById('fppUpgradeOutput');
-    const startBtn = document.getElementById('fppUpgradeStartBtn');
-    const closeBtn = document.getElementById('fppUpgradeCloseBtn');
-    const address = hostSelect.value;
-    if (!address) return;
+function toggleFPPAccordion(address) {
+    const safeId = escapeId(address);
+    const item = document.getElementById(`fpp-item-${safeId}`);
+    const state = fppUpgradeStates.get(address);
+    if (!item || !state) return;
 
-    hostSelect.disabled = true;
-    startBtn.disabled = true;
-    startBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Upgrading...';
-    closeBtn.disabled = true;
-    outputEl.textContent = '';
-    fppUpgradeAbortController = new AbortController();
+    state.expanded = !state.expanded;
+    item.classList.toggle('expanded', state.expanded);
+}
+
+function fppExpandAll() {
+    fppUpgradeStates.forEach((state, address) => {
+        state.expanded = true;
+        document.getElementById(`fpp-item-${escapeId(address)}`)?.classList.add('expanded');
+    });
+}
+
+function fppCollapseAll() {
+    fppUpgradeStates.forEach((state, address) => {
+        state.expanded = false;
+        document.getElementById(`fpp-item-${escapeId(address)}`)?.classList.remove('expanded');
+    });
+}
+
+function toggleFPPSelection(address) {
+    const safeId = escapeId(address);
+    const checkbox = document.getElementById(`fpp-check-${safeId}`);
+    const item = document.getElementById(`fpp-item-${safeId}`);
+    const state = fppUpgradeStates.get(address);
+    if (!state || !checkbox || !item) return;
+
+    state.selected = checkbox.checked;
+    item.classList.toggle('excluded', !state.selected);
+    updateFPPSummary();
+}
+
+function fppSelectAll() {
+    fppUpgradeStates.forEach((state, address) => {
+        if (state.status === 'pending') {
+            state.selected = true;
+            const safeId = escapeId(address);
+            const checkbox = document.getElementById(`fpp-check-${safeId}`);
+            const item = document.getElementById(`fpp-item-${safeId}`);
+            if (checkbox) checkbox.checked = true;
+            item?.classList.remove('excluded');
+        }
+    });
+    updateFPPSummary();
+}
+
+function fppSelectNone() {
+    fppUpgradeStates.forEach((state, address) => {
+        if (state.status === 'pending') {
+            state.selected = false;
+            const safeId = escapeId(address);
+            const checkbox = document.getElementById(`fpp-check-${safeId}`);
+            const item = document.getElementById(`fpp-item-${safeId}`);
+            if (checkbox) checkbox.checked = false;
+            item?.classList.add('excluded');
+        }
+    });
+    updateFPPSummary();
+}
+
+function updateFPPStatus(address, status, icon, text) {
+    const safeId = escapeId(address);
+    const statusEl = document.getElementById(`fpp-status-${safeId}`);
+    const state = fppUpgradeStates.get(address);
+    if (statusEl && state) {
+        state.status = status;
+        statusEl.className = `fpp-accordion-status ${status}`;
+        statusEl.innerHTML = `<i class="fas fa-${icon}"></i> ${text}`;
+    }
+}
+
+function updateFPPSummary() {
+    const countEl = document.getElementById('fppUpgradeCount');
+    const startBtn = document.getElementById('fppUpgradeStartBtn');
+    let pending = 0, upgrading = 0, success = 0, error = 0, selected = 0;
+    fppUpgradeStates.forEach(state => {
+        if (state.status === 'pending') {
+            pending++;
+            if (state.selected) selected++;
+        }
+        else if (state.status === 'upgrading') upgrading++;
+        else if (state.status === 'success') success++;
+        else if (state.status === 'error') error++;
+    });
+    const total = fppUpgradeStates.size;
+    if (upgrading > 0) {
+        countEl.textContent = `${upgrading} upgrading, ${success + error} of ${total} complete`;
+    } else if (success + error > 0) {
+        countEl.textContent = `${success} succeeded, ${error} failed of ${total}`;
+    } else {
+        countEl.textContent = `${selected} of ${total} selected`;
+    }
+    // Disable start button if nothing selected
+    if (startBtn && !fppUpgradeIsRunning) {
+        startBtn.disabled = selected === 0;
+    }
+}
+
+async function startSingleFPPUpgrade(address) {
+    const safeId = escapeId(address);
+    const logEl = document.getElementById(`fpp-log-${safeId}`);
+    const item = document.getElementById(`fpp-item-${safeId}`);
+    const state = fppUpgradeStates.get(address);
+    if (!logEl || !state) return;
+
+    // Get upgrade info to determine if this is a cross-version upgrade
+    const upgradeInfo = hostsWithFPPUpdates.get(address);
+
+    state.abortController = new AbortController();
+    updateFPPStatus(address, 'upgrading', 'spinner fa-spin', 'Upgrading...');
+    updateFPPSummary();
+    logEl.textContent = '';
+
+    // Build request body - include version for cross-version upgrades
+    const requestBody = { host: address };
+    if (upgradeInfo && upgradeInfo.isCrossVersion) {
+        requestBody.version = 'v' + upgradeInfo.remoteVersion;
+    }
 
     try {
         const response = await fetch('/api/plugin/fpp-plugin-watcher/remote/fpp/upgrade', {
-            method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ host: address }), signal: fppUpgradeAbortController.signal
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(requestBody),
+            signal: state.abortController.signal
         });
+
         if (!response.ok) throw new Error(`HTTP error: ${response.status}`);
 
         const reader = response.body.getReader();
         const decoder = new TextDecoder();
+
         while (true) {
             const { done, value } = await reader.read();
             if (done) break;
-            outputEl.textContent += decoder.decode(value, { stream: true });
-            outputEl.scrollTop = outputEl.scrollHeight;
+            logEl.textContent += decoder.decode(value, { stream: true });
+            logEl.scrollTop = logEl.scrollHeight;
         }
-        outputEl.textContent += '\n\n=== Upgrade process finished ===';
+
+        logEl.textContent += '\n\n=== Upgrade complete ===';
+
+        // Auto-reboot after cross-version upgrade
+        if (upgradeInfo && upgradeInfo.isCrossVersion) {
+            logEl.textContent += '\n\n=== Initiating reboot for cross-version upgrade ===';
+            updateFPPStatus(address, 'success', 'sync fa-spin', 'Rebooting...');
+
+            try {
+                const rebootUrl = address === 'localhost' || address === '127.0.0.1'
+                    ? '/api/system/reboot'
+                    : `http://${address}/api/system/reboot`;
+                await fetch(rebootUrl, { method: 'GET', mode: 'no-cors' });
+                logEl.textContent += '\nReboot command sent. System will restart shortly.';
+            } catch (rebootErr) {
+                // Reboot may cause connection loss - this is expected
+                logEl.textContent += '\nReboot initiated (connection closed as expected).';
+            }
+            updateFPPStatus(address, 'success', 'check', 'Rebooting');
+        } else {
+            updateFPPStatus(address, 'success', 'check', 'Complete');
+        }
     } catch (error) {
-        outputEl.textContent += error.name === 'AbortError' ? '\n\n=== Upgrade cancelled ===' : `\n\n=== ERROR: ${error.message} ===`;
+        if (error.name === 'AbortError') {
+            logEl.textContent += '\n\n=== Upgrade cancelled ===';
+            updateFPPStatus(address, 'error', 'ban', 'Cancelled');
+        } else {
+            logEl.textContent += `\n\n=== ERROR: ${error.message} ===`;
+            updateFPPStatus(address, 'error', 'times', 'Failed');
+            // Auto-expand on error
+            state.expanded = true;
+            item?.classList.add('expanded');
+        }
     } finally {
-        fppUpgradeAbortController = null;
-        hostSelect.disabled = false;
-        startBtn.disabled = false;
-        startBtn.innerHTML = '<i class="fas fa-play"></i> Start Upgrade';
-        closeBtn.disabled = false;
+        state.abortController = null;
+        updateFPPSummary();
     }
 }
 
+async function startAllFPPUpgrades() {
+    if (fppUpgradeIsRunning) return;
+
+    // Get selected hosts
+    const selectedHosts = [];
+    fppUpgradeStates.forEach((state, address) => {
+        if (state.status === 'pending' && state.selected) {
+            selectedHosts.push(address);
+        }
+    });
+
+    if (selectedHosts.length === 0) return;
+
+    fppUpgradeIsRunning = true;
+    const startBtn = document.getElementById('fppUpgradeStartBtn');
+    const closeBtn = document.getElementById('fppUpgradeCloseBtn');
+
+    startBtn.disabled = true;
+    startBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Upgrading...';
+    closeBtn.disabled = true;
+
+    // Disable checkboxes during upgrade
+    fppUpgradeStates.forEach((state, address) => {
+        const checkbox = document.getElementById(`fpp-check-${escapeId(address)}`);
+        if (checkbox) checkbox.disabled = true;
+    });
+
+    // Expand first selected host
+    if (selectedHosts[0]) expandFPPItem(selectedHosts[0]);
+
+    // Start selected upgrades in parallel
+    const upgradePromises = selectedHosts.map(address => startSingleFPPUpgrade(address));
+    await Promise.allSettled(upgradePromises);
+
+    fppUpgradeIsRunning = false;
+    closeBtn.disabled = false;
+
+    // Check if all are complete (no pending left)
+    let hasPending = false;
+    fppUpgradeStates.forEach(state => {
+        if (state.status === 'pending') hasPending = true;
+    });
+
+    if (hasPending) {
+        // Some hosts weren't selected, allow restarting
+        startBtn.disabled = false;
+        startBtn.innerHTML = '<i class="fas fa-play"></i> Start Selected';
+        // Re-enable checkboxes for remaining pending hosts
+        fppUpgradeStates.forEach((state, address) => {
+            if (state.status === 'pending') {
+                const checkbox = document.getElementById(`fpp-check-${escapeId(address)}`);
+                if (checkbox) checkbox.disabled = false;
+            }
+        });
+    } else {
+        // All done - hide start button, make close green
+        startBtn.style.display = 'none';
+        closeBtn.classList.remove('btn-muted');
+        closeBtn.classList.add('btn-success');
+        closeBtn.innerHTML = '<i class="fas fa-check"></i> Done';
+    }
+    updateFPPSummary();
+}
+
 function closeFPPUpgradeModal() {
-    if (fppUpgradeAbortController) fppUpgradeAbortController.abort();
+    // Abort all running upgrades
+    fppUpgradeStates.forEach(state => {
+        if (state.abortController) {
+            state.abortController.abort();
+        }
+    });
+    fppUpgradeStates.clear();
+    fppUpgradeIsRunning = false;
     document.getElementById('fppUpgradeModal').style.display = 'none';
     refreshAllStatus();
 }
@@ -1428,7 +1730,58 @@ function closeFPPUpgradeModal() {
 function upgradeFPPSingle(address) {
     if (!hostsWithFPPUpdates.has(address)) { alert('No FPP update available.'); return; }
     showFPPUpgradeModal();
-    document.getElementById('fppUpgradeHostSelect').value = address;
+    setTimeout(() => expandFPPItem(address), 100);
+}
+
+// Individual upgrade button handlers for card UI
+async function upgradeFPPCrossVersion(address) {
+    // Get branch from version element
+    const versionEl = document.getElementById(`version-${address}`);
+    if (versionEl) {
+        const branchMatch = versionEl.textContent.match(/^v?[\d.]+/);
+        if (branchMatch) {
+            const upgrade = checkCrossVersionUpgrade(branchMatch[0]);
+            if (!upgrade || !upgrade.available || upgrade.isMajorUpgrade) {
+                alert('No cross-version upgrade available for this host.');
+                return;
+            }
+        }
+    }
+
+    // Store update info for this specific host with cross-version flag
+    const existingInfo = hostsWithFPPUpdates.get(address);
+    if (existingInfo) {
+        existingInfo.isCrossVersion = true;
+    } else {
+        if (!latestFPPRelease) { alert('FPP release info not available.'); return; }
+        hostsWithFPPUpdates.set(address, {
+            hostname: getHostname(address),
+            localVersion: 'current',
+            remoteVersion: latestFPPRelease.latestVersion,
+            isCrossVersion: true
+        });
+    }
+
+    showFPPUpgradeModal();
+    setTimeout(() => expandFPPItem(address), 100);
+}
+
+async function upgradeFPPBranch(address) {
+    // Store update info for this specific host with same-branch flag
+    const existingInfo = hostsWithFPPUpdates.get(address);
+    if (existingInfo) {
+        existingInfo.isCrossVersion = false;
+    } else {
+        hostsWithFPPUpdates.set(address, {
+            hostname: getHostname(address),
+            localVersion: 'current',
+            remoteVersion: 'latest',
+            isCrossVersion: false
+        });
+    }
+
+    showFPPUpgradeModal();
+    setTimeout(() => expandFPPItem(address), 100);
 }
 
 // Auto-refresh every 30 seconds

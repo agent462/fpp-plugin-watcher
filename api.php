@@ -228,6 +228,20 @@ function getEndpointsfpppluginwatcher() {
         'callback' => 'fpppluginWatcherUpdateCheck');
     array_push($result, $ep);
 
+    // FPP release upgrade check
+    $ep = array(
+        'method' => 'GET',
+        'endpoint' => 'fpp/release',
+        'callback' => 'fpppluginWatcherFPPRelease');
+    array_push($result, $ep);
+
+    // Local plugin updates check (for localhost card)
+    $ep = array(
+        'method' => 'GET',
+        'endpoint' => 'plugins/updates',
+        'callback' => 'fpppluginWatcherLocalPluginUpdates');
+    array_push($result, $ep);
+
     // FPP upgrade endpoint (streaming)
     $ep = array(
         'method' => 'POST',
@@ -917,8 +931,45 @@ function fpppluginWatcherUpdateCheck() {
     return json(checkWatcherUpdate());
 }
 
+// GET /api/plugin/fpp-plugin-watcher/fpp/release
+// Check GitHub for latest FPP release and compare against current branch
+function fpppluginWatcherFPPRelease() {
+    $currentBranch = isset($_GET['branch']) ? trim($_GET['branch']) : null;
+
+    // If no branch provided, try to get it from local system
+    if (empty($currentBranch)) {
+        $systemInfo = apiCall('GET', 'http://127.0.0.1/api/system/info', [], true, 5);
+        if ($systemInfo && isset($systemInfo['Branch'])) {
+            $currentBranch = $systemInfo['Branch'];
+        }
+    }
+
+    if (empty($currentBranch)) {
+        /** @disregard P1010 */
+        return json([
+            'success' => false,
+            'error' => 'Could not determine current FPP branch'
+        ]);
+    }
+
+    $result = checkFPPReleaseUpgrade($currentBranch);
+    $result['success'] = true;
+
+    /** @disregard P1010 */
+    return json($result);
+}
+
+// GET /api/plugin/fpp-plugin-watcher/plugins/updates
+// Check for updates on locally installed plugins (for localhost card)
+function fpppluginWatcherLocalPluginUpdates() {
+    $result = checkRemotePluginUpdates('127.0.0.1');
+    /** @disregard P1010 */
+    return json($result);
+}
+
 // POST /api/plugin/fpp-plugin-watcher/remote/fpp/upgrade
 // Streams the FPP upgrade output from a remote host
+// Optional 'version' parameter for cross-version upgrades (e.g., "v9.3")
 function fpppluginWatcherRemoteFPPUpgrade() {
     $input = json_decode(file_get_contents('php://input'), true);
 
@@ -928,7 +979,8 @@ function fpppluginWatcherRemoteFPPUpgrade() {
         return;
     }
 
-    streamRemoteFPPUpgrade(trim($input['host']));
+    $targetVersion = isset($input['version']) ? trim($input['version']) : null;
+    streamRemoteFPPUpgrade(trim($input['host']), $targetVersion);
 }
 
 // GET /api/plugin/fpp-plugin-watcher/connectivity/state
