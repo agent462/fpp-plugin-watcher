@@ -25,26 +25,27 @@ renderCSSIncludes(false);
         transition: box-shadow 0.2s ease;
     }
     .controlCard:hover { box-shadow: 0 4px 16px rgba(0,0,0,0.15); }
-    .controlCard.offline { opacity: 0.7; }
-    .controlCard.offline .cardHeader { background: #6c757d; }
     .cardHeader {
+        background: #495057;
         color: #fff;
         padding: 0.85rem 1.25rem;
         display: flex;
         justify-content: space-between;
         align-items: center;
+        border-left: 4px solid #28a745;
+        transition: border-color 0.3s, background 0.3s;
     }
     .cardHeader .hostname { font-size: 1.1rem; font-weight: 600; }
     .cardHeader .address { font-size: 0.8rem; opacity: 0.9; }
     .cardHeader .address a { color: inherit; text-decoration: none; }
     .cardHeader .address a:hover { text-decoration: underline; }
-    /* Host color palette */
-    .cardHeader--color-0 { background: #667eea; }
-    .cardHeader--color-1 { background: #e84393; }
-    .cardHeader--color-2 { background: #00b894; }
-    .cardHeader--color-3 { background: #e17055; }
-    .cardHeader--color-4 { background: #0984e3; }
-    .cardHeader--color-5 { background: #6c5ce7; }
+    /* Status-based accent colors */
+    .controlCard.offline .cardHeader { background: #6c757d; border-left-color: #6c757d; }
+    .controlCard.status-ok .cardHeader { border-left-color: #28a745; }
+    .controlCard.status-warning .cardHeader { border-left-color: #ffc107; }
+    .controlCard.status-restart .cardHeader { border-left-color: #fd7e14; }
+    .controlCard.status-update .cardHeader { border-left-color: #17a2b8; }
+    .controlCard.status-testing .cardHeader { border-left-color: #e83e8c; }
     .cardBody { padding: 1.25rem; }
     .infoGrid {
         display: grid;
@@ -192,7 +193,7 @@ renderCSSIncludes(false);
         <div class="controlCardsGrid" id="controlCardsGrid">
             <?php foreach ($remoteSystems as $index => $system): ?>
             <div class="controlCard" id="card-<?php echo htmlspecialchars($system['address']); ?>" data-address="<?php echo htmlspecialchars($system['address']); ?>" data-hostname="<?php echo htmlspecialchars($system['hostname']); ?>">
-                <div class="cardHeader cardHeader--color-<?php echo $index % 6; ?>">
+                <div class="cardHeader">
                     <div class="hostname"><?php echo htmlspecialchars($system['hostname']); ?></div>
                     <div class="address"><a href="http://<?php echo htmlspecialchars($system['address']); ?>/" target="_blank"><?php echo htmlspecialchars($system['address']); ?></a></div>
                 </div>
@@ -594,6 +595,9 @@ function updateCardUI(address, data) {
     const fppUpdateRow = document.getElementById(`fpp-update-row-${address}`);
     const fppUpdateVersion = document.getElementById(`fpp-update-version-${address}`);
 
+    // Clear all status classes
+    card.classList.remove('offline', 'status-ok', 'status-warning', 'status-restart', 'status-update', 'status-testing');
+
     if (!data.success) {
         card.classList.add('offline');
         statusEl.innerHTML = '<div class="status-indicators"><span class="status-indicator status-indicator--offline"><span class="dot"></span>Offline</span></div>';
@@ -612,14 +616,20 @@ function updateCardUI(address, data) {
         updateBulkButton('connectivityFailBtn', 'connectivityFailCount', hostsWithConnectivityFailure);
         return;
     }
-
-    card.classList.remove('offline');
     const { status, testMode, pluginUpdates = [], fppLocalVersion, fppRemoteVersion, connectivityState } = data;
     const isTestMode = testMode.enabled === 1;
     const needsReboot = status.rebootFlag === 1;
     const needsRestart = status.restartFlag === 1;
     const fppUpdateAvailable = fppLocalVersion && fppRemoteVersion && fppRemoteVersion !== 'Unknown' && fppRemoteVersion !== '' && fppLocalVersion !== fppRemoteVersion;
     const hasConnectivityFailure = connectivityState && connectivityState.hasResetAdapter;
+    const hasPluginUpdates = pluginUpdates.length > 0;
+
+    // Set status class for left border accent (priority: testing > restart > update > warning > ok)
+    if (isTestMode) card.classList.add('status-testing');
+    else if (needsReboot || needsRestart) card.classList.add('status-restart');
+    else if (fppUpdateAvailable || hasPluginUpdates) card.classList.add('status-update');
+    else if (hasConnectivityFailure) card.classList.add('status-warning');
+    else card.classList.add('status-ok');
 
     // Build status indicators
     let indicators = ['<span class="status-indicator status-indicator--online"><span class="dot"></span>Online</span>'];
