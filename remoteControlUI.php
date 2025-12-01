@@ -39,18 +39,12 @@ renderCSSIncludes(false);
     .cardHeader .address a { color: inherit; text-decoration: none; }
     .cardHeader .address a:hover { text-decoration: underline; }
     /* Host color palette */
-    .cardHeader--color-0 { background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); }
-    .cardHeader--color-1 { background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%); }
-    .cardHeader--color-2 { background: linear-gradient(135deg, #4facfe 0%, #00f2fe 100%); }
-    .cardHeader--color-3 { background: linear-gradient(135deg, #43e97b 0%, #38f9d7 100%); }
-    .cardHeader--color-4 { background: linear-gradient(135deg, #fa709a 0%, #fee140 100%); }
-    .cardHeader--color-5 { background: linear-gradient(135deg, #a18cd1 0%, #fbc2eb 100%); }
-    .cardHeader--color-6 { background: linear-gradient(135deg, #ff9a9e 0%, #fecfef 100%); }
-    .cardHeader--color-7 { background: linear-gradient(135deg, #ffecd2 0%, #fcb69f 100%); color: #333; }
-    .cardHeader--color-8 { background: linear-gradient(135deg, #a1c4fd 0%, #c2e9fb 100%); color: #333; }
-    .cardHeader--color-9 { background: linear-gradient(135deg, #d299c2 0%, #fef9d7 100%); color: #333; }
-    .cardHeader--color-10 { background: linear-gradient(135deg, #89f7fe 0%, #66a6ff 100%); }
-    .cardHeader--color-11 { background: linear-gradient(135deg, #fddb92 0%, #d1fdff 100%); color: #333; }
+    .cardHeader--color-0 { background: #667eea; }
+    .cardHeader--color-1 { background: #e84393; }
+    .cardHeader--color-2 { background: #00b894; }
+    .cardHeader--color-3 { background: #e17055; }
+    .cardHeader--color-4 { background: #0984e3; }
+    .cardHeader--color-5 { background: #6c5ce7; }
     .cardBody { padding: 1.25rem; }
     .infoGrid {
         display: grid;
@@ -198,7 +192,7 @@ renderCSSIncludes(false);
         <div class="controlCardsGrid" id="controlCardsGrid">
             <?php foreach ($remoteSystems as $index => $system): ?>
             <div class="controlCard" id="card-<?php echo htmlspecialchars($system['address']); ?>" data-address="<?php echo htmlspecialchars($system['address']); ?>" data-hostname="<?php echo htmlspecialchars($system['hostname']); ?>">
-                <div class="cardHeader cardHeader--color-<?php echo $index % 12; ?>">
+                <div class="cardHeader cardHeader--color-<?php echo $index % 6; ?>">
                     <div class="hostname"><?php echo htmlspecialchars($system['hostname']); ?></div>
                     <div class="address"><a href="http://<?php echo htmlspecialchars($system['address']); ?>/" target="_blank"><?php echo htmlspecialchars($system['address']); ?></a></div>
                 </div>
