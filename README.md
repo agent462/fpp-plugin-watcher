@@ -71,6 +71,8 @@ All dashboards appear under **Status** menus when their corresponding feature is
 ![Ping Host View](https://github.com/agent462/fpp-watcher-images/blob/main/ping-host-view.png)
 ![Connectivity Metrics](https://github.com/agent462/fpp-watcher-images/blob/main/connectivity-metrics.png)
 
+## Falcon Controllers
+![Falcon Controllers](https://github.com/agent462/fpp-watcher-images/blob/main/falcon-controllers.png)
 
 ## API
 
