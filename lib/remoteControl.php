@@ -306,9 +306,10 @@ function checkRemotePluginUpdates($host) {
  * This function handles output directly and does not return a value.
  *
  * @param string $host The remote host
+ * @param string|null $targetVersion Optional target version for cross-version upgrades (e.g., "v9.3")
  * @return void
  */
-function streamRemoteFPPUpgrade($host) {
+function streamRemoteFPPUpgrade($host, $targetVersion = null) {
     if (!validateHost($host)) {
         header('Content-Type: application/json');
         echo json_encode([
@@ -316,6 +317,24 @@ function streamRemoteFPPUpgrade($host) {
             'error' => 'Invalid host format'
         ]);
         return;
+    }
+
+    // Validate target version format if provided
+    if ($targetVersion !== null) {
+        $targetVersion = trim($targetVersion);
+        // Ensure it starts with 'v' and has valid format (e.g., v9.3)
+        if (!preg_match('/^v?\d+\.\d+/', $targetVersion)) {
+            header('Content-Type: application/json');
+            echo json_encode([
+                'success' => false,
+                'error' => 'Invalid version format'
+            ]);
+            return;
+        }
+        // Ensure version starts with 'v'
+        if (!str_starts_with($targetVersion, 'v')) {
+            $targetVersion = 'v' . $targetVersion;
+        }
     }
 
     // Disable output buffering for streaming
@@ -331,9 +350,16 @@ function streamRemoteFPPUpgrade($host) {
     // Flush headers
     flush();
 
-    $upgradeUrl = "http://{$host}/manualUpdate.php?wrapped=1";
-
-    echo "=== Starting FPP upgrade on {$host} ===\n";
+    // Determine the upgrade URL based on whether this is a cross-version upgrade
+    if ($targetVersion !== null) {
+        // Cross-version upgrade: use upgradefpp.php with target version
+        $upgradeUrl = "http://{$host}/upgradefpp.php?version=" . urlencode($targetVersion) . "&wrapped=1";
+        echo "=== Starting FPP cross-version upgrade on {$host} to {$targetVersion} ===\n";
+    } else {
+        // Same-branch update: use manualUpdate.php
+        $upgradeUrl = "http://{$host}/manualUpdate.php?wrapped=1";
+        echo "=== Starting FPP upgrade on {$host} ===\n";
+    }
     flush();
 
     $ch = curl_init();
