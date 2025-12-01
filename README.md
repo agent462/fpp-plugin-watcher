@@ -58,6 +58,20 @@ All dashboards appear under **Status** menus when their corresponding feature is
 - **Remote Ping**: Connectivity graphs for all remote hosts
 - **Remote Control**: Control panel for managing all FPP systems
 
+### Remote Control
+![Remote Control](https://github.com/agent462/fpp-watcher-images/blob/main/remote-control.png)
+![Remote Control](https://github.com/agent462/fpp-watcher-images/blob/main/remote-control-2.png)
+![Upgrades](https://github.com/agent462/fpp-watcher-images/blob/main/upgrade-watcher-2.png)
+
+### Metrics
+![Local Metrics](https://github.com/agent462/fpp-watcher-images/blob/main/local-metrics.png)
+![Remote Metrics](https://github.com/agent462/fpp-watcher-images/blob/main/remote-metrics.png)
+
+### Connectivity
+![Ping Host View](https://github.com/agent462/fpp-watcher-images/blob/main/ping-host-view.png)
+![Connectivity Metrics](https://github.com/agent462/fpp-watcher-images/blob/main/connectivity-metrics.png)
+
+
 ## API
 
 All metrics endpoints support `?hours=N` parameter (default: 24).
