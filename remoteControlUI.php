@@ -352,29 +352,61 @@ function buildHostListHtml(hostsMap, idPrefix, extraInfoFn = null) {
     return html;
 }
 
-async function processBulkOperation(hostsArray, operationFn, idPrefix, progressEl) {
+async function processBulkOperation(hostsArray, operationFn, idPrefix, progressEl, parallel = false) {
     let completed = 0, failed = 0;
     const total = hostsArray.length;
-    progressEl.textContent = `Processing 0 of ${total} hosts...`;
 
-    for (const item of hostsArray) {
-        const address = Array.isArray(item) ? item[0] : item;
-        const statusEl = document.getElementById(`${idPrefix}-status-${escapeId(address)}`);
-        statusEl.className = 'host-status in-progress';
-        statusEl.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Processing...';
+    if (parallel) {
+        progressEl.textContent = `Processing ${total} hosts in parallel...`;
 
-        try {
-            await operationFn(item);
-            statusEl.className = 'host-status success';
-            statusEl.innerHTML = '<i class="fas fa-check"></i> Done';
-            completed++;
-        } catch (error) {
-            console.error(`Error processing ${address}:`, error);
-            statusEl.className = 'host-status error';
-            statusEl.innerHTML = '<i class="fas fa-times"></i> Failed';
-            failed++;
+        // Mark all as in-progress
+        hostsArray.forEach(item => {
+            const address = Array.isArray(item) ? item[0] : item;
+            const statusEl = document.getElementById(`${idPrefix}-status-${escapeId(address)}`);
+            statusEl.className = 'host-status in-progress';
+            statusEl.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Processing...';
+        });
+
+        // Run all operations in parallel
+        const results = await Promise.allSettled(hostsArray.map(async (item) => {
+            const address = Array.isArray(item) ? item[0] : item;
+            const statusEl = document.getElementById(`${idPrefix}-status-${escapeId(address)}`);
+            try {
+                await operationFn(item);
+                statusEl.className = 'host-status success';
+                statusEl.innerHTML = '<i class="fas fa-check"></i> Done';
+                return { success: true };
+            } catch (error) {
+                console.error(`Error processing ${address}:`, error);
+                statusEl.className = 'host-status error';
+                statusEl.innerHTML = '<i class="fas fa-times"></i> Failed';
+                return { success: false };
+            }
+        }));
+
+        results.forEach(r => r.value?.success ? completed++ : failed++);
+    } else {
+        progressEl.textContent = `Processing 0 of ${total} hosts...`;
+
+        for (const item of hostsArray) {
+            const address = Array.isArray(item) ? item[0] : item;
+            const statusEl = document.getElementById(`${idPrefix}-status-${escapeId(address)}`);
+            statusEl.className = 'host-status in-progress';
+            statusEl.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Processing...';
+
+            try {
+                await operationFn(item);
+                statusEl.className = 'host-status success';
+                statusEl.innerHTML = '<i class="fas fa-check"></i> Done';
+                completed++;
+            } catch (error) {
+                console.error(`Error processing ${address}:`, error);
+                statusEl.className = 'host-status error';
+                statusEl.innerHTML = '<i class="fas fa-times"></i> Failed';
+                failed++;
+            }
+            progressEl.textContent = `Processed ${completed + failed} of ${total} hosts...`;
         }
-        progressEl.textContent = `Processed ${completed + failed} of ${total} hosts...`;
     }
 
     return { completed, failed, total };
@@ -890,13 +922,19 @@ const bulkConfig = {
     upgrade: {
         title: '<i class="fas fa-arrow-circle-up" style="color: #28a745;"></i> Upgrading Watcher',
         getHosts: () => hostsWithWatcherUpdates,
+        parallel: true,
         operation: async ([address]) => {
             const response = await fetch('/api/plugin/fpp-plugin-watcher/remote/upgrade', {
                 method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ host: address, plugin: 'fpp-plugin-watcher' })
             });
             const data = await response.json();
             if (!data.success) throw new Error(data.error);
-        }
+            // Restart FPPD after Watcher upgrade
+            await fetch('/api/plugin/fpp-plugin-watcher/remote/restart', {
+                method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ host: address })
+            });
+        },
+        refreshDelay: 3000
     },
     restart: {
         title: '<i class="fas fa-sync" style="color: #fd7e14;"></i> Restarting Systems',
@@ -935,7 +973,7 @@ async function showBulkModal(type) {
     closeBtn.disabled = true;
 
     const hostsArray = Array.from(hostsMap.entries());
-    const { completed, failed, total } = await processBulkOperation(hostsArray, config.operation, 'bulk', progressEl);
+    const { completed, failed, total } = await processBulkOperation(hostsArray, config.operation, 'bulk', progressEl, config.parallel || false);
 
     progressEl.textContent = failed === 0 ? `Successfully processed ${completed} hosts!` : `Completed: ${completed} succeeded, ${failed} failed`;
     closeBtn.disabled = false;
