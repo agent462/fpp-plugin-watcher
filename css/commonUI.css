@@ -1383,6 +1383,17 @@
     color: #212529;
 }
 
+.watcher-details__link {
+    color: #007bff;
+    text-decoration: none;
+    transition: color 0.2s;
+}
+
+.watcher-details__link:hover {
+    color: #0056b3;
+    text-decoration: underline;
+}
+
 /* ==========================================================================
    Test Mode Button
 
