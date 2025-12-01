@@ -28,12 +28,29 @@ renderCSSIncludes(false);
     .controlCard.offline { opacity: 0.7; }
     .controlCard.offline .cardHeader { background: #6c757d; }
     .cardHeader {
-        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
         color: #fff;
-        padding: 1rem 1.25rem;
+        padding: 0.85rem 1.25rem;
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
     }
-    .cardHeader .hostname { font-size: 1.15rem; font-weight: 600; margin-bottom: 0.25rem; }
-    .cardHeader .address { font-size: 0.85rem; opacity: 0.85; }
+    .cardHeader .hostname { font-size: 1.1rem; font-weight: 600; }
+    .cardHeader .address { font-size: 0.8rem; opacity: 0.9; }
+    .cardHeader .address a { color: inherit; text-decoration: none; }
+    .cardHeader .address a:hover { text-decoration: underline; }
+    /* Host color palette */
+    .cardHeader--color-0 { background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); }
+    .cardHeader--color-1 { background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%); }
+    .cardHeader--color-2 { background: linear-gradient(135deg, #4facfe 0%, #00f2fe 100%); }
+    .cardHeader--color-3 { background: linear-gradient(135deg, #43e97b 0%, #38f9d7 100%); }
+    .cardHeader--color-4 { background: linear-gradient(135deg, #fa709a 0%, #fee140 100%); }
+    .cardHeader--color-5 { background: linear-gradient(135deg, #a18cd1 0%, #fbc2eb 100%); }
+    .cardHeader--color-6 { background: linear-gradient(135deg, #ff9a9e 0%, #fecfef 100%); }
+    .cardHeader--color-7 { background: linear-gradient(135deg, #ffecd2 0%, #fcb69f 100%); color: #333; }
+    .cardHeader--color-8 { background: linear-gradient(135deg, #a1c4fd 0%, #c2e9fb 100%); color: #333; }
+    .cardHeader--color-9 { background: linear-gradient(135deg, #d299c2 0%, #fef9d7 100%); color: #333; }
+    .cardHeader--color-10 { background: linear-gradient(135deg, #89f7fe 0%, #66a6ff 100%); }
+    .cardHeader--color-11 { background: linear-gradient(135deg, #fddb92 0%, #d1fdff 100%); color: #333; }
     .cardBody { padding: 1.25rem; }
     .infoGrid {
         display: grid;
@@ -179,11 +196,11 @@ renderCSSIncludes(false);
 
     <div id="controlContent" style="display: none;">
         <div class="controlCardsGrid" id="controlCardsGrid">
-            <?php foreach ($remoteSystems as $system): ?>
+            <?php foreach ($remoteSystems as $index => $system): ?>
             <div class="controlCard" id="card-<?php echo htmlspecialchars($system['address']); ?>" data-address="<?php echo htmlspecialchars($system['address']); ?>" data-hostname="<?php echo htmlspecialchars($system['hostname']); ?>">
-                <div class="cardHeader">
+                <div class="cardHeader cardHeader--color-<?php echo $index % 12; ?>">
                     <div class="hostname"><?php echo htmlspecialchars($system['hostname']); ?></div>
-                    <div class="address"><a href="http://<?php echo htmlspecialchars($system['address']); ?>/" target="_blank" style="color: inherit; text-decoration: underline;"><?php echo htmlspecialchars($system['address']); ?></a></div>
+                    <div class="address"><a href="http://<?php echo htmlspecialchars($system['address']); ?>/" target="_blank"><?php echo htmlspecialchars($system['address']); ?></a></div>
                 </div>
                 <div class="cardBody">
                     <div class="infoGrid">
