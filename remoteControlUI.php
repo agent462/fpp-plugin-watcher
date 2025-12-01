@@ -7,6 +7,21 @@ $config = readPluginConfig();
 $localSystem = apiCall('GET', 'http://127.0.0.1/api/fppd/status', [], true, 5) ?: [];
 $access = checkDashboardAccess($config, $localSystem, 'controlUIEnabled');
 $remoteSystems = $access['show'] ? getMultiSyncRemoteSystems() : [];
+$localHostname = gethostname() ?: 'localhost';
+
+// Get primary IP address from FPP network API
+$localIP = '127.0.0.1';
+$networkInterfaces = apiCall('GET', 'http://127.0.0.1/api/network/interface', [], true, 5) ?: [];
+foreach ($networkInterfaces as $iface) {
+    if (isset($iface['operstate']) && $iface['operstate'] === 'UP' && !empty($iface['addr_info'])) {
+        foreach ($iface['addr_info'] as $addr) {
+            if (isset($addr['family']) && $addr['family'] === 'inet' && !empty($addr['local'])) {
+                $localIP = $addr['local'];
+                break 2;
+            }
+        }
+    }
+}
 
 renderCSSIncludes(false);
 ?>
@@ -23,6 +38,8 @@ renderCSSIncludes(false);
         box-shadow: 0 2px 8px rgba(0,0,0,0.1);
         overflow: hidden;
         transition: box-shadow 0.2s ease;
+        display: flex;
+        flex-direction: column;
     }
     .controlCard:hover { box-shadow: 0 4px 16px rgba(0,0,0,0.15); }
     .cardHeader {
@@ -46,7 +63,7 @@ renderCSSIncludes(false);
     .controlCard.status-restart .cardHeader { border-left-color: #fd7e14; }
     .controlCard.status-update .cardHeader { border-left-color: #17a2b8; }
     .controlCard.status-testing .cardHeader { border-left-color: #e83e8c; }
-    .cardBody { padding: 1.25rem; }
+    .cardBody { padding: 1.25rem; display: flex; flex-direction: column; flex: 1; }
     .infoGrid {
         display: grid;
         grid-template-columns: repeat(2, 1fr);
@@ -75,7 +92,7 @@ renderCSSIncludes(false);
     .toggleSwitch input:checked + .toggleSlider { background-color: #ffc107; }
     .toggleSwitch input:checked + .toggleSlider:before { transform: translateX(22px); }
     .toggleSwitch input:disabled + .toggleSlider { opacity: 0.5; cursor: not-allowed; }
-    .actionButtons { display: flex; gap: 0.5rem; flex-wrap: wrap; padding-top: 0.75rem; margin-top: 1rem; border-top: 1px solid #e9ecef; }
+    .actionButtons { display: flex; gap: 0.5rem; flex-wrap: wrap; padding-top: 0.75rem; margin-top: auto; border-top: 1px solid #e9ecef; }
     .actionBtn {
         flex: 1; min-width: 100px; padding: 0.5rem 0.75rem; border: none; border-radius: 6px;
         font-size: 0.8rem; font-weight: 500; cursor: pointer; display: inline-flex;
@@ -92,13 +109,23 @@ renderCSSIncludes(false);
     /* Connectivity alert */
     .connectivity-alert {
         display: none;
+        position: relative;
         background: #fff3cd;
         border: 1px solid #ffc107;
         border-radius: 8px;
-        padding: 0.75rem;
-        margin-bottom: 1rem;
+        padding: 0.75rem 1rem;
+        margin-top: 1.75rem;
+        padding-top: 1rem;
     }
     .connectivity-alert.visible { display: block; }
+    .connectivity-alert.visible::before {
+        content: '';
+        position: absolute;
+        top: -1rem;
+        left: 0;
+        right: 0;
+        border-top: 1px solid #e9ecef;
+    }
     .connectivity-alert-content {
         display: flex;
         align-items: center;
@@ -136,6 +163,12 @@ renderCSSIncludes(false);
     .bulk-action-btn--connectivity { background: #ffc107; color: #212529; }
     .bulk-action-btn--connectivity:hover { background: #e0a800; }
     .status-indicator--connectivity { background: #fff3cd; color: #856404; }
+    .status-indicator--low-storage { background: #fff3cd; color: #856404; }
+    .status-indicator--high-cpu { background: #fff3cd; color: #856404; }
+    .status-indicator--low-memory { background: #fff3cd; color: #856404; }
+    /* Localhost card styling */
+    .controlCard.localhost .cardHeader { background: #2c3e50; }
+    .controlCard.localhost .hostname::before { content: '\f015'; font-family: 'Font Awesome 5 Free'; font-weight: 900; margin-right: 0.5rem; }
 </style>
 
 <div class="metricsContainer">
@@ -191,6 +224,81 @@ renderCSSIncludes(false);
 
     <div id="controlContent" style="display: none;">
         <div class="controlCardsGrid" id="controlCardsGrid">
+            <!-- Localhost Card -->
+            <div class="controlCard localhost" id="card-localhost" data-address="<?php echo htmlspecialchars($localIP); ?>" data-hostname="<?php echo htmlspecialchars($localHostname); ?>">
+                <div class="cardHeader">
+                    <div class="hostname"><?php echo htmlspecialchars($localHostname); ?></div>
+                    <div class="address"><a href="http://<?php echo htmlspecialchars($localIP); ?>/" target="_blank"><?php echo htmlspecialchars($localIP); ?> (This System)</a></div>
+                </div>
+                <div class="cardBody">
+                    <div class="infoGrid">
+                        <div class="infoItem">
+                            <span class="infoLabel">Status</span>
+                            <span class="infoValue" id="status-localhost">
+                                <span class="status-indicator status-indicator--offline"><span class="dot"></span> Loading...</span>
+                            </span>
+                        </div>
+                        <div class="infoItem">
+                            <span class="infoLabel">Platform</span>
+                            <span class="infoValue" id="platform-localhost">--</span>
+                        </div>
+                        <div class="infoItem">
+                            <span class="infoLabel">Version</span>
+                            <span class="infoValue" id="version-localhost">--</span>
+                        </div>
+                        <div class="infoItem">
+                            <span class="infoLabel">Mode</span>
+                            <span class="infoValue" id="mode-localhost">--</span>
+                        </div>
+                        <div class="infoItem">
+                            <span class="infoLabel">Watcher</span>
+                            <span class="infoValue" id="watcher-localhost">--</span>
+                        </div>
+                    </div>
+                    <div class="actionRow">
+                        <span class="actionLabel"><i class="fas fa-vial"></i> Test Mode (Local Channels)</span>
+                        <label class="toggleSwitch">
+                            <input type="checkbox" id="testmode-localhost" onchange="toggleLocalTestMode(this.checked)" disabled>
+                            <span class="toggleSlider"></span>
+                        </label>
+                    </div>
+                    <div class="connectivity-alert" id="connectivity-alert-localhost">
+                        <div class="connectivity-alert-content">
+                            <div class="connectivity-alert-icon"><i class="fas fa-exclamation-triangle"></i></div>
+                            <div class="connectivity-alert-text">
+                                <strong>Connectivity Check Failed</strong>
+                                <span class="connectivity-alert-details" id="connectivity-details-localhost"></span>
+                            </div>
+                            <button class="connectivity-alert-btn" onclick="clearLocalResetState()" id="connectivity-clear-btn-localhost">
+                                <i class="fas fa-redo"></i> Clear
+                            </button>
+                        </div>
+                    </div>
+                    <div class="updates-container" id="updates-container-localhost">
+                        <div class="updates-header">
+                            <i class="fas fa-arrow-circle-up"></i> Updates Available
+                        </div>
+                        <div class="update-row update-row--fpp" id="fpp-update-row-localhost">
+                            <div class="update-info">
+                                <span class="update-name"><i class="fas fa-code-branch"></i> FPP</span>
+                                <span class="update-version" id="fpp-update-version-localhost"></span>
+                            </div>
+                            <button class="banner-btn" onclick="upgradeFPPSingle('localhost')" id="fpp-upgrade-btn-localhost">
+                                <i class="fas fa-download"></i> Upgrade
+                            </button>
+                        </div>
+                        <div id="upgrades-list-localhost"></div>
+                    </div>
+                    <div class="actionButtons">
+                        <button class="actionBtn restart" onclick="restartLocalFppd()" id="restart-btn-localhost" disabled>
+                            <i class="fas fa-redo"></i> Restart FPPD
+                        </button>
+                        <button class="actionBtn reboot" onclick="confirmLocalReboot()" id="reboot-btn-localhost" disabled>
+                            <i class="fas fa-power-off"></i> Reboot
+                        </button>
+                    </div>
+                </div>
+            </div>
             <?php foreach ($remoteSystems as $index => $system): ?>
             <div class="controlCard" id="card-<?php echo htmlspecialchars($system['address']); ?>" data-address="<?php echo htmlspecialchars($system['address']); ?>" data-hostname="<?php echo htmlspecialchars($system['hostname']); ?>">
                 <div class="cardHeader">
@@ -222,6 +330,13 @@ renderCSSIncludes(false);
                             <span class="infoValue" id="watcher-<?php echo htmlspecialchars($system['address']); ?>">--</span>
                         </div>
                     </div>
+                    <div class="actionRow">
+                        <span class="actionLabel"><i class="fas fa-vial"></i> Test Mode (Local Channels)</span>
+                        <label class="toggleSwitch">
+                            <input type="checkbox" id="testmode-<?php echo htmlspecialchars($system['address']); ?>" onchange="toggleTestMode('<?php echo htmlspecialchars($system['address']); ?>', this.checked)" disabled>
+                            <span class="toggleSlider"></span>
+                        </label>
+                    </div>
                     <div class="connectivity-alert" id="connectivity-alert-<?php echo htmlspecialchars($system['address']); ?>">
                         <div class="connectivity-alert-content">
                             <div class="connectivity-alert-icon"><i class="fas fa-exclamation-triangle"></i></div>
@@ -233,13 +348,6 @@ renderCSSIncludes(false);
                                 <i class="fas fa-redo"></i> Clear
                             </button>
                         </div>
-                    </div>
-                    <div class="actionRow">
-                        <span class="actionLabel"><i class="fas fa-vial"></i> Test Mode (Local Channels)</span>
-                        <label class="toggleSwitch">
-                            <input type="checkbox" id="testmode-<?php echo htmlspecialchars($system['address']); ?>" onchange="toggleTestMode('<?php echo htmlspecialchars($system['address']); ?>', this.checked)" disabled>
-                            <span class="toggleSlider"></span>
-                        </label>
                     </div>
                     <div class="updates-container" id="updates-container-<?php echo htmlspecialchars($system['address']); ?>">
                         <div class="updates-header">
@@ -555,12 +663,25 @@ async function fetchRemoteStatus(address) {
             } catch (e) {}
         }
 
-        let fppLocalVersion = null, fppRemoteVersion = null;
+        let fppLocalVersion = null, fppRemoteVersion = null, diskUtilization = null, cpuUtilization = null, memoryUtilization = null;
         if (sysStatusResponse?.ok) {
             try {
                 const sysStatus = await sysStatusResponse.json();
                 fppLocalVersion = sysStatus.advancedView?.LocalGitVersion || null;
                 fppRemoteVersion = sysStatus.advancedView?.RemoteGitVersion || null;
+                const utilization = sysStatus.advancedView?.Utilization;
+                if (utilization) {
+                    const diskInfo = utilization.Disk?.Root;
+                    if (diskInfo?.Total > 0) {
+                        diskUtilization = Math.round(((diskInfo.Total - diskInfo.Free) / diskInfo.Total) * 100);
+                    }
+                    if (typeof utilization.CPU === 'number') {
+                        cpuUtilization = Math.round(utilization.CPU);
+                    }
+                    if (typeof utilization.Memory === 'number') {
+                        memoryUtilization = Math.round(utilization.Memory);
+                    }
+                }
             } catch (e) {}
         }
 
@@ -574,9 +695,92 @@ async function fetchRemoteStatus(address) {
             } catch (e) {}
         }
 
-        return { success: true, address, status: data.status, testMode: data.testMode, watcherVersion, pluginUpdates, fppLocalVersion, fppRemoteVersion, connectivityState };
+        return { success: true, address, status: data.status, testMode: data.testMode, watcherVersion, pluginUpdates, fppLocalVersion, fppRemoteVersion, connectivityState, diskUtilization, cpuUtilization, memoryUtilization };
     } catch (error) {
         return { success: false, address, error: error.message };
+    }
+}
+
+async function fetchLocalStatus() {
+    try {
+        const [statusResponse, versionResponse, updatesResponse, sysStatusResponse, connectivityResponse] = await Promise.all([
+            fetch('/api/fppd/status'),
+            fetch('/api/plugin/fpp-plugin-watcher/version').catch(() => null),
+            fetch('/api/plugin/fpp-plugin-watcher/plugins/updates').catch(() => null),
+            fetch('/api/system/status').catch(() => null),
+            fetch('/api/plugin/fpp-plugin-watcher/connectivity/state').catch(() => null)
+        ]);
+
+        if (!statusResponse.ok) {
+            return { success: false, address: 'localhost', error: 'Failed to fetch local status' };
+        }
+
+        const fppStatus = await statusResponse.json();
+        // Build status object matching remote format
+        const status = {
+            platform: fppStatus.platform || '--',
+            branch: fppStatus.branch || '--',
+            mode_name: fppStatus.mode_name || '--',
+            rebootFlag: fppStatus.rebootFlag || 0,
+            restartFlag: fppStatus.restartFlag || 0
+        };
+
+        // Get test mode status
+        let testMode = { enabled: 0 };
+        if (fppStatus.status_name === 'testing') {
+            testMode.enabled = 1;
+        }
+
+        let watcherVersion = null;
+        if (versionResponse?.ok) {
+            try { watcherVersion = (await versionResponse.json()).version || null; } catch (e) {}
+        }
+
+        let pluginUpdates = [];
+        if (updatesResponse?.ok) {
+            try {
+                const updatesData = await updatesResponse.json();
+                if (updatesData.success && updatesData.updatesAvailable) {
+                    pluginUpdates = updatesData.updatesAvailable;
+                }
+            } catch (e) {}
+        }
+
+        let fppLocalVersion = null, fppRemoteVersion = null, diskUtilization = null, cpuUtilization = null, memoryUtilization = null;
+        if (sysStatusResponse?.ok) {
+            try {
+                const sysStatus = await sysStatusResponse.json();
+                fppLocalVersion = sysStatus.advancedView?.LocalGitVersion || null;
+                fppRemoteVersion = sysStatus.advancedView?.RemoteGitVersion || null;
+                const utilization = sysStatus.advancedView?.Utilization;
+                if (utilization) {
+                    const diskInfo = utilization.Disk?.Root;
+                    if (diskInfo?.Total > 0) {
+                        diskUtilization = Math.round(((diskInfo.Total - diskInfo.Free) / diskInfo.Total) * 100);
+                    }
+                    if (typeof utilization.CPU === 'number') {
+                        cpuUtilization = Math.round(utilization.CPU);
+                    }
+                    if (typeof utilization.Memory === 'number') {
+                        memoryUtilization = Math.round(utilization.Memory);
+                    }
+                }
+            } catch (e) {}
+        }
+
+        let connectivityState = null;
+        if (connectivityResponse?.ok) {
+            try {
+                const connData = await connectivityResponse.json();
+                if (connData.success && connData.hasResetAdapter) {
+                    connectivityState = connData;
+                }
+            } catch (e) {}
+        }
+
+        return { success: true, address: 'localhost', status, testMode, watcherVersion, pluginUpdates, fppLocalVersion, fppRemoteVersion, connectivityState, diskUtilization, cpuUtilization, memoryUtilization };
+    } catch (error) {
+        return { success: false, address: 'localhost', error: error.message };
     }
 }
 
@@ -616,24 +820,30 @@ function updateCardUI(address, data) {
         updateBulkButton('connectivityFailBtn', 'connectivityFailCount', hostsWithConnectivityFailure);
         return;
     }
-    const { status, testMode, pluginUpdates = [], fppLocalVersion, fppRemoteVersion, connectivityState } = data;
+    const { status, testMode, pluginUpdates = [], fppLocalVersion, fppRemoteVersion, connectivityState, diskUtilization, cpuUtilization, memoryUtilization } = data;
     const isTestMode = testMode.enabled === 1;
     const needsReboot = status.rebootFlag === 1;
     const needsRestart = status.restartFlag === 1;
     const fppUpdateAvailable = fppLocalVersion && fppRemoteVersion && fppRemoteVersion !== 'Unknown' && fppRemoteVersion !== '' && fppLocalVersion !== fppRemoteVersion;
     const hasConnectivityFailure = connectivityState && connectivityState.hasResetAdapter;
     const hasPluginUpdates = pluginUpdates.length > 0;
+    const hasLowStorage = diskUtilization !== null && diskUtilization >= 90;
+    const hasHighCpu = cpuUtilization !== null && cpuUtilization >= 80;
+    const hasLowMemory = memoryUtilization !== null && memoryUtilization >= 90;
 
     // Set status class for left border accent (priority: testing > restart > update > warning > ok)
     if (isTestMode) card.classList.add('status-testing');
     else if (needsReboot || needsRestart) card.classList.add('status-restart');
     else if (fppUpdateAvailable || hasPluginUpdates) card.classList.add('status-update');
-    else if (hasConnectivityFailure) card.classList.add('status-warning');
+    else if (hasConnectivityFailure || hasLowStorage || hasHighCpu || hasLowMemory) card.classList.add('status-warning');
     else card.classList.add('status-ok');
 
     // Build status indicators
     let indicators = ['<span class="status-indicator status-indicator--online"><span class="dot"></span>Online</span>'];
     if (hasConnectivityFailure) indicators.push('<span class="status-indicator status-indicator--connectivity"><span class="dot"></span>Conn. Failed</span>');
+    if (hasHighCpu) indicators.push(`<span class="status-indicator status-indicator--high-cpu"><span class="dot"></span>High CPU (${cpuUtilization}%)</span>`);
+    if (hasLowMemory) indicators.push(`<span class="status-indicator status-indicator--low-memory"><span class="dot"></span>Low Memory (${memoryUtilization}%)</span>`);
+    if (hasLowStorage) indicators.push(`<span class="status-indicator status-indicator--low-storage"><span class="dot"></span>Low Storage (${diskUtilization}%)</span>`);
     if (isTestMode) indicators.push('<span class="status-indicator status-indicator--testing"><span class="dot"></span>Test Mode</span>');
     if (fppUpdateAvailable) indicators.push('<span class="status-indicator status-indicator--update"><span class="dot"></span>FPP Update</span>');
     if (needsReboot) indicators.push('<span class="status-indicator status-indicator--reboot"><span class="dot"></span>Reboot Req</span>');
@@ -741,6 +951,7 @@ async function refreshAllStatus() {
 
     try {
         await Promise.all([
+            fetchLocalStatus().then(result => updateCardUI('localhost', result)),
             ...remoteAddresses.map(addr =>
                 fetchRemoteStatus(addr).then(result => updateCardUI(result.address, result))
             ),
@@ -844,6 +1055,12 @@ async function executeReboot() {
     const { address } = pendingReboot;
     closeConfirmDialog();
 
+    // Handle localhost reboot separately
+    if (address === 'localhost') {
+        executeLocalReboot();
+        return;
+    }
+
     const btn = document.getElementById(`reboot-btn-${address}`);
     const originalHtml = btn.innerHTML;
     btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Rebooting...';
@@ -927,6 +1144,122 @@ async function upgradePlugin(address, pluginRepoName) {
         btn.innerHTML = originalHtml;
         btn.disabled = false;
         alert(`Upgrade failed: ${error.message}`);
+    }
+}
+
+// =============================================================================
+// Local System Actions
+// =============================================================================
+
+async function toggleLocalTestMode(enable) {
+    const toggle = document.getElementById('testmode-localhost');
+    toggle.disabled = true;
+
+    try {
+        let channelRange = "1-8388608";
+        try {
+            const infoResponse = await fetch('/api/system/info');
+            if (infoResponse.ok) {
+                const info = await infoResponse.json();
+                if (info.channelRanges) {
+                    const parts = info.channelRanges.split('-');
+                    if (parts.length === 2) {
+                        channelRange = `${parseInt(parts[0]) + 1}-${parseInt(parts[1]) + 1}`;
+                    }
+                }
+            }
+        } catch (e) {}
+
+        const command = enable ? 'Test Start' : 'Test Stop';
+        const args = enable ? ["1000", "RGB Cycle", channelRange, "R-G-B"] : [];
+        const response = await fetch('/api/command', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ command, args })
+        });
+
+        if (!response.ok) throw new Error('Failed to toggle test mode');
+
+        setTimeout(async () => {
+            const result = await fetchLocalStatus();
+            updateCardUI('localhost', result);
+        }, 500);
+    } catch (error) {
+        toggle.checked = !enable;
+        alert(`Failed to toggle test mode: ${error.message}`);
+    } finally {
+        toggle.disabled = false;
+    }
+}
+
+async function restartLocalFppd() {
+    const btn = document.getElementById('restart-btn-localhost');
+    const originalHtml = btn.innerHTML;
+    btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Restarting...';
+    btn.disabled = true;
+
+    try {
+        const response = await fetch('/api/fppd/restart', { method: 'GET' });
+        if (!response.ok) throw new Error('Failed to restart FPPD');
+
+        btn.innerHTML = '<i class="fas fa-check"></i> Restarted!';
+        setTimeout(async () => {
+            btn.innerHTML = originalHtml;
+            btn.disabled = false;
+            const result = await fetchLocalStatus();
+            updateCardUI('localhost', result);
+        }, 3000);
+    } catch (error) {
+        btn.innerHTML = originalHtml;
+        btn.disabled = false;
+        alert(`Failed to restart FPPD: ${error.message}`);
+    }
+}
+
+function confirmLocalReboot() {
+    pendingReboot = { address: 'localhost', hostname: '<?php echo htmlspecialchars($localHostname); ?>' };
+    document.getElementById('confirmMessage').textContent = 'Are you sure you want to reboot THIS system? You will lose connection temporarily.';
+    document.getElementById('confirmDialog').style.display = 'flex';
+}
+
+async function executeLocalReboot() {
+    const btn = document.getElementById('reboot-btn-localhost');
+    const originalHtml = btn.innerHTML;
+    btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Rebooting...';
+    btn.disabled = true;
+
+    try {
+        await fetch('/api/system/reboot', { method: 'GET' });
+        const card = document.getElementById('card-localhost');
+        card.classList.add('offline');
+        document.getElementById('status-localhost').innerHTML = '<span class="status-indicator status-indicator--offline"><span class="dot"></span> Rebooting...</span>';
+    } catch (error) {
+        // Expected - connection will be lost
+        const card = document.getElementById('card-localhost');
+        card.classList.add('offline');
+        document.getElementById('status-localhost').innerHTML = '<span class="status-indicator status-indicator--offline"><span class="dot"></span> Rebooting...</span>';
+    }
+}
+
+async function clearLocalResetState() {
+    const btn = document.getElementById('connectivity-clear-btn-localhost');
+    const originalHtml = btn.innerHTML;
+    btn.disabled = true;
+    btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i>';
+
+    try {
+        const response = await fetch('/api/plugin/fpp-plugin-watcher/connectivity/state/clear', { method: 'POST' });
+        const data = await response.json();
+        if (!data.success) throw new Error(data.error || 'Failed to clear reset state');
+
+        setTimeout(async () => {
+            const result = await fetchLocalStatus();
+            updateCardUI('localhost', result);
+        }, 1000);
+    } catch (error) {
+        btn.innerHTML = originalHtml;
+        btn.disabled = false;
+        alert(`Failed to clear reset state: ${error.message}`);
     }
 }
 

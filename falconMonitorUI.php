@@ -279,7 +279,7 @@ function renderDetails(host, status, isLoading = false) {
         <div class="watcher-details">
             <div class="watcher-details__row">
                 <span class="watcher-details__label">IP Address</span>
-                <span class="watcher-details__value">${escapeHtml(host)}</span>
+                <a href="http://${escapeHtml(host)}/" target="_blank" class="watcher-details__value watcher-details__link">${escapeHtml(host)}</a>
             </div>
             <div class="watcher-details__row">
                 <span class="watcher-details__label">Controller Time</span>
