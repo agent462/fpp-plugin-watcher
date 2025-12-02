@@ -307,6 +307,13 @@ renderCSSIncludes(false);
                         <div class="updates-header">
                             <i class="fas fa-arrow-circle-up"></i> Updates Available
                         </div>
+                        <div class="update-row update-row--fpp update-row--major" id="fpp-major-row-localhost">
+                            <div class="update-info">
+                                <span class="update-name"><i class="fas fa-exclamation-triangle"></i> FPP Major Upgrade</span>
+                                <span class="update-version" id="fpp-major-version-localhost"></span>
+                            </div>
+                            <span class="major-upgrade-note">Requires OS re-image</span>
+                        </div>
                         <div class="update-row update-row--fpp" id="fpp-crossversion-row-localhost">
                             <div class="update-info">
                                 <span class="update-name"><i class="fas fa-arrow-up"></i> FPP Upgrade</span>
@@ -390,6 +397,13 @@ renderCSSIncludes(false);
                     <div class="updates-container" id="updates-container-<?php echo htmlspecialchars($system['address']); ?>">
                         <div class="updates-header">
                             <i class="fas fa-arrow-circle-up"></i> Updates Available
+                        </div>
+                        <div class="update-row update-row--fpp update-row--major" id="fpp-major-row-<?php echo htmlspecialchars($system['address']); ?>">
+                            <div class="update-info">
+                                <span class="update-name"><i class="fas fa-exclamation-triangle"></i> FPP Major Upgrade</span>
+                                <span class="update-version" id="fpp-major-version-<?php echo htmlspecialchars($system['address']); ?>"></span>
+                            </div>
+                            <span class="major-upgrade-note">Requires OS re-image</span>
                         </div>
                         <div class="update-row update-row--fpp" id="fpp-crossversion-row-<?php echo htmlspecialchars($system['address']); ?>">
                             <div class="update-info">
@@ -988,7 +1002,9 @@ function updateCardUI(address, data) {
     const rebootBtn = document.getElementById(`reboot-btn-${address}`);
     const updatesContainer = document.getElementById(`updates-container-${address}`);
     const upgradesList = document.getElementById(`upgrades-list-${address}`);
-    // Separate rows for cross-version and branch updates
+    // Separate rows for cross-version, branch updates, and major upgrades
+    const fppMajorRow = document.getElementById(`fpp-major-row-${address}`);
+    const fppMajorVersion = document.getElementById(`fpp-major-version-${address}`);
     const fppCrossVersionRow = document.getElementById(`fpp-crossversion-row-${address}`);
     const fppCrossVersionVersion = document.getElementById(`fpp-crossversion-version-${address}`);
     const fppBranchRow = document.getElementById(`fpp-branch-row-${address}`);
@@ -1009,6 +1025,7 @@ function updateCardUI(address, data) {
         restartBtn.disabled = true;
         rebootBtn.disabled = true;
         updatesContainer.classList.remove('visible');
+        fppMajorRow.classList.remove('visible');
         fppCrossVersionRow.classList.remove('visible');
         fppBranchRow.classList.remove('visible');
         document.getElementById(`connectivity-alert-${address}`)?.classList.remove('visible');
@@ -1123,6 +1140,14 @@ function updateCardUI(address, data) {
     // Major version upgrades (e.g., v9.x to v10.x) require OS re-image and cannot be done via upgrade
     const isMajorUpgrade = crossVersionUpgrade && crossVersionUpgrade.available && crossVersionUpgrade.isMajorUpgrade;
     const hasCrossVersionUpgrade = crossVersionUpgrade && crossVersionUpgrade.available && !isMajorUpgrade;
+
+    // Show/hide major upgrade row (info only, not actionable)
+    if (isMajorUpgrade) {
+        fppMajorRow.classList.add('visible');
+        fppMajorVersion.textContent = `v${crossVersionUpgrade.currentVersion} → v${crossVersionUpgrade.latestVersion}`;
+    } else {
+        fppMajorRow.classList.remove('visible');
+    }
 
     // Show/hide cross-version upgrade row
     if (hasCrossVersionUpgrade) {
