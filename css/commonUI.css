@@ -607,6 +607,17 @@
     box-shadow: 0 2px 8px rgba(0, 123, 255, 0.3);
 }
 
+/** Yellow - Connectivity reset operations */
+.bulk-action-btn--connectivity {
+    background: #ffc107;
+    color: #212529;
+}
+
+.bulk-action-btn--connectivity:hover:not(:disabled) {
+    background: #e0a800;
+    box-shadow: 0 2px 8px rgba(255, 193, 7, 0.3);
+}
+
 /* ==========================================================================
    Status Indicators (Pills/Badges)
 
@@ -679,6 +690,37 @@
 .status-indicator--update {
     background: rgba(0, 123, 255, 0.15);
     color: #007bff;
+}
+
+/** Yellow - Connectivity issue */
+.status-indicator--connectivity {
+    background: rgba(255, 193, 7, 0.15);
+    color: #856404;
+}
+
+/** Yellow - Low storage warning */
+.status-indicator--low-storage {
+    background: rgba(255, 193, 7, 0.15);
+    color: #856404;
+}
+
+/** Yellow - High CPU warning */
+.status-indicator--high-cpu {
+    background: rgba(255, 193, 7, 0.15);
+    color: #856404;
+}
+
+/** Yellow - Low memory warning */
+.status-indicator--low-memory {
+    background: rgba(255, 193, 7, 0.15);
+    color: #856404;
+}
+
+/** Yellow - Major upgrade available (hover for info) */
+.status-indicator--major-upgrade {
+    background: rgba(255, 193, 7, 0.15);
+    color: #856404;
+    cursor: help;
 }
 
 /* ==========================================================================
