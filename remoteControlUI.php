@@ -11,194 +11,6 @@ $localHostname = gethostname() ?: 'localhost';
 
 renderCSSIncludes(false);
 ?>
-<style>
-    .controlCardsGrid {
-        display: grid;
-        grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
-        gap: 1.5rem;
-        margin-bottom: 1.5rem;
-    }
-    .controlCard {
-        background: #fff;
-        border-radius: 12px;
-        box-shadow: 0 2px 8px rgba(0,0,0,0.1);
-        overflow: hidden;
-        transition: box-shadow 0.2s ease;
-        display: flex;
-        flex-direction: column;
-    }
-    .controlCard:hover { box-shadow: 0 4px 16px rgba(0,0,0,0.15); }
-    .cardHeader {
-        background: #495057;
-        color: #fff;
-        padding: 0.85rem 1.25rem;
-        display: flex;
-        justify-content: space-between;
-        align-items: center;
-        border-left: 4px solid #28a745;
-        transition: border-color 0.3s, background 0.3s;
-    }
-    .cardHeader .hostname { font-size: 1.1rem; font-weight: 600; }
-    .cardHeader .address { font-size: 0.8rem; opacity: 0.9; }
-    .cardHeader .address a { color: inherit; text-decoration: none; }
-    .cardHeader .address a:hover { text-decoration: underline; }
-    /* Status-based accent colors */
-    .controlCard.offline .cardHeader { background: #6c757d; border-left-color: #6c757d; }
-    .controlCard.status-ok .cardHeader { border-left-color: #28a745; }
-    .controlCard.status-warning .cardHeader { border-left-color: #ffc107; }
-    .controlCard.status-restart .cardHeader { border-left-color: #fd7e14; }
-    .controlCard.status-update .cardHeader { border-left-color: #17a2b8; }
-    .controlCard.status-testing .cardHeader { border-left-color: #e83e8c; }
-    .cardBody { padding: 1.25rem; display: flex; flex-direction: column; flex: 1; }
-    .infoGrid {
-        display: grid;
-        grid-template-columns: repeat(2, 1fr);
-        gap: 0.75rem;
-        margin-bottom: 1rem;
-        padding-bottom: 1rem;
-        border-bottom: 1px solid #e9ecef;
-    }
-    .infoItem { display: flex; flex-direction: column; }
-    .infoLabel { font-size: 0.7rem; color: #6c757d; text-transform: uppercase; font-weight: 500; margin-bottom: 0.15rem; }
-    .infoValue { font-size: 0.9rem; font-weight: 500; color: #212529; }
-    .version-update { font-size: 0.75rem; color: #007bff; font-weight: normal; }
-    .version-major { font-size: 0.75rem; color: #856404; font-weight: normal; cursor: help; }
-    .controlActions { display: flex; flex-direction: column; gap: 1.25rem; }
-    .actionRow { display: flex; align-items: center; justify-content: space-between; gap: 0.75rem; }
-    .actionLabel { font-size: 0.85rem; color: #495057; font-weight: 500; }
-    .toggleSwitch { position: relative; display: inline-block; width: 48px; height: 26px; }
-    .toggleSwitch input { opacity: 0; width: 0; height: 0; }
-    .toggleSlider {
-        position: absolute; cursor: pointer; top: 0; left: 0; right: 0; bottom: 0;
-        background-color: #ccc; transition: 0.3s; border-radius: 26px;
-    }
-    .toggleSlider:before {
-        position: absolute; content: ""; height: 20px; width: 20px; left: 3px; bottom: 3px;
-        background-color: white; transition: 0.3s; border-radius: 50%;
-    }
-    .toggleSwitch input:checked + .toggleSlider { background-color: #ffc107; }
-    .toggleSwitch input:checked + .toggleSlider:before { transform: translateX(22px); }
-    .toggleSwitch input:disabled + .toggleSlider { opacity: 0.5; cursor: not-allowed; }
-    .actionButtons { display: flex; gap: 0.5rem; flex-wrap: wrap; padding-top: 0.75rem; margin-top: auto; border-top: 1px solid #e9ecef; }
-    .actionBtn {
-        flex: 1; min-width: 100px; padding: 0.5rem 0.75rem; border: none; border-radius: 6px;
-        font-size: 0.8rem; font-weight: 500; cursor: pointer; display: inline-flex;
-        align-items: center; justify-content: center; gap: 0.4rem; transition: all 0.2s ease;
-    }
-    .actionBtn:disabled { opacity: 0.5; cursor: not-allowed; }
-    .actionBtn.restart { background: #17a2b8; color: #fff; }
-    .actionBtn.restart:hover:not(:disabled) { background: #138496; }
-    .actionBtn.reboot { background: #dc3545; color: #fff; }
-    .actionBtn.reboot:hover:not(:disabled) { background: #c82333; }
-    .actionBtn.loading { pointer-events: none; }
-    .actionBtn.loading i { animation: spin 1s linear infinite; }
-    /* Connectivity alert */
-    .connectivity-alert {
-        display: none;
-        position: relative;
-        background: #fff3cd;
-        border: 1px solid #ffc107;
-        border-radius: 8px;
-        padding: 0.75rem 1rem;
-        margin-top: 1.75rem;
-        padding-top: 1rem;
-    }
-    .connectivity-alert.visible { display: block; }
-    .connectivity-alert.visible::before {
-        content: '';
-        position: absolute;
-        top: -1rem;
-        left: 0;
-        right: 0;
-        border-top: 1px solid #e9ecef;
-    }
-    .connectivity-alert-content {
-        display: flex;
-        align-items: center;
-        gap: 0.75rem;
-    }
-    .connectivity-alert-icon {
-        color: #856404;
-        font-size: 1.25rem;
-        flex-shrink: 0;
-    }
-    .connectivity-alert-text {
-        flex: 1;
-        font-size: 0.85rem;
-        color: #856404;
-    }
-    .connectivity-alert-text strong { display: block; margin-bottom: 0.15rem; }
-    .connectivity-alert-details { font-size: 0.75rem; opacity: 0.85; }
-    .connectivity-alert-btn {
-        background: #ffc107;
-        color: #212529;
-        border: none;
-        border-radius: 4px;
-        padding: 0.4rem 0.75rem;
-        font-size: 0.75rem;
-        font-weight: 500;
-        cursor: pointer;
-        display: inline-flex;
-        align-items: center;
-        gap: 0.3rem;
-        white-space: nowrap;
-        transition: background 0.2s;
-    }
-    .connectivity-alert-btn:hover { background: #e0a800; }
-    .connectivity-alert-btn:disabled { opacity: 0.6; cursor: not-allowed; }
-    /* Localhost card styling */
-    .controlCard.localhost .cardHeader { background: #2c3e50; }
-    .controlCard.localhost .hostname::before { content: '\f015'; font-family: 'Font Awesome 5 Free'; font-weight: 900; margin-right: 0.5rem; }
-    /* FPP Upgrade Accordion */
-    .fpp-upgrade-summary { background: #f8f9fa; border-radius: 6px; padding: 0.75rem 1rem; margin-bottom: 1rem; display: flex; justify-content: space-between; align-items: center; }
-    .fpp-upgrade-summary-text { font-size: 0.9rem; color: #495057; }
-    .fpp-upgrade-summary-text strong { color: #212529; }
-    .fpp-upgrade-actions { display: flex; gap: 0.5rem; }
-    .fpp-upgrade-actions button { background: none; border: 1px solid #dee2e6; border-radius: 4px; padding: 0.25rem 0.5rem; font-size: 0.75rem; cursor: pointer; color: #6c757d; }
-    .fpp-upgrade-actions button:hover { background: #e9ecef; }
-    .fpp-accordion { display: flex; flex-direction: column; gap: 0.5rem; max-height: 60vh; overflow-y: auto; padding-bottom: 0.5rem; }
-    .fpp-accordion-item { border: 1px solid #dee2e6; border-radius: 8px; overflow: visible; }
-    .fpp-accordion-header { display: flex; align-items: center; padding: 0.75rem 1rem; background: #f8f9fa; cursor: pointer; user-select: none; transition: background 0.2s; border-radius: 8px; }
-    .fpp-accordion-header:hover { background: #e9ecef; }
-    .fpp-accordion-item.expanded .fpp-accordion-header { background: #e9ecef; border-bottom: 1px solid #dee2e6; border-radius: 8px 8px 0 0; }
-    .fpp-accordion-toggle { width: 20px; color: #6c757d; transition: transform 0.2s; }
-    .fpp-accordion-item.expanded .fpp-accordion-toggle { transform: rotate(90deg); }
-    .fpp-accordion-info { flex: 1; margin-left: 0.5rem; }
-    .fpp-accordion-hostname { font-weight: 600; color: #212529; }
-    .fpp-accordion-address { font-size: 0.8rem; color: #6c757d; margin-left: 0.5rem; }
-    .fpp-accordion-version { font-size: 0.75rem; color: #007bff; margin-left: 0.75rem; }
-    .fpp-accordion-status { display: flex; align-items: center; gap: 0.4rem; font-size: 0.8rem; padding: 0.25rem 0.6rem; border-radius: 12px; }
-    .fpp-accordion-status.pending { background: #e9ecef; color: #6c757d; }
-    .fpp-accordion-status.upgrading { background: #cce5ff; color: #004085; }
-    .fpp-accordion-status.success { background: #d4edda; color: #155724; }
-    .fpp-accordion-status.error { background: #f8d7da; color: #721c24; }
-    .fpp-accordion-body { display: none; border: 1px solid #dee2e6; border-top: none; border-radius: 0 0 8px 8px; margin-top: -1px; }
-    .fpp-accordion-item.expanded .fpp-accordion-body { display: block; }
-    .fpp-accordion-log { height: 250px; overflow-y: auto; background: #1e1e1e; color: #d4d4d4; font-family: 'Consolas', 'Monaco', monospace; font-size: 0.75rem; padding: 0.75rem; white-space: pre-wrap; word-break: break-word; margin: 0.5rem; border-radius: 4px; }
-    .fpp-accordion-log:empty::before { content: 'Waiting to start...'; color: #6c757d; font-style: italic; }
-    .fpp-accordion-checkbox { margin-right: 0.5rem; width: 18px; height: 18px; cursor: pointer; accent-color: #007bff; }
-    .fpp-accordion-item.excluded { opacity: 0.5; }
-    .fpp-accordion-item.excluded .fpp-accordion-header { background: #f8f9fa; }
-    .fpp-upgrade-selection { display: flex; gap: 0.25rem; margin-right: 0.75rem; padding-right: 0.75rem; border-right: 1px solid #dee2e6; }
-    /* FPP Upgrade Type Selector */
-    .fpp-upgrade-type-selector { display: flex; gap: 1rem; margin-bottom: 1rem; }
-    .fpp-upgrade-type-option {
-        flex: 1; display: flex; flex-direction: column; align-items: center; gap: 0.25rem;
-        padding: 0.75rem 1rem; border: 2px solid #dee2e6; border-radius: 8px;
-        cursor: pointer; transition: all 0.2s; background: #f8f9fa; position: relative;
-    }
-    .fpp-upgrade-type-option:hover { border-color: #adb5bd; background: #fff; }
-    .fpp-upgrade-type-option:has(input:checked) { border-color: #007bff; background: #e7f1ff; }
-    .fpp-upgrade-type-option:has(input:disabled) { opacity: 0.5; cursor: not-allowed; }
-    .fpp-upgrade-type-option input { position: absolute; opacity: 0; }
-    .fpp-upgrade-type-label { font-weight: 600; color: #212529; font-size: 0.9rem; display: flex; align-items: center; gap: 0.4rem; }
-    .fpp-upgrade-type-desc { font-size: 0.75rem; color: #6c757d; }
-    .fpp-upgrade-type-count {
-        position: absolute; top: -8px; right: -8px; background: #007bff; color: #fff;
-        font-size: 0.7rem; font-weight: 600; padding: 0.15rem 0.5rem; border-radius: 10px; min-width: 20px; text-align: center;
-    }
-    .fpp-upgrade-type-count:empty, .fpp-upgrade-type-count[data-count="0"] { display: none; }
-</style>
 
 <div class="metricsContainer">
     <h2 style="margin-bottom: 1.5rem; color: #212529;">
@@ -229,6 +41,9 @@ renderCSSIncludes(false);
             <button class="bulk-action-btn bulk-action-btn--upgrade" id="upgradeAllBtn" onclick="showBulkModal('upgrade')">
                 <i class="fas fa-arrow-circle-up"></i> Upgrade All Watcher <span class="badge" id="upgradeAllCount">0</span>
             </button>
+            <button class="bulk-action-btn bulk-action-btn--plugins" id="upgradeOtherPluginsBtn" onclick="showBulkModal('otherPlugins')">
+                <i class="fas fa-puzzle-piece"></i> Upgrade Plugins <span class="badge" id="upgradeOtherPluginsCount">0</span>
+            </button>
             <button class="bulk-action-btn bulk-action-btn--restart" id="restartAllBtn" onclick="showBulkModal('restart')">
                 <i class="fas fa-sync"></i> Restart Required <span class="badge" id="restartAllCount">0</span>
             </button>
@@ -244,6 +59,23 @@ renderCSSIncludes(false);
             <h3><i class="fas fa-sync-alt"></i> Playback Sync Status <span class="sync-sequence-name" id="syncSequenceName"></span></h3>
         </div>
         <div class="sync-status-grid" id="syncStatusGrid"></div>
+    </div>
+
+    <!-- Output Discrepancy Banner -->
+    <div class="output-discrepancy-banner" id="outputDiscrepancyBanner">
+        <div class="output-discrepancy-banner__header">
+            <div class="output-discrepancy-banner__title">
+                <i class="fas fa-exclamation-triangle"></i>
+                Output Configuration Issues
+                <span class="output-discrepancy-banner__count" id="outputDiscrepancyCount">0</span>
+            </div>
+            <button class="output-discrepancy-banner__toggle" id="outputDiscrepancyToggle" onclick="toggleDiscrepancyDetails()">
+                <i class="fas fa-chevron-down"></i> Details
+            </button>
+        </div>
+        <div class="output-discrepancy-banner__body" id="outputDiscrepancyBody" style="display: none;">
+            <div class="output-discrepancy-banner__list" id="outputDiscrepancyList"></div>
+        </div>
     </div>
 
     <div id="loadingIndicator" class="loadingSpinner">
@@ -291,6 +123,13 @@ renderCSSIncludes(false);
                             <span class="toggleSlider"></span>
                         </label>
                     </div>
+                    <div class="actionRow multisync-test-row" id="multisync-test-row-localhost" style="display: none;">
+                        <span class="actionLabel"><i class="fas fa-broadcast-tower"></i> Test Mode (MultiSync)</span>
+                        <label class="toggleSwitch">
+                            <input type="checkbox" id="testmode-multisync-localhost" onchange="toggleMultiSyncTestMode(this.checked)" disabled>
+                            <span class="toggleSlider toggleSlider--multisync"></span>
+                        </label>
+                    </div>
                     <div class="connectivity-alert" id="connectivity-alert-localhost">
                         <div class="connectivity-alert-content">
                             <div class="connectivity-alert-icon"><i class="fas fa-exclamation-triangle"></i></div>
@@ -312,7 +151,7 @@ renderCSSIncludes(false);
                                 <span class="update-name"><i class="fas fa-exclamation-triangle"></i> FPP Major Upgrade</span>
                                 <span class="update-version" id="fpp-major-version-localhost"></span>
                             </div>
-                            <span class="major-upgrade-note">Requires OS re-image</span>
+                            <span class="major-upgrade-note">Requires OS Upgrade</span>
                         </div>
                         <div class="update-row update-row--fpp" id="fpp-crossversion-row-localhost">
                             <div class="update-info">
@@ -403,7 +242,7 @@ renderCSSIncludes(false);
                                 <span class="update-name"><i class="fas fa-exclamation-triangle"></i> FPP Major Upgrade</span>
                                 <span class="update-version" id="fpp-major-version-<?php echo htmlspecialchars($system['address']); ?>"></span>
                             </div>
-                            <span class="major-upgrade-note">Requires OS re-image</span>
+                            <span class="major-upgrade-note">Requires OS Upgrade</span>
                         </div>
                         <div class="update-row update-row--fpp" id="fpp-crossversion-row-<?php echo htmlspecialchars($system['address']); ?>">
                             <div class="update-info">
@@ -517,6 +356,7 @@ const remoteHostnames = <?php echo json_encode(array_combine(array_column($remot
 let isRefreshing = false;
 let pendingReboot = null;
 let hostsWithWatcherUpdates = new Map();
+let hostsWithOtherPluginUpdates = new Map(); // Non-Watcher plugins with updates
 let hostsNeedingRestart = new Map();
 let hostsWithFPPUpdates = new Map();
 let hostsWithConnectivityFailure = new Map();
@@ -561,7 +401,13 @@ const DATA_SOURCES = {
     // connectivity: /api/plugin/fpp-plugin-watcher/connectivity/state (via proxy for remote)
     // Provides: hasResetAdapter, resetTime, adapter (connectivity failure info)
     // -------------------------------------------------------------------------
-    connectivity: { interval: 0 }
+    connectivity: { interval: 0 },
+
+    // -------------------------------------------------------------------------
+    // discrepancies: /api/plugin/fpp-plugin-watcher/outputs/discrepancies (global, not per-host)
+    // Provides: output configuration issues between player and remotes
+    // -------------------------------------------------------------------------
+    discrepancies: { interval: 60000 }
 };
 
 // Runtime state for each data source
@@ -1077,7 +923,7 @@ function updateCardUI(address, data) {
     if (crossVersionUpgrade && crossVersionUpgrade.available) {
         if (crossVersionUpgrade.isMajorUpgrade) {
             // Major upgrade - show as info/warning, not actionable
-            indicators.push(`<span class="status-indicator status-indicator--major-upgrade" title="Major version upgrade requires OS re-image"><span class="dot"></span>FPP v${crossVersionUpgrade.latestVersion}</span>`);
+            indicators.push(`<span class="status-indicator status-indicator--major-upgrade" title="Major version upgrade requires OS Upgrade"><span class="dot"></span>FPP v${crossVersionUpgrade.latestVersion}</span>`);
         } else {
             indicators.push(`<span class="status-indicator status-indicator--update"><span class="dot"></span>FPP v${crossVersionUpgrade.latestVersion}</span>`);
         }
@@ -1096,7 +942,7 @@ function updateCardUI(address, data) {
     let versionNotes = [];
     if (crossVersionUpgrade && crossVersionUpgrade.available) {
         if (crossVersionUpgrade.isMajorUpgrade) {
-            versionNotes.push(`<span class="version-major" title="Major version upgrade requires OS re-image">v${crossVersionUpgrade.latestVersion} re-image</span>`);
+            versionNotes.push(`<span class="version-major" title="Major version upgrade requires OS Upgrade">v${crossVersionUpgrade.latestVersion} Upgrade</span>`);
         } else {
             versionNotes.push(`<span class="version-update">v${crossVersionUpgrade.latestVersion}</span>`);
         }
@@ -1117,6 +963,21 @@ function updateCardUI(address, data) {
     restartBtn.disabled = false;
     rebootBtn.disabled = false;
 
+    // Show/hide MultiSync test mode toggle for localhost when in player mode
+    // MultiSync toggle is independent - it's a broadcast action, not synced to local test mode state
+    if (address === 'localhost') {
+        const multiSyncRow = document.getElementById('multisync-test-row-localhost');
+        const multiSyncToggle = document.getElementById('testmode-multisync-localhost');
+        const isPlayer = status.mode_name && status.mode_name.toLowerCase() === 'player';
+        if (isPlayer) {
+            multiSyncRow.style.display = 'flex';
+            multiSyncToggle.disabled = false;
+        } else {
+            multiSyncRow.style.display = 'none';
+            multiSyncToggle.disabled = true;
+        }
+    }
+
     // Track Watcher updates
     const watcherUpdate = pluginUpdates.find(p => p.repoName === 'fpp-plugin-watcher');
     if (watcherUpdate) {
@@ -1125,6 +986,15 @@ function updateCardUI(address, data) {
         hostsWithWatcherUpdates.delete(address);
     }
     updateBulkButton('upgradeAllBtn', 'upgradeAllCount', hostsWithWatcherUpdates);
+
+    // Track non-Watcher plugin updates
+    const otherPluginUpdates = pluginUpdates.filter(p => p.repoName !== 'fpp-plugin-watcher');
+    if (otherPluginUpdates.length > 0) {
+        hostsWithOtherPluginUpdates.set(address, { hostname: getHostname(address), plugins: otherPluginUpdates });
+    } else {
+        hostsWithOtherPluginUpdates.delete(address);
+    }
+    updateBulkButton('upgradeOtherPluginsBtn', 'upgradeOtherPluginsCount', hostsWithOtherPluginUpdates);
 
     // Track restart/reboot needed
     if (needsReboot) {
@@ -1137,17 +1007,9 @@ function updateCardUI(address, data) {
     updateBulkButton('restartAllBtn', 'restartAllCount', hostsNeedingRestart);
 
     // Track FPP updates (both same-branch and cross-version, but NOT major version upgrades)
-    // Major version upgrades (e.g., v9.x to v10.x) require OS re-image and cannot be done via upgrade
+    // Major version upgrades (e.g., v9.x to v10.x) require OS Upgrade and cannot be done via upgrade
     const isMajorUpgrade = crossVersionUpgrade && crossVersionUpgrade.available && crossVersionUpgrade.isMajorUpgrade;
     const hasCrossVersionUpgrade = crossVersionUpgrade && crossVersionUpgrade.available && !isMajorUpgrade;
-
-    // Show/hide major upgrade row (info only, not actionable)
-    if (isMajorUpgrade) {
-        fppMajorRow.classList.add('visible');
-        fppMajorVersion.textContent = `v${crossVersionUpgrade.currentVersion} → v${crossVersionUpgrade.latestVersion}`;
-    } else {
-        fppMajorRow.classList.remove('visible');
-    }
 
     // Show/hide cross-version upgrade row
     if (hasCrossVersionUpgrade) {
@@ -1252,7 +1114,8 @@ async function refreshAllStatus() {
             ...remoteAddresses.map(addr =>
                 fetchSystemStatus(addr).then(result => updateCardUI(result.address, result))
             ),
-            updateSyncStatus()
+            updateSyncStatus(),
+            fetchOutputDiscrepancies().then(data => renderOutputDiscrepancies(data))
         ]);
         document.getElementById('lastUpdateTime').textContent = new Date().toLocaleTimeString();
         updateLastFetchTimes();
@@ -1316,6 +1179,54 @@ async function toggleTestMode(address, enable) {
     } catch (error) {
         toggle.checked = !enable;
         alert(`Failed to toggle test mode: ${error.message}`);
+    } finally {
+        toggle.disabled = false;
+    }
+}
+
+// MultiSync test mode - broadcasts to all sync'd systems (player mode only)
+async function toggleMultiSyncTestMode(enable) {
+    const toggle = document.getElementById('testmode-multisync-localhost');
+    const localToggle = document.getElementById('testmode-localhost');
+    toggle.disabled = true;
+
+    try {
+        // Get channel range from local system
+        let channelRange = "1-8388608";
+        if (enable) {
+            try {
+                const infoResponse = await fetch('/api/system/info');
+                if (infoResponse.ok) {
+                    const info = await infoResponse.json();
+                    if (info.channelRanges) {
+                        const parts = info.channelRanges.split('-');
+                        if (parts.length === 2) {
+                            channelRange = `${parseInt(parts[0]) + 1}-${parseInt(parts[1]) + 1}`;
+                        }
+                    }
+                }
+            } catch (e) {}
+        }
+
+        const command = enable ? 'Test Start' : 'Test Stop';
+        const args = enable ? ["1000", "RGB Cycle", channelRange, "R-G-B"] : [];
+
+        // Send command with multisyncCommand: true to broadcast to all sync'd systems
+        const response = await fetch('/api/command', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ command, multisyncCommand: true, multisyncHosts: "", args })
+        });
+        if (!response.ok) throw new Error('Failed to toggle multisync test mode');
+
+        // Update local toggle to match (since multisync affects local too)
+        localToggle.checked = enable;
+
+        // Refresh all cards after a short delay to show updated test mode status
+        setTimeout(() => refreshAllStatus(), 1000);
+    } catch (error) {
+        toggle.checked = !enable;
+        alert(`Failed to toggle multisync test mode: ${error.message}`);
     } finally {
         toggle.disabled = false;
     }
@@ -1522,6 +1433,25 @@ const bulkConfig = {
             const response = await fetch(endpoint, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ host: address }) });
             const data = await response.json();
             if (!data.success) throw new Error(data.error);
+        },
+        refreshDelay: 3000
+    },
+    otherPlugins: {
+        title: '<i class="fas fa-puzzle-piece" style="color: #17a2b8;"></i> Upgrading Plugins',
+        getHosts: () => hostsWithOtherPluginUpdates,
+        extraInfo: (info) => `<span style="font-size: 0.8em; color: #666;"> - ${info.plugins.map(p => p.name).join(', ')}</span>`,
+        parallel: true,
+        operation: async ([address, info], updateStatus) => {
+            const plugins = info.plugins;
+            for (let i = 0; i < plugins.length; i++) {
+                const plugin = plugins[i];
+                updateStatus('spinner fa-spin', `Upgrading ${plugin.name} (${i + 1}/${plugins.length})...`);
+                const response = await fetch('/api/plugin/fpp-plugin-watcher/remote/upgrade', {
+                    method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ host: address, plugin: plugin.repoName })
+                });
+                const data = await response.json();
+                if (!data.success) throw new Error(`Failed to upgrade ${plugin.name}: ${data.error}`);
+            }
         },
         refreshDelay: 3000
     },
@@ -1996,6 +1926,104 @@ async function upgradeFPPBranch(address) {
     fppSelectedUpgradeType = 'branchUpdate';
     showFPPUpgradeModal();
     setTimeout(() => expandFPPItem(address), 100);
+}
+
+// =============================================================================
+// Output Discrepancy Banner
+// =============================================================================
+
+let outputDiscrepanciesExpanded = false;
+let cachedDiscrepancyData = null;
+
+async function fetchOutputDiscrepancies() {
+    // Use interval-based caching (discrepancies is a global check, uses 'global' as key)
+    if (!fetchFlags.discrepancies) {
+        return cachedDiscrepancyData;
+    }
+
+    try {
+        const response = await fetch('/api/plugin/fpp-plugin-watcher/outputs/discrepancies');
+        if (!response.ok) return cachedDiscrepancyData;
+        const data = await response.json();
+        if (data.success) {
+            cachedDiscrepancyData = data;
+            return data;
+        }
+        return cachedDiscrepancyData;
+    } catch (e) {
+        console.log('Failed to fetch output discrepancies:', e);
+        return cachedDiscrepancyData;
+    }
+}
+
+function renderOutputDiscrepancies(data) {
+    const banner = document.getElementById('outputDiscrepancyBanner');
+    const countEl = document.getElementById('outputDiscrepancyCount');
+    const listEl = document.getElementById('outputDiscrepancyList');
+
+    if (!data || !data.discrepancies || data.discrepancies.length === 0) {
+        banner.classList.remove('visible');
+        return;
+    }
+
+    const discrepancies = data.discrepancies;
+    countEl.textContent = discrepancies.length;
+
+    let html = '';
+    discrepancies.forEach(d => {
+        let icon, details = [];
+
+        switch (d.type) {
+            case 'channel_mismatch':
+                icon = 'fa-not-equal';
+                details.push(`<span><strong>Player:</strong> ${escapeHtml(d.playerRange)}</span>`);
+                details.push(`<span><strong>Remote:</strong> ${escapeHtml(d.remoteRange)}</span>`);
+                break;
+            case 'output_to_remote':
+                icon = 'fa-exclamation-triangle';
+                if (d.description) details.push(`<span><strong>Name:</strong> ${escapeHtml(d.description)}</span>`);
+                details.push(`<span><strong>Channels:</strong> ${d.startChannel}-${d.startChannel + d.channelCount - 1}</span>`);
+                break;
+            case 'inactive_output':
+                icon = 'fa-info-circle';
+                if (d.description) details.push(`<span><strong>Name:</strong> ${escapeHtml(d.description)}</span>`);
+                details.push(`<span><strong>Channels:</strong> ${d.startChannel}-${d.startChannel + d.channelCount - 1}</span>`);
+                break;
+            default:
+                icon = 'fa-question-circle';
+        }
+
+        html += `
+            <div class="output-discrepancy-item severity-${d.severity}">
+                <div class="output-discrepancy-item__icon"><i class="fas ${icon}"></i></div>
+                <div class="output-discrepancy-item__content">
+                    <div class="output-discrepancy-item__message">
+                        ${escapeHtml(d.message)}
+                    </div>
+                    <div class="output-discrepancy-item__details">
+                        ${details.join('')}
+                    </div>
+                </div>
+                <span class="output-discrepancy-item__address">${escapeHtml(d.hostname || d.address)}</span>
+            </div>`;
+    });
+
+    listEl.innerHTML = html;
+    banner.classList.add('visible');
+}
+
+function toggleDiscrepancyDetails() {
+    const body = document.getElementById('outputDiscrepancyBody');
+    const toggle = document.getElementById('outputDiscrepancyToggle');
+    outputDiscrepanciesExpanded = !outputDiscrepanciesExpanded;
+
+    if (outputDiscrepanciesExpanded) {
+        body.style.display = 'block';
+        toggle.innerHTML = '<i class="fas fa-chevron-up"></i> Hide';
+    } else {
+        body.style.display = 'none';
+        toggle.innerHTML = '<i class="fas fa-chevron-down"></i> Details';
+    }
 }
 
 // Auto-refresh every 30 seconds

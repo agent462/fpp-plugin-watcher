@@ -138,7 +138,7 @@ async function fetchSystemMetrics(system) {
     const { address, hostname, model, type, version } = system;
     const hours = getSelectedHours();
     const baseUrl = `http://${address}/api/plugin/fpp-plugin-watcher`;
-    const result = { hostname, address, model: model || type || 'Unknown', version: version || '', watcherVersion: null, online: false, error: null, cpu: null, memory: null, disk: null, load: null, temperature: null, wireless: null, ping: null };
+    const result = { hostname, address, model: model || type || 'Unknown', version: version || '', watcherVersion: null, online: false, noWatcher: false, error: null, cpu: null, memory: null, disk: null, load: null, temperature: null, wireless: null, ping: null };
 
     try {
         const [allData, versionData] = await Promise.all([
@@ -195,7 +195,18 @@ async function fetchSystemMetrics(system) {
                 result.ping = { current: valid.at(-1).avg_latency, average: valid.reduce((a, b) => a + b.avg_latency, 0) / valid.length, min: Math.min(...valid.map(d => d.min_latency)), max: Math.max(...valid.map(d => d.max_latency)), data: pingData.data, tier: pingData.tier_info?.label || '5-min averages' };
             }
         }
-    } catch (e) { result.error = e.message || 'Failed to connect'; }
+    } catch (e) {
+        // Watcher API failed - check if host is still online via basic FPP API
+        try {
+            const fppStatus = await fetchJson(`http://${address}/api/fppd/status`, 5000);
+            if (fppStatus && typeof fppStatus === 'object') {
+                result.online = true;
+                result.noWatcher = true;
+            }
+        } catch {
+            result.error = e.message || 'Failed to connect';
+        }
+    }
     return result;
 }
 
@@ -217,6 +228,15 @@ function renderSystemCard(m, index) {
             <div class="systemInfo"><a href="http://${escapeHtml(m.address)}" target="_blank" style="color:#007bff">${escapeHtml(m.address)}</a> | ${escapeHtml(m.model)} | FPP ${escapeHtml(m.version)}</div></div>
             <div class="systemStatus offline">Offline</div></div>
             <div class="noDataMessage"><i class="fas fa-exclamation-triangle"></i><p>Unable to fetch metrics: ${escapeHtml(m.error || 'Connection failed')}</p><p style="font-size:0.875rem">Ensure the Watcher plugin is installed and collectd is enabled.</p></div>
+        </div>`;
+    }
+
+    if (m.noWatcher) {
+        return `<div class="systemCard" data-system="${index}">
+            <div class="systemHeader"><div><div class="systemName">${escapeHtml(m.hostname)}</div>
+            <div class="systemInfo"><a href="http://${escapeHtml(m.address)}" target="_blank" style="color:#007bff">${escapeHtml(m.address)}</a> | ${escapeHtml(m.model)} | FPP ${escapeHtml(m.version)}</div></div>
+            <div class="systemStatus online">Online</div></div>
+            <div class="noDataMessage"><i class="fas fa-info-circle"></i><p>Watcher plugin not installed or metrics not available</p><p style="font-size:0.875rem">Install the Watcher plugin on this system to view metrics.</p></div>
         </div>`;
     }
 

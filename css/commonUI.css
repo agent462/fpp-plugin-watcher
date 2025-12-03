@@ -618,6 +618,15 @@
     box-shadow: 0 2px 8px rgba(255, 193, 7, 0.3);
 }
 
+/** Teal gradient - Other plugin upgrades */
+.bulk-action-btn--plugins {
+    background: linear-gradient(135deg, #17a2b8 0%, #20c997 100%);
+}
+
+.bulk-action-btn--plugins:hover:not(:disabled) {
+    box-shadow: 0 2px 8px rgba(23, 162, 184, 0.3);
+}
+
 /* ==========================================================================
    Status Indicators (Pills/Badges)
 
@@ -1703,4 +1712,778 @@
     .sync-status-grid {
         grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
     }
+}
+
+/* ==========================================================================
+   Output Discrepancy Banner
+
+   Shows warnings when player outputs don't match remote systems.
+   Displayed at top of Remote Control UI when discrepancies are detected.
+   ========================================================================== */
+
+.output-discrepancy-banner {
+    display: none;
+    background: linear-gradient(135deg, #fff3cd 0%, #ffeeba 100%);
+    border: 1px solid #ffc107;
+    border-radius: 10px;
+    margin-bottom: 1.5rem;
+    overflow: hidden;
+}
+
+.output-discrepancy-banner.visible {
+    display: block;
+}
+
+.output-discrepancy-banner__header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 0.75rem 1rem;
+    background: rgba(255, 193, 7, 0.2);
+    border-bottom: 1px solid rgba(255, 193, 7, 0.3);
+}
+
+.output-discrepancy-banner__title {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    font-weight: 600;
+    color: #856404;
+    font-size: 0.95rem;
+}
+
+.output-discrepancy-banner__title i {
+    font-size: 1.1rem;
+}
+
+.output-discrepancy-banner__count {
+    background: #856404;
+    color: #fff;
+    padding: 0.15rem 0.5rem;
+    border-radius: 10px;
+    font-size: 0.75rem;
+    font-weight: 600;
+}
+
+.output-discrepancy-banner__toggle {
+    background: transparent;
+    border: 1px solid #856404;
+    color: #856404;
+    padding: 0.25rem 0.6rem;
+    border-radius: 4px;
+    font-size: 0.75rem;
+    cursor: pointer;
+    transition: all 0.2s;
+}
+
+.output-discrepancy-banner__toggle:hover {
+    background: #856404;
+    color: #fff;
+}
+
+.output-discrepancy-banner__body {
+    padding: 0.75rem 1rem;
+}
+
+.output-discrepancy-banner__list {
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+}
+
+.output-discrepancy-item {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    padding: 0.6rem 0.75rem;
+    background: rgba(255, 255, 255, 0.7);
+    border-radius: 6px;
+    border-left: 3px solid #ffc107;
+}
+
+.output-discrepancy-item.severity-warning {
+    border-left-color: #fd7e14;
+}
+
+.output-discrepancy-item.severity-info {
+    border-left-color: #17a2b8;
+    background: rgba(23, 162, 184, 0.1);
+}
+
+.output-discrepancy-item__icon {
+    font-size: 1rem;
+    color: #856404;
+    flex-shrink: 0;
+}
+
+.output-discrepancy-item.severity-warning .output-discrepancy-item__icon {
+    color: #fd7e14;
+}
+
+.output-discrepancy-item.severity-info .output-discrepancy-item__icon {
+    color: #17a2b8;
+}
+
+.output-discrepancy-item__content {
+    flex: 1;
+    min-width: 0;
+}
+
+.output-discrepancy-item__message {
+    font-size: 0.85rem;
+    color: #495057;
+    font-weight: 500;
+}
+
+.output-discrepancy-item__details {
+    font-size: 0.75rem;
+    color: #6c757d;
+    margin-top: 0.15rem;
+}
+
+.output-discrepancy-item__details span {
+    margin-right: 1rem;
+}
+
+.output-discrepancy-item__address {
+    font-family: 'Consolas', 'Monaco', monospace;
+    background: rgba(0, 0, 0, 0.08);
+    padding: 0.1rem 0.4rem;
+    border-radius: 3px;
+    font-size: 0.8rem;
+    color: #495057;
+}
+
+/* ==========================================================================
+   Remote Control UI - Control Cards
+   ========================================================================== */
+
+.controlCardsGrid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
+    gap: 1.5rem;
+    margin-bottom: 1.5rem;
+}
+
+.controlCard {
+    background: #fff;
+    border-radius: 12px;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+    overflow: hidden;
+    transition: box-shadow 0.2s ease;
+    display: flex;
+    flex-direction: column;
+}
+
+.controlCard:hover {
+    box-shadow: 0 4px 16px rgba(0,0,0,0.15);
+}
+
+.cardHeader {
+    background: #495057;
+    color: #fff;
+    padding: 0.85rem 1.25rem;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    border-left: 4px solid #28a745;
+    transition: border-color 0.3s, background 0.3s;
+}
+
+.cardHeader .hostname {
+    font-size: 1.1rem;
+    font-weight: 600;
+}
+
+.cardHeader .address {
+    font-size: 0.8rem;
+    opacity: 0.9;
+}
+
+.cardHeader .address a {
+    color: inherit;
+    text-decoration: none;
+}
+
+.cardHeader .address a:hover {
+    text-decoration: underline;
+}
+
+/* Status-based accent colors */
+.controlCard.offline .cardHeader {
+    background: #6c757d;
+    border-left-color: #6c757d;
+}
+
+.controlCard.status-ok .cardHeader {
+    border-left-color: #28a745;
+}
+
+.controlCard.status-warning .cardHeader {
+    border-left-color: #ffc107;
+}
+
+.controlCard.status-restart .cardHeader {
+    border-left-color: #fd7e14;
+}
+
+.controlCard.status-update .cardHeader {
+    border-left-color: #17a2b8;
+}
+
+.controlCard.status-testing .cardHeader {
+    border-left-color: #e83e8c;
+}
+
+.cardBody {
+    padding: 1.25rem;
+    display: flex;
+    flex-direction: column;
+    flex: 1;
+}
+
+.infoGrid {
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    gap: 0.75rem;
+    margin-bottom: 1rem;
+    padding-bottom: 1rem;
+    border-bottom: 1px solid #e9ecef;
+}
+
+.infoItem {
+    display: flex;
+    flex-direction: column;
+}
+
+.infoLabel {
+    font-size: 0.7rem;
+    color: #6c757d;
+    text-transform: uppercase;
+    font-weight: 500;
+    margin-bottom: 0.15rem;
+}
+
+.infoValue {
+    font-size: 0.9rem;
+    font-weight: 500;
+    color: #212529;
+}
+
+.version-update {
+    font-size: 0.75rem;
+    color: #007bff;
+    font-weight: normal;
+}
+
+.version-major {
+    font-size: 0.75rem;
+    color: #856404;
+    font-weight: normal;
+    cursor: help;
+}
+
+.controlActions {
+    display: flex;
+    flex-direction: column;
+    gap: 1.25rem;
+}
+
+.actionRow {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.75rem;
+}
+
+.actionRow + .actionRow {
+    margin-top: 0.75rem;
+}
+
+.actionLabel {
+    font-size: 0.85rem;
+    color: #495057;
+    font-weight: 500;
+    flex: 1;
+}
+
+/* Toggle Switch */
+.toggleSwitch {
+    position: relative;
+    display: inline-block;
+    width: 48px;
+    height: 26px;
+    flex-shrink: 0;
+}
+
+.toggleSwitch input {
+    opacity: 0;
+    width: 0;
+    height: 0;
+}
+
+.toggleSlider {
+    position: absolute;
+    cursor: pointer;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background-color: #ccc;
+    transition: 0.3s;
+    border-radius: 26px;
+}
+
+.toggleSlider:before {
+    position: absolute;
+    content: "";
+    height: 20px;
+    width: 20px;
+    left: 3px;
+    bottom: 3px;
+    background-color: white;
+    transition: 0.3s;
+    border-radius: 50%;
+}
+
+.toggleSwitch input:checked + .toggleSlider {
+    background-color: #ffc107;
+}
+
+.toggleSwitch input:checked + .toggleSlider.toggleSlider--multisync {
+    background-color: #e83e8c;
+}
+
+.toggleSwitch input:checked + .toggleSlider:before {
+    transform: translateX(22px);
+}
+
+.toggleSwitch input:disabled + .toggleSlider {
+    opacity: 0.5;
+    cursor: not-allowed;
+}
+
+.multisync-test-row {
+    display: none;
+}
+
+.multisync-test-row.visible {
+    display: flex;
+}
+
+/* Action Buttons */
+.actionButtons {
+    display: flex;
+    gap: 0.5rem;
+    flex-wrap: wrap;
+    padding-top: 0.75rem;
+    margin-top: auto;
+    border-top: 1px solid #e9ecef;
+}
+
+.actionBtn {
+    flex: 1;
+    min-width: 100px;
+    padding: 0.5rem 0.75rem;
+    border: none;
+    border-radius: 6px;
+    font-size: 0.8rem;
+    font-weight: 500;
+    cursor: pointer;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.4rem;
+    transition: all 0.2s ease;
+}
+
+.actionBtn:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+}
+
+.actionBtn.restart {
+    background: #17a2b8;
+    color: #fff;
+}
+
+.actionBtn.restart:hover:not(:disabled) {
+    background: #138496;
+}
+
+.actionBtn.reboot {
+    background: #dc3545;
+    color: #fff;
+}
+
+.actionBtn.reboot:hover:not(:disabled) {
+    background: #c82333;
+}
+
+.actionBtn.loading {
+    pointer-events: none;
+}
+
+.actionBtn.loading i {
+    animation: spin 1s linear infinite;
+}
+
+/* Connectivity Alert */
+.connectivity-alert {
+    display: none;
+    position: relative;
+    background: #fff3cd;
+    border: 1px solid #ffc107;
+    border-radius: 8px;
+    padding: 0.75rem 1rem;
+    margin-top: 1.75rem;
+    padding-top: 1rem;
+}
+
+.connectivity-alert.visible {
+    display: block;
+}
+
+.connectivity-alert.visible::before {
+    content: '';
+    position: absolute;
+    top: -1rem;
+    left: 0;
+    right: 0;
+    border-top: 1px solid #e9ecef;
+}
+
+.connectivity-alert-content {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+}
+
+.connectivity-alert-icon {
+    color: #856404;
+    font-size: 1.25rem;
+    flex-shrink: 0;
+}
+
+.connectivity-alert-text {
+    flex: 1;
+    font-size: 0.85rem;
+    color: #856404;
+}
+
+.connectivity-alert-text strong {
+    display: block;
+    margin-bottom: 0.15rem;
+}
+
+.connectivity-alert-details {
+    font-size: 0.75rem;
+    opacity: 0.85;
+}
+
+.connectivity-alert-btn {
+    background: #ffc107;
+    color: #212529;
+    border: none;
+    border-radius: 4px;
+    padding: 0.4rem 0.75rem;
+    font-size: 0.75rem;
+    font-weight: 500;
+    cursor: pointer;
+    display: inline-flex;
+    align-items: center;
+    gap: 0.3rem;
+    white-space: nowrap;
+    transition: background 0.2s;
+}
+
+.connectivity-alert-btn:hover {
+    background: #e0a800;
+}
+
+.connectivity-alert-btn:disabled {
+    opacity: 0.6;
+    cursor: not-allowed;
+}
+
+/* Localhost card styling */
+.controlCard.localhost .cardHeader {
+    background: #2c3e50;
+}
+
+.controlCard.localhost .hostname::before {
+    content: '\f015';
+    font-family: 'Font Awesome 5 Free';
+    font-weight: 900;
+    margin-right: 0.5rem;
+}
+
+/* ==========================================================================
+   Remote Control UI - FPP Upgrade Accordion
+   ========================================================================== */
+
+.fpp-upgrade-summary {
+    background: #f8f9fa;
+    border-radius: 6px;
+    padding: 0.75rem 1rem;
+    margin-bottom: 1rem;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}
+
+.fpp-upgrade-summary-text {
+    font-size: 0.9rem;
+    color: #495057;
+}
+
+.fpp-upgrade-summary-text strong {
+    color: #212529;
+}
+
+.fpp-upgrade-actions {
+    display: flex;
+    gap: 0.5rem;
+}
+
+.fpp-upgrade-actions button {
+    background: none;
+    border: 1px solid #dee2e6;
+    border-radius: 4px;
+    padding: 0.25rem 0.5rem;
+    font-size: 0.75rem;
+    cursor: pointer;
+    color: #6c757d;
+}
+
+.fpp-upgrade-actions button:hover {
+    background: #e9ecef;
+}
+
+.fpp-accordion {
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+    max-height: 60vh;
+    overflow-y: auto;
+    padding-bottom: 0.5rem;
+}
+
+.fpp-accordion-item {
+    border: 1px solid #dee2e6;
+    border-radius: 8px;
+    overflow: visible;
+}
+
+.fpp-accordion-header {
+    display: flex;
+    align-items: center;
+    padding: 0.75rem 1rem;
+    background: #f8f9fa;
+    cursor: pointer;
+    user-select: none;
+    transition: background 0.2s;
+    border-radius: 8px;
+}
+
+.fpp-accordion-header:hover {
+    background: #e9ecef;
+}
+
+.fpp-accordion-item.expanded .fpp-accordion-header {
+    background: #e9ecef;
+    border-bottom: 1px solid #dee2e6;
+    border-radius: 8px 8px 0 0;
+}
+
+.fpp-accordion-toggle {
+    width: 20px;
+    color: #6c757d;
+    transition: transform 0.2s;
+}
+
+.fpp-accordion-item.expanded .fpp-accordion-toggle {
+    transform: rotate(90deg);
+}
+
+.fpp-accordion-info {
+    flex: 1;
+    margin-left: 0.5rem;
+}
+
+.fpp-accordion-hostname {
+    font-weight: 600;
+    color: #212529;
+}
+
+.fpp-accordion-address {
+    font-size: 0.8rem;
+    color: #6c757d;
+    margin-left: 0.5rem;
+}
+
+.fpp-accordion-version {
+    font-size: 0.75rem;
+    color: #007bff;
+    margin-left: 0.75rem;
+}
+
+.fpp-accordion-status {
+    display: flex;
+    align-items: center;
+    gap: 0.4rem;
+    font-size: 0.8rem;
+    padding: 0.25rem 0.6rem;
+    border-radius: 12px;
+}
+
+.fpp-accordion-status.pending {
+    background: #e9ecef;
+    color: #6c757d;
+}
+
+.fpp-accordion-status.upgrading {
+    background: #cce5ff;
+    color: #004085;
+}
+
+.fpp-accordion-status.success {
+    background: #d4edda;
+    color: #155724;
+}
+
+.fpp-accordion-status.error {
+    background: #f8d7da;
+    color: #721c24;
+}
+
+.fpp-accordion-body {
+    display: none;
+    border: 1px solid #dee2e6;
+    border-top: none;
+    border-radius: 0 0 8px 8px;
+    margin-top: -1px;
+}
+
+.fpp-accordion-item.expanded .fpp-accordion-body {
+    display: block;
+}
+
+.fpp-accordion-log {
+    height: 250px;
+    overflow-y: auto;
+    background: #1e1e1e;
+    color: #d4d4d4;
+    font-family: 'Consolas', 'Monaco', monospace;
+    font-size: 0.75rem;
+    padding: 0.75rem;
+    white-space: pre-wrap;
+    word-break: break-word;
+    margin: 0.5rem;
+    border-radius: 4px;
+}
+
+.fpp-accordion-log:empty::before {
+    content: 'Waiting to start...';
+    color: #6c757d;
+    font-style: italic;
+}
+
+.fpp-accordion-checkbox {
+    margin-right: 0.5rem;
+    width: 18px;
+    height: 18px;
+    cursor: pointer;
+    accent-color: #007bff;
+}
+
+.fpp-accordion-item.excluded {
+    opacity: 0.5;
+}
+
+.fpp-accordion-item.excluded .fpp-accordion-header {
+    background: #f8f9fa;
+}
+
+.fpp-upgrade-selection {
+    display: flex;
+    gap: 0.25rem;
+    margin-right: 0.75rem;
+    padding-right: 0.75rem;
+    border-right: 1px solid #dee2e6;
+}
+
+/* FPP Upgrade Type Selector */
+.fpp-upgrade-type-selector {
+    display: flex;
+    gap: 1rem;
+    margin-bottom: 1rem;
+}
+
+.fpp-upgrade-type-option {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 0.25rem;
+    padding: 0.75rem 1rem;
+    border: 2px solid #dee2e6;
+    border-radius: 8px;
+    cursor: pointer;
+    transition: all 0.2s;
+    background: #f8f9fa;
+    position: relative;
+}
+
+.fpp-upgrade-type-option:hover {
+    border-color: #adb5bd;
+    background: #fff;
+}
+
+.fpp-upgrade-type-option:has(input:checked) {
+    border-color: #007bff;
+    background: #e7f1ff;
+}
+
+.fpp-upgrade-type-option:has(input:disabled) {
+    opacity: 0.5;
+    cursor: not-allowed;
+}
+
+.fpp-upgrade-type-option input {
+    position: absolute;
+    opacity: 0;
+}
+
+.fpp-upgrade-type-label {
+    font-weight: 600;
+    color: #212529;
+    font-size: 0.9rem;
+    display: flex;
+    align-items: center;
+    gap: 0.4rem;
+}
+
+.fpp-upgrade-type-desc {
+    font-size: 0.75rem;
+    color: #6c757d;
+}
+
+.fpp-upgrade-type-count {
+    position: absolute;
+    top: -8px;
+    right: -8px;
+    background: #007bff;
+    color: #fff;
+    font-size: 0.7rem;
+    font-weight: 600;
+    padding: 0.15rem 0.5rem;
+    border-radius: 10px;
+    min-width: 20px;
+    text-align: center;
+}
+
+.fpp-upgrade-type-count:empty,
+.fpp-upgrade-type-count[data-count="0"] {
+    display: none;
 }
