@@ -93,12 +93,14 @@ function sendRemoteCommand($host, $command, $args = [], $multisyncCommand = fals
 }
 
 /**
- * Restart fppd on a remote FPP instance
+ * Send a simple GET action to a remote FPP instance
  *
  * @param string $host The remote host
+ * @param string $endpoint The API endpoint path
+ * @param string $message Success message to return
  * @return array Result with success status
  */
-function restartRemoteFPPD($host) {
+function sendSimpleRemoteAction($host, $endpoint, $message) {
     if (!validateHost($host)) {
         return [
             'success' => false,
@@ -106,14 +108,24 @@ function restartRemoteFPPD($host) {
         ];
     }
 
-    $restartUrl = "http://{$host}/api/system/fppd/restart";
-    apiCall('GET', $restartUrl, [], true, 10);
+    $url = "http://{$host}{$endpoint}";
+    apiCall('GET', $url, [], true, 10);
 
     return [
         'success' => true,
         'host' => $host,
-        'message' => 'Restart command sent'
+        'message' => $message
     ];
+}
+
+/**
+ * Restart fppd on a remote FPP instance
+ *
+ * @param string $host The remote host
+ * @return array Result with success status
+ */
+function restartRemoteFPPD($host) {
+    return sendSimpleRemoteAction($host, '/api/system/fppd/restart', 'Restart command sent');
 }
 
 /**
@@ -123,21 +135,7 @@ function restartRemoteFPPD($host) {
  * @return array Result with success status
  */
 function rebootRemoteFPP($host) {
-    if (!validateHost($host)) {
-        return [
-            'success' => false,
-            'error' => 'Invalid host format'
-        ];
-    }
-
-    $rebootUrl = "http://{$host}/api/system/reboot";
-    apiCall('GET', $rebootUrl, [], true, 10);
-
-    return [
-        'success' => true,
-        'host' => $host,
-        'message' => 'Reboot command sent'
-    ];
+    return sendSimpleRemoteAction($host, '/api/system/reboot', 'Reboot command sent');
 }
 
 /**
@@ -227,18 +225,14 @@ function getRemotePlugins($host) {
  * @return array Result with success status and updates list
  */
 function checkRemotePluginUpdates($host) {
-    if (!validateHost($host)) {
-        return [
-            'success' => false,
-            'error' => 'Invalid host format'
-        ];
+    // Get list of installed plugins using shared function
+    $pluginsResult = getRemotePlugins($host);
+    if (!$pluginsResult['success']) {
+        return $pluginsResult;
     }
+    $pluginNames = $pluginsResult['plugins'];
 
-    // Get list of installed plugins (returns array of plugin name strings)
-    $pluginsUrl = "http://{$host}/api/plugin";
-    $pluginNames = apiCall('GET', $pluginsUrl, [], true, 10);
-
-    if ($pluginNames === false || !is_array($pluginNames)) {
+    if (!is_array($pluginNames)) {
         return [
             'success' => false,
             'error' => 'Failed to fetch plugins from remote host',
@@ -389,5 +383,104 @@ function streamRemoteFPPUpgrade($host, $targetVersion = null) {
     }
 
     flush();
+}
+
+/**
+ * Check for outputs enabled to systems in remote mode
+ * Remote mode systems receive data via multisync, so direct outputs are redundant
+ * Results are cached for 60 seconds to reduce API calls
+ */
+function getOutputDiscrepancies() {
+    $cacheFile = WATCHERLOGDIR . '/watcher-discrepancies-cache.json';
+    $cacheMaxAge = 60; // seconds
+
+    // Check cache
+    if (file_exists($cacheFile)) {
+        $cacheAge = time() - filemtime($cacheFile);
+        if ($cacheAge < $cacheMaxAge) {
+            $cached = json_decode(file_get_contents($cacheFile), true);
+            if ($cached && isset($cached['success'])) {
+                return $cached;
+            }
+        }
+    }
+
+    // Get universe outputs from local FPP
+    $outputsData = apiCall('GET', 'http://127.0.0.1/api/channel/output/universeOutputs', [], true, 5);
+
+    if (!$outputsData || !isset($outputsData['channelOutputs'])) {
+        return [
+            'success' => true,
+            'discrepancies' => [],
+            'message' => 'No universe outputs configured'
+        ];
+    }
+
+    // Get remote systems
+    $remoteSystems = getMultiSyncRemoteSystems();
+    $remotesByIP = [];
+    foreach ($remoteSystems as $remote) {
+        if (!empty($remote['address'])) {
+            $remotesByIP[$remote['address']] = $remote;
+        }
+    }
+
+    // Build map of active outputs per remote IP
+    $activeOutputsByIP = [];
+    foreach ($outputsData['channelOutputs'] as $outputGroup) {
+        if (!isset($outputGroup['universes']) || !is_array($outputGroup['universes'])) {
+            continue;
+        }
+        foreach ($outputGroup['universes'] as $universe) {
+            $address = $universe['address'] ?? '';
+            $active = ($universe['active'] ?? 0) == 1;
+            if (empty($address) || !filter_var($address, FILTER_VALIDATE_IP) || !$active) {
+                continue;
+            }
+            if (!isset($activeOutputsByIP[$address])) {
+                $activeOutputsByIP[$address] = [];
+            }
+            $activeOutputsByIP[$address][] = $universe;
+        }
+    }
+
+    $discrepancies = [];
+
+    // Check for active outputs to systems in remote mode
+    foreach ($activeOutputsByIP as $ip => $outputs) {
+        if (!isset($remotesByIP[$ip])) {
+            continue;
+        }
+        $remote = $remotesByIP[$ip];
+        $remoteMode = $remote['fppModeString'] ?? '';
+        $hostname = $remote['hostname'] ?? $ip;
+
+        if ($remoteMode === 'remote') {
+            foreach ($outputs as $output) {
+                $discrepancies[] = [
+                    'type' => 'output_to_remote',
+                    'severity' => 'warning',
+                    'address' => $ip,
+                    'hostname' => $hostname,
+                    'description' => $output['description'] ?? '',
+                    'startChannel' => $output['startChannel'] ?? 0,
+                    'channelCount' => $output['channelCount'] ?? 0,
+                    'message' => "Output enabled to {$hostname} but it's in remote mode (receives via multisync)"
+                ];
+            }
+        }
+    }
+
+    $result = [
+        'success' => true,
+        'discrepancies' => $discrepancies,
+        'remoteCount' => count($remoteSystems)
+    ];
+
+    // Cache the result
+    file_put_contents($cacheFile, json_encode($result));
+    ensureFppOwnership($cacheFile);
+
+    return $result;
 }
 ?>

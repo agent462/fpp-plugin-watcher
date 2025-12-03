@@ -9,10 +9,11 @@ define("WATCHERPLUGINNAME", 'fpp-plugin-watcher');
 define("WATCHERVERSION", 'v' . ($_watcherPluginInfo['version'] ?? '0.0.0'));
 define("WATCHERPLUGINDIR", $settings['pluginDirectory']."/".WATCHERPLUGINNAME."/");
 define("WATCHERCONFIGFILELOCATION", $settings['configDirectory']."/plugin.".WATCHERPLUGINNAME);
-define("WATCHERLOGFILE", $settings['logDirectory']."/".WATCHERPLUGINNAME.".log");
-define("WATCHERPINGMETRICSFILE", $settings['logDirectory']."/".WATCHERPLUGINNAME."-ping-metrics.log");
-define("WATCHERMULTISYNCPINGMETRICSFILE", $settings['logDirectory']."/".WATCHERPLUGINNAME."-multisync-ping-metrics.log");
-define("WATCHERRESETSTATEFILE", $settings['logDirectory']."/".WATCHERPLUGINNAME."-reset-state.json");
+define("WATCHERLOGDIR", $settings['logDirectory']);
+define("WATCHERLOGFILE", WATCHERLOGDIR."/".WATCHERPLUGINNAME.".log");
+define("WATCHERPINGMETRICSFILE", WATCHERLOGDIR."/".WATCHERPLUGINNAME."-ping-metrics.log");
+define("WATCHERMULTISYNCPINGMETRICSFILE", WATCHERLOGDIR."/".WATCHERPLUGINNAME."-multisync-ping-metrics.log");
+define("WATCHERRESETSTATEFILE", WATCHERLOGDIR."/".WATCHERPLUGINNAME."-reset-state.json");
 define("WATCHERFPPUSER", 'fpp');
 define("WATCHERFPPGROUP", 'fpp');
 define("WATCHERDEFAULTSETTINGS",
@@ -247,6 +248,12 @@ function getMultiSyncRemoteSystems() {
     foreach ($multiSyncData['systems'] as $system) {
         // Skip local systems
         if (!empty($system['local'])) {
+            continue;
+        }
+
+        // Only include player and remote mode systems (skip bridge, etc.)
+        $mode = $system['fppModeString'] ?? '';
+        if ($mode !== 'player' && $mode !== 'remote') {
             continue;
         }
 

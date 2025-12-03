@@ -275,6 +275,13 @@ function getEndpointsfpppluginwatcher() {
         'callback' => 'fpppluginWatcherRemoteConnectivityStateClear');
     array_push($result, $ep);
 
+    // Output configuration discrepancy check
+    $ep = array(
+        'method' => 'GET',
+        'endpoint' => 'outputs/discrepancies',
+        'callback' => 'fpppluginWatcherOutputDiscrepancies');
+    array_push($result, $ep);
+
     return $result;
 }
 
@@ -1072,5 +1079,12 @@ function fpppluginWatcherRemoteConnectivityStateClear() {
 
     /** @disregard P1010 */
     return json($result);
+}
+
+// GET /api/plugin/fpp-plugin-watcher/outputs/discrepancies
+// Compare local universe outputs with remote systems
+function fpppluginWatcherOutputDiscrepancies() {
+    /** @disregard P1010 */
+    return json(getOutputDiscrepancies());
 }
 ?>
