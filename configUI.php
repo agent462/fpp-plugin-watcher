@@ -73,7 +73,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['save_settings'])) {
 
     if (empty($errors)) {
         // Save settings using FPP's WriteSettingToFile
-        // Note: collectd service will be enabled/disabled on FPP restart via postStart.sh
         $settingsToSave = [
             'connectivityCheckEnabled' => $connectivityCheckEnabled,
             'checkInterval' => $checkInterval,
@@ -125,14 +124,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['save_settings'])) {
 $config = readPluginConfig();
 
 // Always detect what auto-detect would choose (for display in the dropdown)
-// This shows users what would be detected even if they have a specific interface selected
 $actualAdapter = detectActiveNetworkInterface();
 
 // Get network interfaces from system
 $interfaces = [];
 exec("ip link show | grep -E '^[0-9]+:' | awk -F': ' '{print $2}' | grep -v '^lo'", $interfaces);
 $interfaces = array_map('trim', $interfaces);
-$interfaces = array_filter($interfaces); // Remove empty values
+$interfaces = array_filter($interfaces);
 
 // Ensure current adapter is in the list (if not using 'default')
 if ($config['networkAdapter'] !== 'default' && !in_array($config['networkAdapter'], $interfaces)) {
@@ -141,11 +139,6 @@ if ($config['networkAdapter'] !== 'default' && !in_array($config['networkAdapter
 
 $gatewaySuggestion = detectGatewayForInterface($actualAdapter);
 $gatewayAlreadyConfigured = $gatewaySuggestion && in_array($gatewaySuggestion, $config['testHosts'], true);
-$hostPlaceholder = 'Enter hostname or IP address (e.g., 8.8.8.8';
-if ($gatewaySuggestion) {
-    $hostPlaceholder .= ' or ' . $gatewaySuggestion;
-}
-$hostPlaceholder .= ')';
 $gatewayInputValue = ($gatewaySuggestion && !$gatewayAlreadyConfigured) ? $gatewaySuggestion : '';
 
 // Detect if this FPP instance is in player mode (for multisync metrics feature)
@@ -177,357 +170,265 @@ if ($isPlayerMode) {
         <?php endif; ?>
 
         <?php if ($resetState && !empty($resetState['hasResetAdapter'])): ?>
-        <div class="settingsPanel" style="background: #fff3cd; border: 1px solid #ffc107; margin-bottom: 1.5rem;">
-            <div class="panelTitle" style="color: #856404;">
-                <i class="fas fa-exclamation-triangle"></i> Network Adapter Reset Occurred
-            </div>
-            <div class="row settingRow">
-                <div class="col-12">
-                    <p style="margin-bottom: 0.5rem;">
-                        The connectivity check daemon reset the network adapter <strong><?php echo htmlspecialchars($resetState['adapter'] ?? 'unknown'); ?></strong>
-                        on <strong><?php echo htmlspecialchars(date('Y-m-d H:i:s', $resetState['resetTimestamp'] ?? 0)); ?></strong>
-                        and has stopped monitoring to prevent a reset loop.
-                    </p>
-                    <p style="margin-bottom: 1rem; color: #666;">
-                        If your network is now stable, click the button below to clear this state and restart the connectivity daemon.
-                    </p>
-                    <button type="button" class="buttons btn-warning" id="clearResetStateBtn" onclick="clearResetState()">
-                        <i class="fas fa-redo"></i> Clear State &amp; Restart Daemon
-                    </button>
+        <div class="settingsPanel warningPanel">
+            <div class="panelHeader" onclick="watcherTogglePanel(this)">
+                <div class="panelTitle">
+                    <i class="fas fa-exclamation-triangle"></i>
+                    Network Adapter Reset Occurred
                 </div>
+                <i class="fas fa-chevron-down panelToggle"></i>
+            </div>
+            <div class="panelBody">
+                <p style="margin-bottom: 0.5rem;">
+                    The connectivity daemon reset <strong><?php echo htmlspecialchars($resetState['adapter'] ?? 'unknown'); ?></strong>
+                    on <strong><?php echo htmlspecialchars(date('Y-m-d H:i:s', $resetState['resetTimestamp'] ?? 0)); ?></strong>
+                    and stopped monitoring to prevent a reset loop.
+                </p>
+                <p style="margin-bottom: 1rem;">
+                    If your network is stable, clear this state to restart monitoring.
+                </p>
+                <button type="button" class="buttons btn-warning" id="clearResetStateBtn" onclick="clearResetState()">
+                    <i class="fas fa-redo"></i> Clear State &amp; Restart Daemon
+                </button>
             </div>
         </div>
         <?php endif; ?>
 
         <form method="post" action="" id="watcherSettingsForm">
+
+            <!-- Connectivity Check Panel -->
             <div class="settingsPanel">
-                <div class="panelTitle">
-                    <i class="fas fa-wifi"></i> Connectivity Check Settings
-                </div>
-
-                <!-- Enable/Disable Toggle -->
-                <div class="row settingRow">
-                    <div class="col-md-4 col-lg-3">
-                        <label class="settingLabel">
-                            <input type="checkbox" id="watcherEnabled" name="connectivityCheckEnabled" class="form-check-input" value="1"
+                <div class="panelHeader" onclick="watcherTogglePanel(this)">
+                    <div class="panelTitle">
+                        <label class="toggleSwitch" onclick="event.stopPropagation()">
+                            <input type="checkbox" id="connectivityCheckEnabled" name="connectivityCheckEnabled" value="1"
                                 <?php echo (!empty($config['connectivityCheckEnabled'])) ? 'checked' : ''; ?>>
-                            Enable Connectivity Check
+                            <span class="toggleSlider"></span>
                         </label>
+                        <i class="fas fa-wifi"></i>
+                        Connectivity Check
                     </div>
-                    <div class="col-md-8">
-                        <div class="settingDescription">
-                            Enable or disable the connectivity check service. When disabled, the service will not monitor network connectivity.
-                        </div>
-                    </div>
+                    <i class="fas fa-chevron-down panelToggle"></i>
                 </div>
-
-                <!-- Check Interval -->
-                <div class="row settingRow">
-                    <div class="col-md-4 col-lg-3">
-                        <label class="settingLabel" for="checkInterval">Check Interval (seconds)</label>
+                <div class="panelBody">
+                    <div class="panelDesc" style="margin-bottom: 1rem;">
+                        Periodically pings test hosts to verify network connectivity. After consecutive failures reach the max threshold,
+                        the network adapter is automatically reset to restore connectivity. A connectivity reset will only happen once to avoid a reset loop.  You must clear the reset state.
+                        Metrics are logged to the Connectivity dashboard. Recommendation is to configure pinging your local gateway.
                     </div>
-                    <div class="col-md-8">
-                        <input type="number" id="checkInterval" name="checkInterval" class="form-control"
-                            min="5" max="3600" value="<?php echo htmlspecialchars($config['checkInterval']); ?>">
-                        <div class="settingDescription">
-                            How frequently to check network connectivity (5-3600 seconds). Lower values check more often but consume more resources.
-                        </div>
-                    </div>
-                </div>
-
-                <!-- Max Failures -->
-                <div class="row settingRow">
-                    <div class="col-md-4 col-lg-3">
-                        <label class="settingLabel" for="maxFailures">Max Failures Before Reset</label>
-                    </div>
-                    <div class="col-md-8">
-                        <input type="number" id="maxFailures" name="maxFailures" class="form-control"
-                            min="1" max="100" value="<?php echo htmlspecialchars($config['maxFailures']); ?>">
-                        <div class="settingDescription">
-                            Number of consecutive connectivity check failures before attempting to reset the network adapter (1-100).
-                        </div>
-                    </div>
-                </div>
-
-                <!-- Network Adapter Selection -->
-                <div class="row settingRow">
-                    <div class="col-md-4 col-lg-3">
-                        <label class="settingLabel" for="networkAdapter">Network Adapter</label>
-                    </div>
-                    <div class="col-md-8">
-                        <select id="networkAdapter" name="networkAdapter" class="form-control">
-                            <option value="default" <?php echo ($config['networkAdapter'] === 'default') ? 'selected' : ''; ?>>
-                                Auto-detect (detected: <?php echo htmlspecialchars($actualAdapter); ?>)
-                            </option>
-                            <?php foreach ($interfaces as $iface): ?>
-                            <option value="<?php echo htmlspecialchars($iface); ?>"
-                                <?php echo ($config['networkAdapter'] === $iface) ? 'selected' : ''; ?>>
-                                <?php echo htmlspecialchars($iface); ?>
-                            </option>
-                            <?php endforeach; ?>
-                        </select>
-                        <div class="settingDescription">
-                            Select the network adapter to monitor and reset if necessary. Use "Auto-detect" to automatically select the active interface, or choose a specific interface from the detected network interfaces.
-                        </div>
-                    </div>
-                </div>
-
-                <!-- Test Hosts -->
-                <div class="row settingRow">
-                    <div class="col-md-4 col-lg-3">
-                        <label class="settingLabel">Test Hosts/IPs</label>
-                    </div>
-                    <div class="col-md-8">
-                        <div class="hostInputGroup">
-                            <input type="text" id="newHostInput" class="form-control"
-                                placeholder="<?php echo htmlspecialchars($hostPlaceholder); ?>"
-                                value="<?php echo htmlspecialchars($gatewayInputValue); ?>">
-                            <button type="button" class="buttons btn-success" onclick="AddTestHost()">
-                                <i class="fas fa-plus"></i> Add
-                            </button>
-                        </div>
-                        <?php if ($gatewaySuggestion): ?>
-                        <div class="settingDescription" style="margin-top: -0.5rem;">
-                            Detected reachable gateway <?php echo htmlspecialchars($gatewaySuggestion); ?>.
-                            Click "Add" to include it as a test host.
-                        </div>
-                        <?php endif; ?>
-
-                        <div class="testHostsList" id="testHostsList">
-                            <?php
-                            $testHosts = $config['testHosts'];
-                            if (!empty($testHosts)):
-                                foreach ($testHosts as $index => $host):
-                            ?>
-                            <div class="testHostItem" data-index="<?php echo $index; ?>">
-                                <span><strong><?php echo htmlspecialchars($host); ?></strong></span>
-                                <input type="hidden" name="testHosts[]" value="<?php echo htmlspecialchars($host); ?>">
-                                <button type="button" class="buttons btn-danger btn-sm" onclick="RemoveTestHost(this)">
-                                    <i class="fas fa-trash"></i> Remove
-                                </button>
+                    <div class="formRow">
+                        <div class="formGroup">
+                            <label class="formLabel">Check Interval</label>
+                            <div class="inputWithSuffix">
+                                <input type="number" id="checkInterval" name="checkInterval" class="form-control"
+                                    min="5" max="3600" value="<?php echo htmlspecialchars($config['checkInterval']); ?>">
+                                <span class="inputSuffix">seconds</span>
                             </div>
-                            <?php
-                                endforeach;
-                            else:
-                            ?>
-                            <div style="padding: 1rem; text-align: center; color: #6c757d;">No test hosts configured. Add at least one.</div>
+                        </div>
+                        <div class="formGroup">
+                            <label class="formLabel">Max Failures</label>
+                            <input type="number" id="maxFailures" name="maxFailures" class="form-control"
+                                min="1" max="100" value="<?php echo htmlspecialchars($config['maxFailures']); ?>" style="width: 80px;">
+                        </div>
+                        <div class="formGroup">
+                            <label class="formLabel">Network Adapter</label>
+                            <select id="networkAdapter" name="networkAdapter" class="form-control">
+                                <option value="default" <?php echo ($config['networkAdapter'] === 'default') ? 'selected' : ''; ?>>
+                                    Auto-detect (<?php echo htmlspecialchars($actualAdapter); ?>)
+                                </option>
+                                <?php foreach ($interfaces as $iface): ?>
+                                <option value="<?php echo htmlspecialchars($iface); ?>"
+                                    <?php echo ($config['networkAdapter'] === $iface) ? 'selected' : ''; ?>>
+                                    <?php echo htmlspecialchars($iface); ?>
+                                </option>
+                                <?php endforeach; ?>
+                            </select>
+                        </div>
+                    </div>
+                    <div class="formRow">
+                        <div class="formGroup fullWidth">
+                            <label class="formLabel">Test Hosts</label>
+                            <div class="tagsContainer" id="testHostsContainer">
+                                <?php foreach ($config['testHosts'] as $host): ?>
+                                <span class="tag">
+                                    <?php echo htmlspecialchars($host); ?>
+                                    <i class="fas fa-times tagRemove" onclick="watcherRemoveTag(this)"></i>
+                                    <input type="hidden" name="testHosts[]" value="<?php echo htmlspecialchars($host); ?>">
+                                </span>
+                                <?php endforeach; ?>
+                                <input type="text" class="tagInput" id="newHostInput"
+                                    placeholder="Add host (e.g., 8.8.8.8)"
+                                    value="<?php echo htmlspecialchars($gatewayInputValue); ?>"
+                                    onkeypress="watcherHandleTagKeypress(event)">
+                            </div>
+                            <?php if ($gatewaySuggestion && !$gatewayAlreadyConfigured): ?>
+                            <div class="gatewaySuggestion">
+                                <i class="fas fa-lightbulb"></i> Detected gateway: <?php echo htmlspecialchars($gatewaySuggestion); ?> - press Enter to add
+                            </div>
                             <?php endif; ?>
                         </div>
-
-                        <div class="settingDescription">
-                            List of hostnames or IP addresses to check for connectivity. At least one host should be reachable (e.g., gateway, public DNS like 8.8.8.8 or 1.1.1.1).
-                            We don't recommend more than 3 hosts to avoid excessive network traffic and metric fize size.
-                        </div>
                     </div>
                 </div>
-
             </div>
 
-            <!-- System Metrics Collection Settings -->
-            <div class="settingsPanel" style="margin-top: 2rem;">
-                <div class="panelTitle">
-                    <i class="fas fa-chart-line"></i> System Metrics Collection
-                </div>
-
-                <!-- Enable/Disable collectd -->
-                <div class="row settingRow">
-                    <div class="col-md-4 col-lg-3">
-                        <label class="settingLabel">
-                            <input type="checkbox" id="collectdEnabled" name="collectdEnabled" class="form-check-input" value="1"
+            <!-- System Metrics Panel -->
+            <div class="settingsPanel">
+                <div class="panelHeader" onclick="watcherTogglePanel(this)">
+                    <div class="panelTitle">
+                        <label class="toggleSwitch" onclick="event.stopPropagation()">
+                            <input type="checkbox" id="collectdEnabled" name="collectdEnabled" value="1"
                                 <?php echo (!empty($config['collectdEnabled'])) ? 'checked' : ''; ?>>
-                            Enable collectd Service
+                            <span class="toggleSlider"></span>
                         </label>
+                        <i class="fas fa-chart-line"></i>
+                        System Metrics Collection
                     </div>
-                    <div class="col-md-8">
-                        <div class="settingDescription">
-                            Enable or disable the collectd service. Collectd collects system metrics including CPU usage, memory usage,
-                            disk space, network interface statistics, temperature and system load averages. On average collectd will use about 60MB of
-                            storage to keep historical data for these metrics.  On Linux we also run this process at a lower priority.  This ensures FPP
-                            performance is not impacted while still collecting useful system metrics.
-                            <p></p>
-                            These metrics are displayed in the. "Watcher - Local Metrics" dashboard.
-                            Disabling this service will stop metric collection and reduce system overhead, but historical data will be preserved.
-                        </div>
+                    <i class="fas fa-chevron-down panelToggle"></i>
+                </div>
+                <div class="panelBody">
+                    <div class="panelDesc">
+                        Collectd gathers CPU, memory, disk, network, and temperature metrics. Uses ~60MB storage for historical data.
+                        Runs at lower priority to avoid impacting FPP performance. View in "Watcher - Local Metrics" dashboard.
                     </div>
                 </div>
             </div>
 
             <?php if ($isPlayerMode): ?>
-            <!-- Remote Metrics Settings (Player Mode Only) -->
-            <div class="settingsPanel" style="margin-top: 2rem;">
-                <div class="panelTitle">
-                    <i class="fas fa-network-wired"></i> Player Mode Options
-                </div>
-
-                <!-- Enable/Disable Remote Metrics -->
-                <div class="row settingRow">
-                    <div class="col-md-4 col-lg-3">
-                        <label class="settingLabel">
-                            <input type="checkbox" id="multiSyncMetricsEnabled" name="multiSyncMetricsEnabled" class="form-check-input" value="1"
-                                <?php echo (!empty($config['multiSyncMetricsEnabled'])) ? 'checked' : ''; ?>>
-                            Enable Remote Metrics Dashboard
-                        </label>
+            <!-- Player Mode Options Panel -->
+            <div class="settingsPanel">
+                <div class="panelHeader" onclick="watcherTogglePanel(this)">
+                    <div class="panelTitle">
+                        <i class="fas fa-network-wired"></i>
+                        Player Mode Options
+                        <span class="badge"><i class="fas fa-server"></i> <?php echo $remoteSystemCount; ?> remote<?php echo $remoteSystemCount !== 1 ? 's' : ''; ?></span>
                     </div>
-                    <div class="col-md-8">
-                        <div class="settingDescription">
-                            Enable a dashboard that aggregates system metrics from all remote FPP systems in your multi-sync setup.
-                            This allows you to monitor CPU, memory, disk, and other metrics for all connected remotes from a single page.
-                            <p></p>
-                            <strong>Note:</strong> Remote systems must also have the Watcher plugin installed with collectd enabled
-                            for their metrics to be collected.
-                            <p></p>
-                            <span style="display: inline-block; background: #e9ecef; border: 1px solid #adb5bd; border-radius: 4px; padding: 0.4em 0.8em; font-weight: 500;">
-                                <i class="fas fa-server" style="color: #495057;"></i> <?php echo $remoteSystemCount; ?> remote system(s) detected
-                            </span>
+                    <i class="fas fa-chevron-down panelToggle"></i>
+                </div>
+                <div class="panelBody">
+                    <div class="featureGrid">
+                        <!-- Remote Metrics -->
+                        <div class="featureCard">
+                            <div class="featureHeader">
+                                <div class="featureTitle">
+                                    <i class="fas fa-chart-area"></i>
+                                    Remote Metrics
+                                </div>
+                                <label class="toggleSwitch">
+                                    <input type="checkbox" id="multiSyncMetricsEnabled" name="multiSyncMetricsEnabled" value="1"
+                                        <?php echo (!empty($config['multiSyncMetricsEnabled'])) ? 'checked' : ''; ?>>
+                                    <span class="toggleSlider"></span>
+                                </label>
+                            </div>
+                            <div class="featureDesc">
+                                Aggregate system metrics from all remote FPP systems. Remotes need Watcher + collectd enabled. Enables Dashboard.
+                            </div>
                         </div>
-                    </div>
-                </div>
 
-                <!-- Enable/Disable Remote Ping Monitoring -->
-                <div class="row settingRow">
-                    <div class="col-md-4 col-lg-3">
-                        <label class="settingLabel">
-                            <input type="checkbox" id="multiSyncPingEnabled" name="multiSyncPingEnabled" class="form-check-input" value="1"
-                                <?php echo (!empty($config['multiSyncPingEnabled'])) ? 'checked' : ''; ?>>
-                            Enable Remote Ping Monitoring
-                        </label>
-                    </div>
-                    <div class="col-md-8">
-                        <div class="settingDescription">
-                            Enable continuous ping monitoring of all remote multi-sync systems.
-                            This tracks network latency and availability between this player and all remote FPP systems,
-                            providing historical ping metrics and charts similar to the connectivity check.
-                            <p></p>
-                            <strong>Note:</strong> This does not require the Watcher plugin on remote systems.
+                        <!-- Remote Ping -->
+                        <div class="featureCard">
+                            <div class="featureHeader">
+                                <div class="featureTitle">
+                                    <i class="fas fa-satellite-dish"></i>
+                                    Remote Ping
+                                </div>
+                                <label class="toggleSwitch">
+                                    <input type="checkbox" id="multiSyncPingEnabled" name="multiSyncPingEnabled" value="1"
+                                        <?php echo (!empty($config['multiSyncPingEnabled'])) ? 'checked' : ''; ?>>
+                                    <span class="toggleSlider"></span>
+                                </label>
+                            </div>
+                            <div class="featureDesc">
+                                Monitor latency and availability to all remote multi-sync systems. Enables Dashboard.
+                            </div>
+                            <div class="featureOptions">
+                                <div class="featureOption">
+                                    <span>Interval:</span>
+                                    <input type="number" id="multiSyncPingInterval" name="multiSyncPingInterval"
+                                        min="10" max="300" value="<?php echo htmlspecialchars($config['multiSyncPingInterval'] ?? WATCHERDEFAULTSETTINGS['multiSyncPingInterval']); ?>">
+                                    <span>sec</span>
+                                </div>
+                            </div>
                         </div>
-                    </div>
-                </div>
 
-                <!-- Remote Ping Interval (sub-setting) -->
-                <div class="row settingRow" style="margin-left: 2rem; padding-left: 1rem; border-left: 3px solid #dee2e6;">
-                    <div class="col-md-4 col-lg-3">
-                        <label class="settingLabel" for="multiSyncPingInterval">Ping Interval (seconds)</label>
-                    </div>
-                    <div class="col-md-8">
-                        <input type="number" id="multiSyncPingInterval" name="multiSyncPingInterval" class="form-control"
-                            min="10" max="300" value="<?php echo htmlspecialchars($config['multiSyncPingInterval'] ?? WATCHERDEFAULTSETTINGS['multiSyncPingInterval']); ?>">
-                        <div class="settingDescription">
-                            How frequently to ping each remote multi-sync system (10-300 seconds).
-                            Lower values provide more granular monitoring but increase network traffic and storage.
+                        <!-- Remote Control -->
+                        <div class="featureCard">
+                            <div class="featureHeader">
+                                <div class="featureTitle">
+                                    <i class="fas fa-sliders-h"></i>
+                                    Remote Control
+                                </div>
+                                <label class="toggleSwitch">
+                                    <input type="checkbox" id="controlUIEnabled" name="controlUIEnabled" value="1"
+                                        <?php echo (!empty($config['controlUIEnabled'])) ? 'checked' : ''; ?>>
+                                    <span class="toggleSlider"></span>
+                                </label>
+                            </div>
+                            <div class="featureDesc">
+                                Control remote FPP systems: test mode, restart FPPD, reboot devices. Enables Consolidated View.
+                            </div>
+                            <div class="featureOptions">
+                                <div class="featureOptionTitle">Issue Checks</div>
+                                <div class="featureOption">
+                                    <input type="checkbox" name="issueCheckOutputs" value="1"
+                                        <?php echo (!empty($config['issueCheckOutputs'])) ? 'checked' : ''; ?>>
+                                    <span><strong>Output to Remote</strong> - Warn when outputs target systems in remote mode</span>
+                                </div>
+                                <div class="featureOption">
+                                    <input type="checkbox" name="issueCheckSequences" value="1"
+                                        <?php echo (!empty($config['issueCheckSequences'])) ? 'checked' : ''; ?>>
+                                    <span><strong>Missing Sequences</strong> - Warn when remotes are missing sequences from the player</span>
+                                </div>
+                            </div>
                         </div>
-                    </div>
-                </div>
 
-                <!-- Enable/Disable Remote Control UI -->
-                <div class="row settingRow">
-                    <div class="col-md-4 col-lg-3">
-                        <label class="settingLabel">
-                            <input type="checkbox" id="controlUIEnabled" name="controlUIEnabled" class="form-check-input" value="1"
-                                <?php echo (!empty($config['controlUIEnabled'])) ? 'checked' : ''; ?>>
-                            Enable Remote Control Dashboard
-                        </label>
-                    </div>
-                    <div class="col-md-8">
-                        <div class="settingDescription">
-                            Enable a dashboard to control remote FPP systems in your multi-sync setup.
-                            Provides quick actions like toggling test mode, restarting FPPD, rebooting devices,
-                            and viewing system information for all connected remotes from a single page.
-                            <p></p>
-                            <strong>Note:</strong> Remote systems must be accessible over the network.
-                            Control actions are sent directly to each remote FPP instance.
-                        </div>
-                    </div>
-                </div>
-
-                <!-- Issue Checkers (sub-setting) -->
-                <div class="row settingRow" style="margin-left: 2rem; padding-left: 1rem; border-left: 3px solid #dee2e6;">
-                    <div class="col-md-4 col-lg-3">
-                        <label class="settingLabel">Issue Checks</label>
-                    </div>
-                    <div class="col-md-8">
-                        <div class="settingDescription" style="margin-top: 0;">
-                            <label style="display: flex; align-items: flex-start; gap: 0.5rem; cursor: pointer; margin-bottom: 0.3rem;">
-                                <input type="checkbox" name="issueCheckOutputs" value="1" style="flex-shrink: 0; margin-top: 0.15rem;"
-                                    <?php echo (!empty($config['issueCheckOutputs'])) ? 'checked' : ''; ?>>
-                                <span><strong>Output to Remote</strong> - Warn when outputs target systems in remote mode</span>
-                            </label>
-                            <label style="display: flex; align-items: flex-start; gap: 0.5rem; cursor: pointer; margin-bottom: 0;">
-                                <input type="checkbox" name="issueCheckSequences" value="1" style="flex-shrink: 0; margin-top: 0.15rem;"
-                                    <?php echo (!empty($config['issueCheckSequences'])) ? 'checked' : ''; ?>>
-                                <span><strong>Missing Sequences</strong> - Warn when remotes are missing sequences from the player</span>
-                            </label>
-                        </div>
-                    </div>
-                </div>
-
-                <!-- Enable/Disable MQTT Monitor -->
-                <div class="row settingRow">
-                    <div class="col-md-4 col-lg-3">
-                        <label class="settingLabel">
-                            <input type="checkbox" id="mqttMonitorEnabled" name="mqttMonitorEnabled" class="form-check-input" value="1"
-                                <?php echo (!empty($config['mqttMonitorEnabled'])) ? 'checked' : ''; ?>>
-                            Enable MQTT Event Monitor
-                        </label>
-                    </div>
-                    <div class="col-md-8">
-                        <div class="settingDescription">
-                            Enable a dashboard that captures and displays MQTT events from FPP.
-                            Tracks sequence start/stop, playlist events, and status updates from all FPP instances publishing to the MQTT broker.
-                            <p></p>
-                            <span class="watcher-auto-config-note">
-                                <i class="fas fa-magic"></i> <strong>Auto-configured:</strong> Enabling this will automatically configure FPP's built-in MQTT broker.
-                            </span>
-                            <p></p>
-                            <strong>Subscribed Topics:</strong> Sequence events, Playlist events, Status updates, Command Events
-                        </div>
-                    </div>
-                </div>
-
-                <!-- MQTT Retention Days (sub-setting) -->
-                <div class="row settingRow" style="margin-left: 2rem; padding-left: 1rem; border-left: 3px solid #dee2e6;">
-                    <div class="col-md-4 col-lg-3">
-                        <label class="settingLabel" for="mqttRetentionDays">Event Retention (days)</label>
-                    </div>
-                    <div class="col-md-8">
-                        <input type="number" id="mqttRetentionDays" name="mqttRetentionDays" class="form-control"
-                            min="1" max="365" value="<?php echo htmlspecialchars($config['mqttRetentionDays'] ?? WATCHERDEFAULTSETTINGS['mqttRetentionDays']); ?>">
-                        <div class="settingDescription">
-                            How long to retain MQTT event data for historical graphing (1-365 days).
-                            Default is 60 days (2 months). Longer retention uses more disk space.
+                        <!-- MQTT Monitor -->
+                        <div class="featureCard">
+                            <div class="featureHeader">
+                                <div class="featureTitle">
+                                    <i class="fas fa-broadcast-tower"></i>
+                                    MQTT Events
+                                </div>
+                                <label class="toggleSwitch">
+                                    <input type="checkbox" id="mqttMonitorEnabled" name="mqttMonitorEnabled" value="1"
+                                        <?php echo (!empty($config['mqttMonitorEnabled'])) ? 'checked' : ''; ?>>
+                                    <span class="toggleSlider"></span>
+                                </label>
+                            </div>
+                            <div class="featureDesc">
+                                Capture sequence, playlist, and status events. Auto-configures FPP's MQTT broker. Enables Dashboard.
+                            </div>
+                            <div class="featureOptions">
+                                <div class="featureOption">
+                                    <span>Retention:</span>
+                                    <input type="number" id="mqttRetentionDays" name="mqttRetentionDays"
+                                        min="1" max="365" value="<?php echo htmlspecialchars($config['mqttRetentionDays'] ?? WATCHERDEFAULTSETTINGS['mqttRetentionDays']); ?>">
+                                    <span>days</span>
+                                </div>
+                            </div>
                         </div>
                     </div>
                 </div>
             </div>
             <?php endif; ?>
 
-            <!-- Falcon Controller Monitor Settings -->
-            <div class="settingsPanel" style="margin-top: 2rem;">
-                <div class="panelTitle">
-                    <i class="fas fa-broadcast-tower"></i> Falcon Controller Monitor
-                </div>
-
-                <!-- Enable/Disable Falcon Monitor -->
-                <div class="row settingRow">
-                    <div class="col-md-4 col-lg-3">
-                        <label class="settingLabel">
-                            <input type="checkbox" id="falconMonitorEnabled" name="falconMonitorEnabled" class="form-check-input" value="1"
+            <!-- Falcon Controller Monitor Panel -->
+            <div class="settingsPanel">
+                <div class="panelHeader" onclick="watcherTogglePanel(this)">
+                    <div class="panelTitle">
+                        <label class="toggleSwitch" onclick="event.stopPropagation()">
+                            <input type="checkbox" id="falconMonitorEnabled" name="falconMonitorEnabled" value="1"
                                 <?php echo (!empty($config['falconMonitorEnabled'])) ? 'checked' : ''; ?>>
-                            Enable Falcon Monitor Dashboard
+                            <span class="toggleSlider"></span>
                         </label>
+                        <i class="fas fa-microchip"></i>
+                        Falcon Controller Monitor
                     </div>
-                    <div class="col-md-8">
-                        <div class="settingDescription">
-                            Enable a dashboard for monitoring Falcon pixel controllers on your network.
-                            Displays real-time status including temperatures, voltages, pixel counts, and firmware versions.
-                            <p></p>Allows triggering test mode and rebooting the controllers directly from the dashboard.
-                            <p></p>
-                            <span style="display: inline-block; background: #e7f3ff; border: 1px solid #b3d7ff; border-radius: 4px; padding: 0.4em 0.8em; font-weight: 500; margin: 0.25em 0;">
-                                <i class="fas fa-microchip" style="color: #0066cc;"></i> <strong>Supported Controllers:</strong> F4V2, F16V2, F4V3, F16V3, F48
-                            </span>
-                            <p></p>
-                            <strong>Note:</strong> Configure controller IP addresses in the Falcon Monitor dashboard once enabled.
-                            Controllers must be network-accessible from this FPP instance.
-                        </div>
+                    <i class="fas fa-chevron-down panelToggle"></i>
+                </div>
+                <div class="panelBody">
+                    <div class="panelDesc">
+                        Monitor Falcon controllers (F4V2, F16V2, F4V3, F16V3, F48) - temps, voltages, pixel counts, firmware. Toggle test mode or reboot controllers.
+                        Configure controller IPs in the Falcon Monitor dashboard once enabled.
                     </div>
                 </div>
             </div>
@@ -545,15 +446,26 @@ if ($isPlayerMode) {
     </div>
 
     <script>
-        // Add a test host dynamically
-        function AddTestHost() {
+        // Toggle panel collapse
+        function watcherTogglePanel(header) {
+            const panel = header.closest('.settingsPanel');
+            panel.classList.toggle('collapsed');
+        }
+
+        // Handle tag input keypress
+        function watcherHandleTagKeypress(event) {
+            if (event.key === 'Enter') {
+                event.preventDefault();
+                watcherAddTag();
+            }
+        }
+
+        // Add a test host tag
+        function watcherAddTag() {
             const input = document.getElementById('newHostInput');
             const host = input.value.trim();
 
-            if (!host) {
-                alert('Please enter a hostname or IP address');
-                return;
-            }
+            if (!host) return;
 
             // Check for duplicates
             const existingHosts = Array.from(document.querySelectorAll('input[name="testHosts[]"]'))
@@ -564,51 +476,28 @@ if ($isPlayerMode) {
                 return;
             }
 
-            // Add to the list
-            const container = document.getElementById('testHostsList');
-
-            // Remove "no hosts" message if present
-            const noHostsMsg = container.querySelector('[style*="text-align: center"]');
-            if (noHostsMsg) {
-                noHostsMsg.remove();
-            }
-
-            const div = document.createElement('div');
-            div.className = 'testHostItem';
-            div.innerHTML = `
-                <span><strong>${escapeHtml(host)}</strong></span>
+            // Create tag element
+            const container = document.getElementById('testHostsContainer');
+            const tag = document.createElement('span');
+            tag.className = 'tag';
+            tag.innerHTML = `
+                ${escapeHtml(host)}
+                <i class="fas fa-times tagRemove" onclick="watcherRemoveTag(this)"></i>
                 <input type="hidden" name="testHosts[]" value="${escapeHtml(host)}">
-                <button type="button" class="buttons btn-danger btn-sm" onclick="RemoveTestHost(this)">
-                    <i class="fas fa-trash"></i> Remove
-                </button>
             `;
-            container.appendChild(div);
 
+            // Insert before the input
+            container.insertBefore(tag, input);
             input.value = '';
         }
 
-        // Remove a test host
-        function RemoveTestHost(button) {
-            const item = button.closest('.testHostItem');
-            item.remove();
-
-            // Check if list is now empty
-            const container = document.getElementById('testHostsList');
-            if (container.children.length === 0) {
-                container.innerHTML = '<div style="padding: 1rem; text-align: center; color: #6c757d;">No test hosts configured. Add at least one.</div>';
-            }
+        // Remove a test host tag
+        function watcherRemoveTag(element) {
+            element.closest('.tag').remove();
         }
 
-        // Allow Enter key to add test host
+        // Form validation
         document.addEventListener('DOMContentLoaded', function() {
-            document.getElementById('newHostInput').addEventListener('keypress', function(e) {
-                if (e.key === 'Enter') {
-                    e.preventDefault();
-                    AddTestHost();
-                }
-            });
-
-            // Form validation before submit
             document.getElementById('watcherSettingsForm').addEventListener('submit', function(e) {
                 const testHosts = document.querySelectorAll('input[name="testHosts[]"]');
                 if (testHosts.length === 0) {
@@ -635,7 +524,6 @@ if ($isPlayerMode) {
                 const result = await response.json();
 
                 if (result.success) {
-                    // Reload page to reflect new state
                     window.location.reload();
                 } else {
                     alert('Failed to clear reset state: ' + (result.error || 'Unknown error'));
