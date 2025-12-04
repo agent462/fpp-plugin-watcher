@@ -61,20 +61,20 @@ renderCSSIncludes(false);
         <div class="sync-status-grid" id="syncStatusGrid"></div>
     </div>
 
-    <!-- Output Discrepancy Banner -->
-    <div class="output-discrepancy-banner" id="outputDiscrepancyBanner">
-        <div class="output-discrepancy-banner__header">
-            <div class="output-discrepancy-banner__title">
+    <!-- Issues Banner -->
+    <div class="issues-banner" id="issuesBanner">
+        <div class="issues-banner__header">
+            <div class="issues-banner__title">
                 <i class="fas fa-exclamation-triangle"></i>
-                Output Configuration Issues
-                <span class="output-discrepancy-banner__count" id="outputDiscrepancyCount">0</span>
+                Configuration Issues
+                <span class="issues-banner__count" id="issuesCount">0</span>
             </div>
-            <button class="output-discrepancy-banner__toggle" id="outputDiscrepancyToggle" onclick="toggleDiscrepancyDetails()">
+            <button class="issues-banner__toggle" id="issuesToggle" onclick="toggleIssuesDetails()">
                 <i class="fas fa-chevron-down"></i> Details
             </button>
         </div>
-        <div class="output-discrepancy-banner__body" id="outputDiscrepancyBody" style="display: none;">
-            <div class="output-discrepancy-banner__list" id="outputDiscrepancyList"></div>
+        <div class="issues-banner__body" id="issuesBody" style="display: none;">
+            <div class="issues-banner__list" id="issuesList"></div>
         </div>
     </div>
 
@@ -1115,7 +1115,7 @@ async function refreshAllStatus() {
                 fetchSystemStatus(addr).then(result => updateCardUI(result.address, result))
             ),
             updateSyncStatus(),
-            fetchOutputDiscrepancies().then(data => renderOutputDiscrepancies(data))
+            fetchIssues().then(data => renderIssues(data))
         ]);
         document.getElementById('lastUpdateTime').textContent = new Date().toLocaleTimeString();
         updateLastFetchTimes();
@@ -1929,37 +1929,37 @@ async function upgradeFPPBranch(address) {
 }
 
 // =============================================================================
-// Output Discrepancy Banner
+// Issues Banner
 // =============================================================================
 
-let outputDiscrepanciesExpanded = false;
-let cachedDiscrepancyData = null;
+let issuesExpanded = false;
+let cachedIssuesData = null;
 
-async function fetchOutputDiscrepancies() {
-    // Use interval-based caching (discrepancies is a global check, uses 'global' as key)
+async function fetchIssues() {
+    // Use interval-based caching (issues is a global check, uses 'global' as key)
     if (!fetchFlags.discrepancies) {
-        return cachedDiscrepancyData;
+        return cachedIssuesData;
     }
 
     try {
         const response = await fetch('/api/plugin/fpp-plugin-watcher/outputs/discrepancies');
-        if (!response.ok) return cachedDiscrepancyData;
+        if (!response.ok) return cachedIssuesData;
         const data = await response.json();
         if (data.success) {
-            cachedDiscrepancyData = data;
+            cachedIssuesData = data;
             return data;
         }
-        return cachedDiscrepancyData;
+        return cachedIssuesData;
     } catch (e) {
-        console.log('Failed to fetch output discrepancies:', e);
-        return cachedDiscrepancyData;
+        console.log('Failed to fetch issues:', e);
+        return cachedIssuesData;
     }
 }
 
-function renderOutputDiscrepancies(data) {
-    const banner = document.getElementById('outputDiscrepancyBanner');
-    const countEl = document.getElementById('outputDiscrepancyCount');
-    const listEl = document.getElementById('outputDiscrepancyList');
+function renderIssues(data) {
+    const banner = document.getElementById('issuesBanner');
+    const countEl = document.getElementById('issuesCount');
+    const listEl = document.getElementById('issuesList');
 
     if (!data || !data.discrepancies || data.discrepancies.length === 0) {
         banner.classList.remove('visible');
@@ -1989,22 +1989,30 @@ function renderOutputDiscrepancies(data) {
                 if (d.description) details.push(`<span><strong>Name:</strong> ${escapeHtml(d.description)}</span>`);
                 details.push(`<span><strong>Channels:</strong> ${d.startChannel}-${d.startChannel + d.channelCount - 1}</span>`);
                 break;
+            case 'missing_sequences':
+                icon = 'fa-file-audio';
+                if (d.sequences && d.sequences.length > 0) {
+                    const seqList = d.sequences.slice(0, 5).map(s => escapeHtml(s)).join(', ');
+                    const more = d.sequences.length > 5 ? ` (+${d.sequences.length - 5} more)` : '';
+                    details.push(`<span><strong>Missing:</strong> ${seqList}${more}</span>`);
+                }
+                break;
             default:
                 icon = 'fa-question-circle';
         }
 
         html += `
-            <div class="output-discrepancy-item severity-${d.severity}">
-                <div class="output-discrepancy-item__icon"><i class="fas ${icon}"></i></div>
-                <div class="output-discrepancy-item__content">
-                    <div class="output-discrepancy-item__message">
+            <div class="issues-item severity-${d.severity}">
+                <div class="issues-item__icon"><i class="fas ${icon}"></i></div>
+                <div class="issues-item__content">
+                    <div class="issues-item__message">
                         ${escapeHtml(d.message)}
                     </div>
-                    <div class="output-discrepancy-item__details">
+                    <div class="issues-item__details">
                         ${details.join('')}
                     </div>
                 </div>
-                <span class="output-discrepancy-item__address">${escapeHtml(d.hostname || d.address)}</span>
+                <span class="issues-item__address">${escapeHtml(d.hostname || d.address)}</span>
             </div>`;
     });
 
@@ -2012,12 +2020,12 @@ function renderOutputDiscrepancies(data) {
     banner.classList.add('visible');
 }
 
-function toggleDiscrepancyDetails() {
-    const body = document.getElementById('outputDiscrepancyBody');
-    const toggle = document.getElementById('outputDiscrepancyToggle');
-    outputDiscrepanciesExpanded = !outputDiscrepanciesExpanded;
+function toggleIssuesDetails() {
+    const body = document.getElementById('issuesBody');
+    const toggle = document.getElementById('issuesToggle');
+    issuesExpanded = !issuesExpanded;
 
-    if (outputDiscrepanciesExpanded) {
+    if (issuesExpanded) {
         body.style.display = 'block';
         toggle.innerHTML = '<i class="fas fa-chevron-up"></i> Hide';
     } else {
