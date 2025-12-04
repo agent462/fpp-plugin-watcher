@@ -23,6 +23,48 @@ function normalizeBoolean(&$config, $key, $default = false) {
     }
 }
 
+/**
+ * Check if any changed settings require an FPP restart
+ * Compares old config values to new values for settings marked in WATCHERSETTINGSRESTARTREQUIRED
+ *
+ * @param array $oldConfig Previous configuration (from readPluginConfig)
+ * @param array $newSettings New settings being saved (key => value)
+ * @return bool True if restart is required, false otherwise
+ */
+function settingsRequireRestart($oldConfig, $newSettings) {
+    foreach ($newSettings as $key => $newValue) {
+        // Skip if this setting doesn't require restart
+        if (!isset(WATCHERSETTINGSRESTARTREQUIRED[$key]) || !WATCHERSETTINGSRESTARTREQUIRED[$key]) {
+            continue;
+        }
+
+        // Get old value (handle both array and string formats for testHosts)
+        $oldValue = $oldConfig[$key] ?? null;
+
+        // Normalize for comparison
+        if ($key === 'testHosts') {
+            // testHosts: old is array, new is comma-separated string
+            $oldNormalized = is_array($oldValue) ? implode(',', $oldValue) : $oldValue;
+            $newNormalized = $newValue;
+        } elseif (is_bool($oldValue)) {
+            // Boolean settings: normalize string to bool for comparison
+            $oldNormalized = $oldValue;
+            $newNormalized = filter_var($newValue, FILTER_VALIDATE_BOOLEAN);
+        } else {
+            // Other settings: compare as strings
+            $oldNormalized = (string)$oldValue;
+            $newNormalized = (string)$newValue;
+        }
+
+        if ($oldNormalized !== $newNormalized) {
+            logMessage("Setting '$key' changed from '$oldNormalized' to '$newNormalized' - restart required");
+            return true;
+        }
+    }
+
+    return false;
+}
+
 // Prepare configuration by processing specific fields
 function prepareConfig($config) {
     // Normalize boolean flags (INI parsing returns strings)
@@ -33,6 +75,8 @@ function prepareConfig($config) {
     normalizeBoolean($config, 'falconMonitorEnabled', false);
     normalizeBoolean($config, 'controlUIEnabled', true);
     normalizeBoolean($config, 'mqttMonitorEnabled', false);
+    normalizeBoolean($config, 'issueCheckOutputs', true);
+    normalizeBoolean($config, 'issueCheckSequences', true);
 
     // Parse retention days as integer
     if (isset($config['mqttRetentionDays'])) {

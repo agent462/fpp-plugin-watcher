@@ -32,8 +32,31 @@ define("WATCHERDEFAULTSETTINGS",
         'falconMonitorEnabled' => false,
         'controlUIEnabled' => true,
         'mqttMonitorEnabled' => false,
-        'mqttRetentionDays' => 60)
+        'mqttRetentionDays' => 60,
+        'issueCheckOutputs' => true,
+        'issueCheckSequences' => true)
         );
+
+// Settings that require FPP restart when changed (daemons/services managed by postStart.sh)
+// UI-only settings (controlUIEnabled, falconMonitorEnabled, etc.) don't require restart
+define("WATCHERSETTINGSRESTARTREQUIRED",
+    array(
+        'connectivityCheckEnabled' => true,   // Daemon started/stopped in postStart.sh
+        'checkInterval' => true,              // Daemon config
+        'maxFailures' => true,                // Daemon config
+        'networkAdapter' => true,             // Daemon config
+        'testHosts' => true,                  // Daemon config
+        'collectdEnabled' => true,            // Service managed in postStart.sh
+        'multiSyncMetricsEnabled' => false,   // UI visibility only
+        'multiSyncPingEnabled' => true,       // Ping daemon started/stopped
+        'multiSyncPingInterval' => true,      // Ping daemon config
+        'falconMonitorEnabled' => false,      // UI visibility only
+        'controlUIEnabled' => false,          // UI visibility only
+        'mqttMonitorEnabled' => true,         // MQTT subscriber started/stopped
+        'mqttRetentionDays' => false,         // Cleanup schedule, no restart needed
+        'issueCheckOutputs' => false,         // UI feature only
+        'issueCheckSequences' => false        // UI feature only
+    ));
 
 // Ensure plugin-created files are owned by the FPP user/group for web access
 function ensureFppOwnership($path) {

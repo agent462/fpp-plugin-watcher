@@ -12,6 +12,9 @@ include_once __DIR__ . "/lib/config.php";
 $statusMessage = '';
 $statusType = '';
 
+// Load current settings BEFORE form processing (for restart check comparison)
+$oldConfig = readPluginConfig();
+
 // Handle form submission
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['save_settings'])) {
     // Get form values
@@ -27,6 +30,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['save_settings'])) {
     $controlUIEnabled = isset($_POST['controlUIEnabled']) ? 'true' : 'false';
     $mqttMonitorEnabled = isset($_POST['mqttMonitorEnabled']) ? 'true' : 'false';
     $mqttRetentionDays = intval($_POST['mqttRetentionDays'] ?? 60);
+    $issueCheckOutputs = isset($_POST['issueCheckOutputs']) ? 'true' : 'false';
+    $issueCheckSequences = isset($_POST['issueCheckSequences']) ? 'true' : 'false';
 
     // If 'default' is selected, auto-detect and save the actual interface
     if ($networkAdapter === 'default') {
@@ -82,7 +87,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['save_settings'])) {
             'falconMonitorEnabled' => $falconMonitorEnabled,
             'controlUIEnabled' => $controlUIEnabled,
             'mqttMonitorEnabled' => $mqttMonitorEnabled,
-            'mqttRetentionDays' => $mqttRetentionDays
+            'mqttRetentionDays' => $mqttRetentionDays,
+            'issueCheckOutputs' => $issueCheckOutputs,
+            'issueCheckSequences' => $issueCheckSequences
         ];
 
         foreach ($settingsToSave as $settingName => $settingValue) {
@@ -96,22 +103,25 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['save_settings'])) {
             logMessage("Warning: Some FPP MQTT settings may not have been configured: " . implode(', ', $mqttConfigResult['messages']));
         }
 
-        // Set FPP restart flag to notify that fppd restart is needed
-        /** @disregard P1010 */
-        WriteSettingToFile('restartFlag', 1);
-
-        $statusMessage = 'Settings saved successfully!';
+        // Only set FPP restart flag if settings that require restart have changed
+        if (settingsRequireRestart($oldConfig, $settingsToSave)) {
+            /** @disregard P1010 */
+            WriteSettingToFile('restartFlag', 1);
+            $statusMessage = 'Settings saved successfully! FPP restart required.';
+        } else {
+            $statusMessage = 'Settings saved successfully!';
+        }
         $statusType = 'success';
 
-        // Reload config
-        $config = readPluginConfig();
+        // Reload config (force reload to bypass static cache after save)
+        $config = readPluginConfig(true);
     } else {
         $statusMessage = 'Error saving settings: ' . implode(', ', $errors);
         $statusType = 'error';
     }
 }
 
-// Load current settings
+// Load/reload current settings (after form processing)
 $config = readPluginConfig();
 
 // Always detect what auto-detect would choose (for display in the dropdown)
@@ -425,6 +435,27 @@ if ($isPlayerMode) {
                             <p></p>
                             <strong>Note:</strong> Remote systems must be accessible over the network.
                             Control actions are sent directly to each remote FPP instance.
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Issue Checkers (sub-setting) -->
+                <div class="row settingRow" style="margin-left: 2rem; padding-left: 1rem; border-left: 3px solid #dee2e6;">
+                    <div class="col-md-4 col-lg-3">
+                        <label class="settingLabel">Issue Checks</label>
+                    </div>
+                    <div class="col-md-8">
+                        <div class="settingDescription" style="margin-top: 0;">
+                            <label style="display: flex; align-items: flex-start; gap: 0.5rem; cursor: pointer; margin-bottom: 0.3rem;">
+                                <input type="checkbox" name="issueCheckOutputs" value="1" style="flex-shrink: 0; margin-top: 0.15rem;"
+                                    <?php echo (!empty($config['issueCheckOutputs'])) ? 'checked' : ''; ?>>
+                                <span><strong>Output to Remote</strong> - Warn when outputs target systems in remote mode</span>
+                            </label>
+                            <label style="display: flex; align-items: flex-start; gap: 0.5rem; cursor: pointer; margin-bottom: 0;">
+                                <input type="checkbox" name="issueCheckSequences" value="1" style="flex-shrink: 0; margin-top: 0.15rem;"
+                                    <?php echo (!empty($config['issueCheckSequences'])) ? 'checked' : ''; ?>>
+                                <span><strong>Missing Sequences</strong> - Warn when remotes are missing sequences from the player</span>
+                            </label>
                         </div>
                     </div>
                 </div>
