@@ -1,5 +1,6 @@
     <link rel="stylesheet" href="/css/fpp-bootstrap/dist-new/fpp-bootstrap-5-3.css">
     <link rel="stylesheet" href="/css/fpp.css">
+    <link rel="stylesheet" href="/plugin.php?plugin=fpp-plugin-watcher&file=css/commonUI.css&nopage=1">
     <link rel="stylesheet" href="/plugin.php?plugin=fpp-plugin-watcher&file=css/configUI.css&nopage=1">
     <script src="/plugin.php?plugin=fpp-plugin-watcher&file=js/commonUI.js&nopage=1"></script>
 
@@ -200,10 +201,10 @@ if ($isPlayerMode) {
             <div class="settingsPanel">
                 <div class="panelHeader" onclick="watcherTogglePanel(this)">
                     <div class="panelTitle">
-                        <label class="toggleSwitch" onclick="event.stopPropagation()">
+                        <label class="toggleSwitch toggleSwitch--sm" onclick="event.stopPropagation()">
                             <input type="checkbox" id="connectivityCheckEnabled" name="connectivityCheckEnabled" value="1"
                                 <?php echo (!empty($config['connectivityCheckEnabled'])) ? 'checked' : ''; ?>>
-                            <span class="toggleSlider"></span>
+                            <span class="toggleSlider toggleSlider--green"></span>
                         </label>
                         <i class="fas fa-wifi"></i>
                         Connectivity Check
@@ -275,10 +276,10 @@ if ($isPlayerMode) {
             <div class="settingsPanel">
                 <div class="panelHeader" onclick="watcherTogglePanel(this)">
                     <div class="panelTitle">
-                        <label class="toggleSwitch" onclick="event.stopPropagation()">
+                        <label class="toggleSwitch toggleSwitch--sm" onclick="event.stopPropagation()">
                             <input type="checkbox" id="collectdEnabled" name="collectdEnabled" value="1"
                                 <?php echo (!empty($config['collectdEnabled'])) ? 'checked' : ''; ?>>
-                            <span class="toggleSlider"></span>
+                            <span class="toggleSlider toggleSlider--green"></span>
                         </label>
                         <i class="fas fa-chart-line"></i>
                         System Metrics Collection
@@ -313,10 +314,10 @@ if ($isPlayerMode) {
                                     <i class="fas fa-chart-area"></i>
                                     Remote Metrics
                                 </div>
-                                <label class="toggleSwitch">
+                                <label class="toggleSwitch toggleSwitch--sm">
                                     <input type="checkbox" id="multiSyncMetricsEnabled" name="multiSyncMetricsEnabled" value="1"
                                         <?php echo (!empty($config['multiSyncMetricsEnabled'])) ? 'checked' : ''; ?>>
-                                    <span class="toggleSlider"></span>
+                                    <span class="toggleSlider toggleSlider--green"></span>
                                 </label>
                             </div>
                             <div class="featureDesc">
@@ -331,10 +332,10 @@ if ($isPlayerMode) {
                                     <i class="fas fa-satellite-dish"></i>
                                     Remote Ping
                                 </div>
-                                <label class="toggleSwitch">
+                                <label class="toggleSwitch toggleSwitch--sm">
                                     <input type="checkbox" id="multiSyncPingEnabled" name="multiSyncPingEnabled" value="1"
                                         <?php echo (!empty($config['multiSyncPingEnabled'])) ? 'checked' : ''; ?>>
-                                    <span class="toggleSlider"></span>
+                                    <span class="toggleSlider toggleSlider--green"></span>
                                 </label>
                             </div>
                             <div class="featureDesc">
@@ -357,10 +358,10 @@ if ($isPlayerMode) {
                                     <i class="fas fa-sliders-h"></i>
                                     Remote Control
                                 </div>
-                                <label class="toggleSwitch">
+                                <label class="toggleSwitch toggleSwitch--sm">
                                     <input type="checkbox" id="controlUIEnabled" name="controlUIEnabled" value="1"
                                         <?php echo (!empty($config['controlUIEnabled'])) ? 'checked' : ''; ?>>
-                                    <span class="toggleSlider"></span>
+                                    <span class="toggleSlider toggleSlider--green"></span>
                                 </label>
                             </div>
                             <div class="featureDesc">
@@ -388,10 +389,10 @@ if ($isPlayerMode) {
                                     <i class="fas fa-broadcast-tower"></i>
                                     MQTT Events
                                 </div>
-                                <label class="toggleSwitch">
+                                <label class="toggleSwitch toggleSwitch--sm">
                                     <input type="checkbox" id="mqttMonitorEnabled" name="mqttMonitorEnabled" value="1"
                                         <?php echo (!empty($config['mqttMonitorEnabled'])) ? 'checked' : ''; ?>>
-                                    <span class="toggleSlider"></span>
+                                    <span class="toggleSlider toggleSlider--green"></span>
                                 </label>
                             </div>
                             <div class="featureDesc">
@@ -415,10 +416,10 @@ if ($isPlayerMode) {
             <div class="settingsPanel">
                 <div class="panelHeader" onclick="watcherTogglePanel(this)">
                     <div class="panelTitle">
-                        <label class="toggleSwitch" onclick="event.stopPropagation()">
+                        <label class="toggleSwitch toggleSwitch--sm" onclick="event.stopPropagation()">
                             <input type="checkbox" id="falconMonitorEnabled" name="falconMonitorEnabled" value="1"
                                 <?php echo (!empty($config['falconMonitorEnabled'])) ? 'checked' : ''; ?>>
-                            <span class="toggleSlider"></span>
+                            <span class="toggleSlider toggleSlider--green"></span>
                         </label>
                         <i class="fas fa-microchip"></i>
                         Falcon Controller Monitor

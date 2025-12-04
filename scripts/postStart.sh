@@ -40,11 +40,18 @@ if [ -f "$CONFIG_FILE" ]; then
         fi
     fi
 else
-    echo "Watcher: Configuration file not found, skipping collectd management"
+    echo "Watcher: Configuration file not found, skipping startup"
+    exit 0
 fi
 
-# Start the Connectivity Checker in the background
-/usr/bin/php /home/fpp/media/plugins/fpp-plugin-watcher/connectivityCheck.php &
+# Start Connectivity Checker if enabled
+CONNECTIVITY_ENABLED=$(grep -E "^connectivityCheckEnabled" "$CONFIG_FILE" | cut -d'=' -f2 | tr -d ' \t\r\n"')
+if [ "$CONNECTIVITY_ENABLED" = "true" ] || [ "$CONNECTIVITY_ENABLED" = "1" ] || [ "$CONNECTIVITY_ENABLED" = "yes" ]; then
+    echo "Watcher: Connectivity Checker is enabled, starting daemon..."
+    /usr/bin/php /home/fpp/media/plugins/fpp-plugin-watcher/connectivityCheck.php &
+else
+    echo "Watcher: Connectivity Checker is disabled"
+fi
 
 # Start MQTT Subscriber if enabled
 MQTT_ENABLED=$(grep -E "^mqttMonitorEnabled" "$CONFIG_FILE" | cut -d'=' -f2 | tr -d ' \t\r\n"')
