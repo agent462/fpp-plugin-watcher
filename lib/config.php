@@ -32,6 +32,14 @@ function prepareConfig($config) {
     normalizeBoolean($config, 'multiSyncPingEnabled', false);
     normalizeBoolean($config, 'falconMonitorEnabled', false);
     normalizeBoolean($config, 'controlUIEnabled', true);
+    normalizeBoolean($config, 'mqttMonitorEnabled', false);
+
+    // Parse retention days as integer
+    if (isset($config['mqttRetentionDays'])) {
+        $config['mqttRetentionDays'] = max(1, min(365, intval($config['mqttRetentionDays'])));
+    } else {
+        $config['mqttRetentionDays'] = WATCHERDEFAULTSETTINGS['mqttRetentionDays'];
+    }
 
     // Process testHosts into an array
     if (isset($config['testHosts'])) {
@@ -41,6 +49,57 @@ function prepareConfig($config) {
     }
 
     return $config;
+}
+
+/**
+ * Configure FPP's MQTT settings when MQTT Monitor is enabled/disabled
+ * Sets up or tears down local broker, credentials, and publish frequencies
+ *
+ * @param bool $enable - true to enable/configure, false to disable
+ * @return array - result with 'success' and 'messages' keys
+ */
+function configureFppMqttSettings($enable) {
+    include_once __DIR__ . '/apiCall.php';
+
+    $result = ['success' => true, 'messages' => []];
+
+    if ($enable) {
+        // Settings to configure when enabling MQTT Monitor
+        $mqttSettings = [
+            'Service_MQTT_localbroker' => '1',      // Enable local MQTT broker
+            'MQTTHost' => 'localhost',               // Connect to local broker
+            'MQTTUsername' => 'fpp',                 // Default FPP MQTT user
+            'MQTTPassword' => 'falcon',              // Default FPP MQTT password
+        ];
+    } else {
+        // Settings to configure when disabling MQTT Monitor
+        $mqttSettings = [
+            'Service_MQTT_localbroker' => '0',      // Disable local MQTT broker
+            'MQTTHost' => '',                        // Clear broker host
+            'MQTTUsername' => '',                    // Clear username
+            'MQTTPassword' => '',                    // Clear password
+        ];
+    }
+
+    foreach ($mqttSettings as $settingName => $settingValue) {
+        $response = apiCall(
+            'PUT',
+            "http://127.0.0.1/api/settings/{$settingName}",
+            $settingValue,
+            true,
+            5,
+            ['Content-Type: text/plain']
+        );
+
+        if ($response === false) {
+            $result['messages'][] = "Failed to set {$settingName}";
+            $result['success'] = false;
+        } else {
+            $result['messages'][] = "Set {$settingName} = {$settingValue}";
+        }
+    }
+
+    return $result;
 }
 
 // Read plugin configuration file (cached per request)

@@ -1,29 +1,38 @@
 <?php
 // Function to make calls to the FPP API
-function apiCall($method, $uri, $data = [], $returnResponse = false, $timeout = 15) {
-    #logMessage("Attempting to make the api call to: $uri"); \\ make this debug in future
+function apiCall($method, $uri, $data = [], $returnResponse = false, $timeout = 15, $headers = null) {
 
     $ch = curl_init($uri);
     curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
     curl_setopt($ch, CURLOPT_TIMEOUT, $timeout);
 
+    $method = strtoupper($method);
+
     // Handle GET requests
-    if (strtoupper($method) === 'GET') {
+    if ($method === 'GET') {
         // Don't set Content-Type for GET requests - FPP API doesn't handle it well
         if (!empty($data)) {
             curl_setopt($ch, CURLOPT_URL, $uri);
         }
     }
     // Handle POST requests
-    elseif (strtoupper($method) === 'POST') {
+    elseif ($method === 'POST') {
         curl_setopt($ch, CURLOPT_POST, true);
-        // Only set headers for POST requests with data
-        curl_setopt($ch, CURLOPT_HTTPHEADER, [
-            'Content-Type: application/json'
-        ]);
+        curl_setopt($ch, CURLOPT_HTTPHEADER, $headers ?: ['Content-Type: application/json']);
         if (!empty($data)) {
             settype($data, "string");
-            curl_setopt($ch, CURLOPT_POSTFIELDS, $data); // Can be array or URL-encoded string
+            curl_setopt($ch, CURLOPT_POSTFIELDS, $data);
+        }
+    }
+    // Handle PUT requests
+    elseif ($method === 'PUT') {
+        curl_setopt($ch, CURLOPT_CUSTOMREQUEST, 'PUT');
+        curl_setopt($ch, CURLOPT_HTTPHEADER, $headers ?: ['Content-Type: application/json']);
+        if (!empty($data)) {
+            if (is_array($data)) {
+                $data = json_encode($data);
+            }
+            curl_setopt($ch, CURLOPT_POSTFIELDS, $data);
         }
     } else {
         // Handle other methods if needed, or throw an error

@@ -20,18 +20,13 @@ $showMultiSyncMenu = !empty($watcherConfig['multiSyncMetricsEnabled']);
 $showMultiSyncPingMenu = !empty($watcherConfig['multiSyncPingEnabled']);
 $showFalconMonitorMenu = !empty($watcherConfig['falconMonitorEnabled']);
 $showControlUIMenu = !empty($watcherConfig['controlUIEnabled']);
+$showEventsMenu = !empty($watcherConfig['mqttMonitorEnabled']);
 
 $menuEntries = Array(
 	Array(
-		'text' => 'Watcher - Config',
+		'text' => '<i class="fas fa-cog"></i> Watcher - Config',
 		'type' => 'content',
 		'page' => 'configUI.php',
-		'wrap' => 1
-	),
-	Array(
-		'text' => 'Watcher - Home',
-		'type' => 'help',
-		'page' => 'https://github.com/agent462/fpp-plugin-watcher',
 		'wrap' => 1
 	)
 );
@@ -41,7 +36,7 @@ if ($showLocalMetricsMenu) {
 	$helpIndex = count($menuEntries) - 1;
 	array_splice($menuEntries, $helpIndex, 0, [
 		Array(
-			'text' => 'Watcher - Local Metrics',
+			'text' => '<i class="fa-solid fa-chart-area"></i>  Watcher - Local Metrics',
 			'type' => 'status',
 			'page' => 'localMetricsUI.php',
 			'wrap' => 1
@@ -54,7 +49,7 @@ if ($showConnectivityMenu) {
 	$helpIndex = count($menuEntries) - 1;
 	array_splice($menuEntries, $helpIndex, 0, [
 		Array(
-			'text' => 'Watcher - Connectivity',
+			'text' => '<i class="fa-solid fa-ethernet"></i> Watcher - Connectivity',
 			'type' => 'status',
 			'page' => 'connectivityUI.php',
 			'wrap' => 1
@@ -67,7 +62,7 @@ if ($showFalconMonitorMenu) {
 	$helpIndex = count($menuEntries) - 1;
 	array_splice($menuEntries, $helpIndex, 0, [
 		Array(
-			'text' => 'Watcher - Falcon Monitor',
+			'text' => '<i class="fa-solid fa-feather-pointed"></i> Watcher - Falcon Monitor',
 			'type' => 'status',
 			'page' => 'falconMonitorUI.php',
 			'wrap' => 1
@@ -81,7 +76,7 @@ if ($showMultiSyncMenu) {
 	$helpIndex = count($menuEntries) - 1;
 	array_splice($menuEntries, $helpIndex, 0, [
 		Array(
-			'text' => 'Watcher - Remote Metrics',
+			'text' => '<i class="fa-solid fa-chart-area"></i>  Watcher - Remote Metrics',
 			'type' => 'status',
 			'page' => 'remoteMetricsUI.php',
 			'wrap' => 1
@@ -95,7 +90,7 @@ if ($showMultiSyncPingMenu) {
 	$helpIndex = count($menuEntries) - 1;
 	array_splice($menuEntries, $helpIndex, 0, [
 		Array(
-			'text' => 'Watcher - Remote Ping',
+			'text' => '<i class="fa-solid fa-satellite-dish"></i> Watcher - Remote Ping',
 			'type' => 'status',
 			'page' => 'remotePingUI.php',
 			'wrap' => 1
@@ -109,9 +104,22 @@ if ($showControlUIMenu) {
 	$helpIndex = count($menuEntries) - 1;
 	array_splice($menuEntries, $helpIndex, 0, [
 		Array(
-			'text' => 'Watcher - Remote Control',
+			'text' => '<i class="fa-solid fa-gamepad"></i>  Watcher - Remote Control',
 			'type' => 'status',
 			'page' => 'remoteControlUI.php',
+			'wrap' => 1
+		)
+	]);
+}
+
+// Add MQTT Events menu entry only if enabled (player mode only)
+if ($showEventsMenu && isPlayerMode()) {
+	$helpIndex = count($menuEntries) - 1;
+	array_splice($menuEntries, $helpIndex, 0, [
+		Array(
+			'text' => '<i class="fa-solid fa-radio"></i> Watcher - Events',
+			'type' => 'status',
+			'page' => 'eventsUI.php',
 			'wrap' => 1
 		)
 	]);

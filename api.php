@@ -7,6 +7,7 @@ include_once WATCHERPLUGINDIR . '/lib/falconController.php';
 include_once WATCHERPLUGINDIR . '/lib/config.php';
 include_once WATCHERPLUGINDIR . '/lib/updateCheck.php';
 include_once WATCHERPLUGINDIR . '/lib/remoteControl.php';
+include_once WATCHERPLUGINDIR . '/lib/mqttEvents.php';
 /**
  * Returns the API endpoints for the fpp-plugin-watcher plugin
  */
@@ -280,6 +281,25 @@ function getEndpointsfpppluginwatcher() {
         'method' => 'GET',
         'endpoint' => 'outputs/discrepancies',
         'callback' => 'fpppluginWatcherOutputDiscrepancies');
+    array_push($result, $ep);
+
+    // MQTT event monitoring endpoints
+    $ep = array(
+        'method' => 'GET',
+        'endpoint' => 'mqtt/events',
+        'callback' => 'fpppluginWatcherMqttEvents');
+    array_push($result, $ep);
+
+    $ep = array(
+        'method' => 'GET',
+        'endpoint' => 'mqtt/stats',
+        'callback' => 'fpppluginWatcherMqttStats');
+    array_push($result, $ep);
+
+    $ep = array(
+        'method' => 'GET',
+        'endpoint' => 'mqtt/hosts',
+        'callback' => 'fpppluginWatcherMqttHosts');
     array_push($result, $ep);
 
     return $result;
@@ -1087,4 +1107,37 @@ function fpppluginWatcherOutputDiscrepancies() {
     /** @disregard P1010 */
     return json(getOutputDiscrepancies());
 }
-?>
+
+// GET /api/plugin/fpp-plugin-watcher/mqtt/events
+// Returns MQTT events with optional filters
+function fpppluginWatcherMqttEvents() {
+    $hoursBack = isset($_GET['hours']) ? intval($_GET['hours']) : 24;
+    $hostname = isset($_GET['hostname']) ? trim($_GET['hostname']) : null;
+    $eventType = isset($_GET['type']) ? trim($_GET['type']) : null;
+
+    $result = getMqttEvents($hoursBack, $hostname ?: null, $eventType ?: null);
+    /** @disregard P1010 */
+    return json($result);
+}
+
+// GET /api/plugin/fpp-plugin-watcher/mqtt/stats
+// Returns aggregated MQTT event statistics
+function fpppluginWatcherMqttStats() {
+    $hoursBack = isset($_GET['hours']) ? intval($_GET['hours']) : 24;
+
+    $result = getMqttEventStats($hoursBack);
+    /** @disregard P1010 */
+    return json($result);
+}
+
+// GET /api/plugin/fpp-plugin-watcher/mqtt/hosts
+// Returns list of unique hostnames from MQTT events
+function fpppluginWatcherMqttHosts() {
+    $hosts = getMqttHostsList();
+    /** @disregard P1010 */
+    return json([
+        'success' => true,
+        'count' => count($hosts),
+        'hosts' => $hosts
+    ]);
+}
