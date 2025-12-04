@@ -2487,3 +2487,18 @@
 .fpp-upgrade-type-count[data-count="0"] {
     display: none;
 }
+
+/* ==========================================================================
+   Config Page - Auto-config Note
+   ========================================================================== */
+
+.watcher-auto-config-note {
+    display: inline-block;
+    background: #d4edda;
+    border: 1px solid #28a745;
+    border-radius: 4px;
+    padding: 0.4em 0.8em;
+    font-weight: 500;
+    margin: 0.25em 0;
+    color: #155724;
+}

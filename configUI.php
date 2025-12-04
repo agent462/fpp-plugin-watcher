@@ -25,6 +25,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['save_settings'])) {
     $multiSyncPingInterval = intval($_POST['multiSyncPingInterval'] ?? 60);
     $falconMonitorEnabled = isset($_POST['falconMonitorEnabled']) ? 'true' : 'false';
     $controlUIEnabled = isset($_POST['controlUIEnabled']) ? 'true' : 'false';
+    $mqttMonitorEnabled = isset($_POST['mqttMonitorEnabled']) ? 'true' : 'false';
+    $mqttRetentionDays = intval($_POST['mqttRetentionDays'] ?? 60);
 
     // If 'default' is selected, auto-detect and save the actual interface
     if ($networkAdapter === 'default') {
@@ -60,6 +62,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['save_settings'])) {
     if ($multiSyncPingInterval < 10 || $multiSyncPingInterval > 300) {
         $errors[] = "Multi-sync ping interval must be between 10 and 300 seconds";
     }
+    if ($mqttRetentionDays < 1 || $mqttRetentionDays > 365) {
+        $errors[] = "MQTT retention must be between 1 and 365 days";
+    }
 
     if (empty($errors)) {
         // Save settings using FPP's WriteSettingToFile
@@ -75,12 +80,20 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['save_settings'])) {
             'multiSyncPingEnabled' => $multiSyncPingEnabled,
             'multiSyncPingInterval' => $multiSyncPingInterval,
             'falconMonitorEnabled' => $falconMonitorEnabled,
-            'controlUIEnabled' => $controlUIEnabled
+            'controlUIEnabled' => $controlUIEnabled,
+            'mqttMonitorEnabled' => $mqttMonitorEnabled,
+            'mqttRetentionDays' => $mqttRetentionDays
         ];
 
         foreach ($settingsToSave as $settingName => $settingValue) {
             /** @disregard P1010 */
             WriteSettingToFile($settingName, $settingValue, WATCHERPLUGINNAME);
+        }
+
+        // Configure FPP MQTT settings based on enable/disable state
+        $mqttConfigResult = configureFppMqttSettings($mqttMonitorEnabled === 'true');
+        if (!$mqttConfigResult['success']) {
+            logMessage("Warning: Some FPP MQTT settings may not have been configured: " . implode(', ', $mqttConfigResult['messages']));
         }
 
         // Set FPP restart flag to notify that fppd restart is needed
@@ -415,6 +428,44 @@ if ($isPlayerMode) {
                         </div>
                     </div>
                 </div>
+
+                <!-- Enable/Disable MQTT Monitor -->
+                <div class="row settingRow">
+                    <div class="col-md-4 col-lg-3">
+                        <label class="settingLabel">
+                            <input type="checkbox" id="mqttMonitorEnabled" name="mqttMonitorEnabled" class="form-check-input" value="1"
+                                <?php echo (!empty($config['mqttMonitorEnabled'])) ? 'checked' : ''; ?>>
+                            Enable MQTT Event Monitor
+                        </label>
+                    </div>
+                    <div class="col-md-8">
+                        <div class="settingDescription">
+                            Enable a dashboard that captures and displays MQTT events from FPP.
+                            Tracks sequence start/stop, playlist events, and status updates from all FPP instances publishing to the MQTT broker.
+                            <p></p>
+                            <span class="watcher-auto-config-note">
+                                <i class="fas fa-magic"></i> <strong>Auto-configured:</strong> Enabling this will automatically configure FPP's built-in MQTT broker.
+                            </span>
+                            <p></p>
+                            <strong>Subscribed Topics:</strong> Sequence events, Playlist events, Status updates, Command Events
+                        </div>
+                    </div>
+                </div>
+
+                <!-- MQTT Retention Days (sub-setting) -->
+                <div class="row settingRow" style="margin-left: 2rem; padding-left: 1rem; border-left: 3px solid #dee2e6;">
+                    <div class="col-md-4 col-lg-3">
+                        <label class="settingLabel" for="mqttRetentionDays">Event Retention (days)</label>
+                    </div>
+                    <div class="col-md-8">
+                        <input type="number" id="mqttRetentionDays" name="mqttRetentionDays" class="form-control"
+                            min="1" max="365" value="<?php echo htmlspecialchars($config['mqttRetentionDays'] ?? WATCHERDEFAULTSETTINGS['mqttRetentionDays']); ?>">
+                        <div class="settingDescription">
+                            How long to retain MQTT event data for historical graphing (1-365 days).
+                            Default is 60 days (2 months). Longer retention uses more disk space.
+                        </div>
+                    </div>
+                </div>
             </div>
             <?php endif; ?>
 
@@ -436,7 +487,7 @@ if ($isPlayerMode) {
                     <div class="col-md-8">
                         <div class="settingDescription">
                             Enable a dashboard for monitoring Falcon pixel controllers on your network.
-                            Displays real-time status including temperatures, voltages, pixel counts, and firmware versions. 
+                            Displays real-time status including temperatures, voltages, pixel counts, and firmware versions.
                             <p></p>Allows triggering test mode and rebooting the controllers directly from the dashboard.
                             <p></p>
                             <span style="display: inline-block; background: #e7f3ff; border: 1px solid #b3d7ff; border-radius: 4px; padding: 0.4em 0.8em; font-weight: 500; margin: 0.25em 0;">

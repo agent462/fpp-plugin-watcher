@@ -16,6 +16,7 @@ define("WATCHERMULTISYNCPINGMETRICSFILE", WATCHERLOGDIR."/".WATCHERPLUGINNAME."-
 define("WATCHERRESETSTATEFILE", WATCHERLOGDIR."/".WATCHERPLUGINNAME."-reset-state.json");
 define("WATCHERFPPUSER", 'fpp');
 define("WATCHERFPPGROUP", 'fpp');
+define("WATCHERMQTTEVENTSFILE", WATCHERLOGDIR."/".WATCHERPLUGINNAME."-mqtt-events.log");
 define("WATCHERDEFAULTSETTINGS",
     array(
         'connectivityCheckEnabled' => false,
@@ -29,7 +30,9 @@ define("WATCHERDEFAULTSETTINGS",
         'multiSyncPingEnabled' => false,
         'multiSyncPingInterval' => 60,
         'falconMonitorEnabled' => false,
-        'controlUIEnabled' => true)
+        'controlUIEnabled' => true,
+        'mqttMonitorEnabled' => false,
+        'mqttRetentionDays' => 60)
         );
 
 // Ensure plugin-created files are owned by the FPP user/group for web access

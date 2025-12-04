@@ -45,3 +45,12 @@ fi
 
 # Start the Connectivity Checker in the background
 /usr/bin/php /home/fpp/media/plugins/fpp-plugin-watcher/connectivityCheck.php &
+
+# Start MQTT Subscriber if enabled
+MQTT_ENABLED=$(grep -E "^mqttMonitorEnabled" "$CONFIG_FILE" | cut -d'=' -f2 | tr -d ' \t\r\n"')
+if [ "$MQTT_ENABLED" = "true" ] || [ "$MQTT_ENABLED" = "1" ] || [ "$MQTT_ENABLED" = "yes" ]; then
+    echo "Watcher: MQTT Monitor is enabled, starting subscriber..."
+    /usr/bin/php /home/fpp/media/plugins/fpp-plugin-watcher/mqttSubscriber.php &
+else
+    echo "Watcher: MQTT Monitor is disabled"
+fi
