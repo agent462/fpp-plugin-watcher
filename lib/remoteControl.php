@@ -386,8 +386,8 @@ function streamRemoteFPPUpgrade($host, $targetVersion = null) {
 }
 
 /**
- * Check for outputs enabled to systems in remote mode
- * Remote mode systems receive data via multisync, so direct outputs are redundant
+ * Check for configuration issues between player and remote systems
+ * Includes output discrepancies and missing sequences
  * Results are cached for 60 seconds to reduce API calls
  */
 function getOutputDiscrepancies() {
@@ -405,16 +405,7 @@ function getOutputDiscrepancies() {
         }
     }
 
-    // Get universe outputs from local FPP
-    $outputsData = apiCall('GET', 'http://127.0.0.1/api/channel/output/universeOutputs', [], true, 5);
-
-    if (!$outputsData || !isset($outputsData['channelOutputs'])) {
-        return [
-            'success' => true,
-            'discrepancies' => [],
-            'message' => 'No universe outputs configured'
-        ];
-    }
+    $discrepancies = [];
 
     // Get remote systems
     $remoteSystems = getMultiSyncRemoteSystems();
@@ -425,50 +416,143 @@ function getOutputDiscrepancies() {
         }
     }
 
-    // Build map of active outputs per remote IP
-    $activeOutputsByIP = [];
-    foreach ($outputsData['channelOutputs'] as $outputGroup) {
-        if (!isset($outputGroup['universes']) || !is_array($outputGroup['universes'])) {
-            continue;
-        }
-        foreach ($outputGroup['universes'] as $universe) {
-            $address = $universe['address'] ?? '';
-            $active = ($universe['active'] ?? 0) == 1;
-            if (empty($address) || !filter_var($address, FILTER_VALIDATE_IP) || !$active) {
+    // =========================================================================
+    // Check 1: Output configuration issues
+    // =========================================================================
+    $outputsData = apiCall('GET', 'http://127.0.0.1/api/channel/output/universeOutputs', [], true, 5);
+
+    if ($outputsData && isset($outputsData['channelOutputs'])) {
+        // Build map of active outputs per remote IP
+        $activeOutputsByIP = [];
+        foreach ($outputsData['channelOutputs'] as $outputGroup) {
+            if (!isset($outputGroup['universes']) || !is_array($outputGroup['universes'])) {
                 continue;
             }
-            if (!isset($activeOutputsByIP[$address])) {
-                $activeOutputsByIP[$address] = [];
+            foreach ($outputGroup['universes'] as $universe) {
+                $address = $universe['address'] ?? '';
+                $active = ($universe['active'] ?? 0) == 1;
+                if (empty($address) || !filter_var($address, FILTER_VALIDATE_IP) || !$active) {
+                    continue;
+                }
+                if (!isset($activeOutputsByIP[$address])) {
+                    $activeOutputsByIP[$address] = [];
+                }
+                $activeOutputsByIP[$address][] = $universe;
             }
-            $activeOutputsByIP[$address][] = $universe;
+        }
+
+        // Check for active outputs to systems in remote mode
+        foreach ($activeOutputsByIP as $ip => $outputs) {
+            if (!isset($remotesByIP[$ip])) {
+                continue;
+            }
+            $remote = $remotesByIP[$ip];
+            $remoteMode = $remote['fppModeString'] ?? '';
+            $hostname = $remote['hostname'] ?? $ip;
+
+            if ($remoteMode === 'remote') {
+                foreach ($outputs as $output) {
+                    $discrepancies[] = [
+                        'type' => 'output_to_remote',
+                        'severity' => 'warning',
+                        'address' => $ip,
+                        'hostname' => $hostname,
+                        'description' => $output['description'] ?? '',
+                        'startChannel' => $output['startChannel'] ?? 0,
+                        'channelCount' => $output['channelCount'] ?? 0,
+                        'message' => "Output enabled to {$hostname} but it's in remote mode (receives via multisync)"
+                    ];
+                }
+            }
         }
     }
 
-    $discrepancies = [];
+    // =========================================================================
+    // Check 2: Missing sequences on remote systems
+    // =========================================================================
+    $localSequences = apiCall('GET', 'http://127.0.0.1/api/sequence', [], true, 5);
 
-    // Check for active outputs to systems in remote mode
-    foreach ($activeOutputsByIP as $ip => $outputs) {
-        if (!isset($remotesByIP[$ip])) {
-            continue;
+    if ($localSequences && is_array($localSequences) && count($localSequences) > 0 && count($remoteSystems) > 0) {
+        // Build set of local sequence filenames
+        $localSeqSet = [];
+        foreach ($localSequences as $seq) {
+            $name = is_array($seq) ? ($seq['Name'] ?? '') : $seq;
+            if (!empty($name)) {
+                $localSeqSet[$name] = true;
+            }
         }
-        $remote = $remotesByIP[$ip];
-        $remoteMode = $remote['fppModeString'] ?? '';
-        $hostname = $remote['hostname'] ?? $ip;
 
-        if ($remoteMode === 'remote') {
-            foreach ($outputs as $output) {
+        // Fetch sequences from remotes in parallel using curl_multi
+        $mh = curl_multi_init();
+        $handles = [];
+        $timeout = 3;
+
+        foreach ($remoteSystems as $system) {
+            $ch = curl_init("http://{$system['address']}/api/sequence");
+            curl_setopt_array($ch, [
+                CURLOPT_RETURNTRANSFER => true,
+                CURLOPT_TIMEOUT => $timeout,
+                CURLOPT_CONNECTTIMEOUT => $timeout,
+                CURLOPT_HTTPHEADER => ['Accept: application/json']
+            ]);
+            curl_multi_add_handle($mh, $ch);
+            $handles[$system['address']] = ['handle' => $ch, 'hostname' => $system['hostname']];
+        }
+
+        // Execute all requests in parallel
+        do {
+            $status = curl_multi_exec($mh, $active);
+            if ($active) curl_multi_select($mh);
+        } while ($active && $status === CURLM_OK);
+
+        // Collect results and check for missing sequences
+        foreach ($handles as $address => $info) {
+            $ch = $info['handle'];
+            $response = curl_multi_getcontent($ch);
+            $httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+            curl_multi_remove_handle($mh, $ch);
+            curl_close($ch);
+
+            if ($httpCode !== 200 || !$response) {
+                continue; // Skip offline/unreachable remotes
+            }
+
+            $remoteSequences = json_decode($response, true);
+            if (!is_array($remoteSequences)) {
+                continue;
+            }
+
+            // Build set of remote sequence filenames
+            $remoteSeqSet = [];
+            foreach ($remoteSequences as $seq) {
+                $name = is_array($seq) ? ($seq['Name'] ?? '') : $seq;
+                if (!empty($name)) {
+                    $remoteSeqSet[$name] = true;
+                }
+            }
+
+            // Find sequences on player that are missing from this remote
+            $missingSequences = [];
+            foreach ($localSeqSet as $seqName => $_) {
+                if (!isset($remoteSeqSet[$seqName])) {
+                    $missingSequences[] = $seqName;
+                }
+            }
+
+            if (count($missingSequences) > 0) {
+                $hostname = $info['hostname'] ?: $address;
+                $count = count($missingSequences);
                 $discrepancies[] = [
-                    'type' => 'output_to_remote',
+                    'type' => 'missing_sequences',
                     'severity' => 'warning',
-                    'address' => $ip,
+                    'address' => $address,
                     'hostname' => $hostname,
-                    'description' => $output['description'] ?? '',
-                    'startChannel' => $output['startChannel'] ?? 0,
-                    'channelCount' => $output['channelCount'] ?? 0,
-                    'message' => "Output enabled to {$hostname} but it's in remote mode (receives via multisync)"
+                    'sequences' => $missingSequences,
+                    'message' => "{$count} sequence" . ($count > 1 ? 's' : '') . " missing from {$hostname}"
                 ];
             }
         }
+        curl_multi_close($mh);
     }
 
     $result = [

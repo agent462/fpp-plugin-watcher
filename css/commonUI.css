@@ -1715,13 +1715,13 @@
 }
 
 /* ==========================================================================
-   Output Discrepancy Banner
+   Issues Banner
 
-   Shows warnings when player outputs don't match remote systems.
-   Displayed at top of Remote Control UI when discrepancies are detected.
+   Shows configuration warnings/issues at the top of Remote Control UI.
+   Includes output discrepancies, missing sequences, etc.
    ========================================================================== */
 
-.output-discrepancy-banner {
+.issues-banner {
     display: none;
     background: linear-gradient(135deg, #fff3cd 0%, #ffeeba 100%);
     border: 1px solid #ffc107;
@@ -1730,11 +1730,11 @@
     overflow: hidden;
 }
 
-.output-discrepancy-banner.visible {
+.issues-banner.visible {
     display: block;
 }
 
-.output-discrepancy-banner__header {
+.issues-banner__header {
     display: flex;
     align-items: center;
     justify-content: space-between;
@@ -1743,7 +1743,7 @@
     border-bottom: 1px solid rgba(255, 193, 7, 0.3);
 }
 
-.output-discrepancy-banner__title {
+.issues-banner__title {
     display: flex;
     align-items: center;
     gap: 0.5rem;
@@ -1752,11 +1752,11 @@
     font-size: 0.95rem;
 }
 
-.output-discrepancy-banner__title i {
+.issues-banner__title i {
     font-size: 1.1rem;
 }
 
-.output-discrepancy-banner__count {
+.issues-banner__count {
     background: #856404;
     color: #fff;
     padding: 0.15rem 0.5rem;
@@ -1765,7 +1765,7 @@
     font-weight: 600;
 }
 
-.output-discrepancy-banner__toggle {
+.issues-banner__toggle {
     background: transparent;
     border: 1px solid #856404;
     color: #856404;
@@ -1776,22 +1776,22 @@
     transition: all 0.2s;
 }
 
-.output-discrepancy-banner__toggle:hover {
+.issues-banner__toggle:hover {
     background: #856404;
     color: #fff;
 }
 
-.output-discrepancy-banner__body {
+.issues-banner__body {
     padding: 0.75rem 1rem;
 }
 
-.output-discrepancy-banner__list {
+.issues-banner__list {
     display: flex;
     flex-direction: column;
     gap: 0.5rem;
 }
 
-.output-discrepancy-item {
+.issues-item {
     display: flex;
     align-items: center;
     gap: 0.75rem;
@@ -1801,51 +1801,51 @@
     border-left: 3px solid #ffc107;
 }
 
-.output-discrepancy-item.severity-warning {
+.issues-item.severity-warning {
     border-left-color: #fd7e14;
 }
 
-.output-discrepancy-item.severity-info {
+.issues-item.severity-info {
     border-left-color: #17a2b8;
     background: rgba(23, 162, 184, 0.1);
 }
 
-.output-discrepancy-item__icon {
+.issues-item__icon {
     font-size: 1rem;
     color: #856404;
     flex-shrink: 0;
 }
 
-.output-discrepancy-item.severity-warning .output-discrepancy-item__icon {
+.issues-item.severity-warning .issues-item__icon {
     color: #fd7e14;
 }
 
-.output-discrepancy-item.severity-info .output-discrepancy-item__icon {
+.issues-item.severity-info .issues-item__icon {
     color: #17a2b8;
 }
 
-.output-discrepancy-item__content {
+.issues-item__content {
     flex: 1;
     min-width: 0;
 }
 
-.output-discrepancy-item__message {
+.issues-item__message {
     font-size: 0.85rem;
     color: #495057;
     font-weight: 500;
 }
 
-.output-discrepancy-item__details {
+.issues-item__details {
     font-size: 0.75rem;
     color: #6c757d;
     margin-top: 0.15rem;
 }
 
-.output-discrepancy-item__details span {
+.issues-item__details span {
     margin-right: 1rem;
 }
 
-.output-discrepancy-item__address {
+.issues-item__address {
     font-family: 'Consolas', 'Monaco', monospace;
     background: rgba(0, 0, 0, 0.08);
     padding: 0.1rem 0.4rem;
