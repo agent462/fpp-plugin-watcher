@@ -7,10 +7,10 @@
  * - Player vs remote comparison
  * - Real-time sync status and issues
  */
-include_once __DIR__ . '/lib/core/config.php';
-include_once __DIR__ . '/lib/core/watcherCommon.php';
-include_once __DIR__ . '/lib/ui/common.php';
-include_once __DIR__ . '/lib/multisync/syncStatus.php';
+include_once __DIR__ . '/../lib/core/config.php';
+include_once __DIR__ . '/../lib/core/watcherCommon.php';
+include_once __DIR__ . '/../lib/ui/common.php';
+include_once __DIR__ . '/../lib/multisync/syncStatus.php';
 
 $config = readPluginConfig();
 $localSystem = apiCall('GET', 'http://127.0.0.1/api/fppd/status', [], true, 5) ?: [];

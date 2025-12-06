@@ -26,7 +26,7 @@ $menuEntries = Array(
 	Array(
 		'text' => '<i class="fas fa-cog"></i> Watcher - Config',
 		'type' => 'content',
-		'page' => 'configUI.php',
+		'page' => 'ui/configUI.php',
 		'wrap' => 1
 	)
 );
@@ -38,7 +38,7 @@ if ($showLocalMetricsMenu) {
 		Array(
 			'text' => '<i class="fa-solid fa-chart-area"></i>  Watcher - Local Metrics',
 			'type' => 'status',
-			'page' => 'localMetricsUI.php',
+			'page' => 'ui/localMetricsUI.php',
 			'wrap' => 1
 		)
 	]);
@@ -51,7 +51,7 @@ if ($showConnectivityMenu) {
 		Array(
 			'text' => '<i class="fa-solid fa-ethernet"></i> Watcher - Connectivity',
 			'type' => 'status',
-			'page' => 'connectivityUI.php',
+			'page' => 'ui/connectivityUI.php',
 			'wrap' => 1
 		)
 	]);
@@ -64,7 +64,7 @@ if ($showFalconMonitorMenu) {
 		Array(
 			'text' => '<i class="fa-solid fa-feather-pointed"></i> Watcher - Falcon Monitor',
 			'type' => 'status',
-			'page' => 'falconMonitorUI.php',
+			'page' => 'ui/falconMonitorUI.php',
 			'wrap' => 1
 		)
 	]);
@@ -78,7 +78,7 @@ if ($showMultiSyncMenu) {
 		Array(
 			'text' => '<i class="fa-solid fa-chart-area"></i>  Watcher - Remote Metrics',
 			'type' => 'status',
-			'page' => 'remoteMetricsUI.php',
+			'page' => 'ui/remoteMetricsUI.php',
 			'wrap' => 1
 		)
 	]);
@@ -92,7 +92,7 @@ if ($showMultiSyncPingMenu) {
 		Array(
 			'text' => '<i class="fa-solid fa-satellite-dish"></i> Watcher - Remote Ping',
 			'type' => 'status',
-			'page' => 'remotePingUI.php',
+			'page' => 'ui/remotePingUI.php',
 			'wrap' => 1
 		)
 	]);
@@ -106,7 +106,7 @@ if ($showMultiSyncMenu || $showMultiSyncPingMenu) {
 		Array(
 			'text' => '<i class="fa-solid fa-network-wired"></i> Watcher - Sync Metrics',
 			'type' => 'status',
-			'page' => 'multiSyncMetricsUI.php',
+			'page' => 'ui/multiSyncMetricsUI.php',
 			'wrap' => 1
 		)
 	]);
@@ -121,7 +121,7 @@ if ($showControlUIMenu) {
 		Array(
 			'text' => '<i class="fa-solid fa-gamepad"></i>  Watcher - Remote Control',
 			'type' => 'status',
-			'page' => 'remoteControlUI.php',
+			'page' => 'ui/remoteControlUI.php',
 			'wrap' => 1
 		)
 	]);
@@ -134,7 +134,7 @@ if ($showEventsMenu && isPlayerMode()) {
 		Array(
 			'text' => '<i class="fa-solid fa-radio"></i> Watcher - Events',
 			'type' => 'status',
-			'page' => 'eventsUI.php',
+			'page' => 'ui/eventsUI.php',
 			'wrap' => 1
 		)
 	]);
