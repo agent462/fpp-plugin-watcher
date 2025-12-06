@@ -277,7 +277,7 @@ function isRemoteModeWithMultiSync() {
     }
 
     // Must be in remote mode and have multi-sync enabled
-    return $result['mode_name'] === 'remote' && !empty($result['multisync']);
+    return $result['mode_name'] === 'remote';
 }
 
 /**
