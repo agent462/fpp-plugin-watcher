@@ -24,8 +24,25 @@ fi
 echo "Disabling default collectd service. If collectd is enabled, it will start when FPP is started..."
 sudo systemctl disable --now collectd.service
 
-# Copy our custom collectd service file.  We are setting a Nice on the service.
+# Define plugin directory
 PLUGIN_DIR="/home/fpp/media/plugins/fpp-plugin-watcher"
+
+# Compile C++ plugin if Makefile exists
+if [ -f "${PLUGIN_DIR}/Makefile" ]; then
+    echo "Compiling C++ plugin..."
+    cd "${PLUGIN_DIR}"
+    make clean 2>/dev/null || true
+    make "SRCDIR=${SRCDIR:-/opt/fpp/src}"
+    if [ $? -eq 0 ]; then
+        echo "C++ plugin compiled successfully"
+        chown fpp:fpp "${PLUGIN_DIR}/libfpp-plugin-watcher.so" 2>/dev/null || true
+        chown -R fpp:fpp "${PLUGIN_DIR}/src/" 2>/dev/null || true
+    else
+        echo "WARNING: C++ plugin compilation failed"
+    fi
+fi
+
+# Copy our custom collectd service file.  We are setting a Nice on the service.
 if [ -f "${PLUGIN_DIR}/config/collectd.service" ]; then
     if [ -f "/lib/systemd/system/collectd.service" ] && cmp -s "${PLUGIN_DIR}/config/collectd.service" /lib/systemd/system/collectd.service; then
         echo "Custom collectd service file already up to date; skipping copy."
