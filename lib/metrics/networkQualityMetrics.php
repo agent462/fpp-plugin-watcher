@@ -9,48 +9,28 @@
  */
 
 include_once __DIR__ . "/rollupBase.php";
-include_once __DIR__ . "/multiSyncComparison.php";
+include_once __DIR__ . "/../multisync/comparison.php";
 
 // Network quality log file
 define("WATCHERNETWORKQUALITYFILE", WATCHERLOGDIR . "/" . WATCHERPLUGINNAME . "-network-quality.log");
 define("WATCHERNETWORKQUALITYROLLUPSTATEFILE", WATCHERLOGDIR . "/" . WATCHERPLUGINNAME . "-network-quality-rollup-state.json");
 
-// Rollup tiers for network quality metrics
-define("WATCHERNETWORKQUALITYTIERS", [
-    '1min' => [
-        'interval' => 60,
-        'retention' => 21600,       // 6 hours
-        'label' => '1-minute averages'
-    ],
-    '5min' => [
-        'interval' => 300,
-        'retention' => 172800,      // 48 hours
-        'label' => '5-minute averages'
-    ],
-    '30min' => [
-        'interval' => 1800,
-        'retention' => 1209600,     // 14 days
-        'label' => '30-minute averages'
-    ],
-    '2hour' => [
-        'interval' => 7200,
-        'retention' => 7776000,     // 90 days
-        'label' => '2-hour averages'
-    ]
-]);
+// Use shared tier configuration from rollupBase.php (WATCHER_ROLLUP_TIERS)
+// Alias for backward compatibility with existing code
+define("WATCHERNETWORKQUALITYTIERS", WATCHER_ROLLUP_TIERS);
 
-// Quality thresholds
-define('LATENCY_GOOD_MS', 50);
-define('LATENCY_FAIR_MS', 100);
-define('LATENCY_POOR_MS', 250);
+// Quality thresholds - use shared constants from rollupBase.php
+define('LATENCY_GOOD_MS', WATCHER_LATENCY_THRESHOLDS['good']);
+define('LATENCY_FAIR_MS', WATCHER_LATENCY_THRESHOLDS['fair']);
+define('LATENCY_POOR_MS', WATCHER_LATENCY_THRESHOLDS['poor']);
 
-define('JITTER_GOOD_MS', 10);
-define('JITTER_FAIR_MS', 20);
-define('JITTER_POOR_MS', 50);
+define('JITTER_GOOD_MS', WATCHER_JITTER_THRESHOLDS['good']);
+define('JITTER_FAIR_MS', WATCHER_JITTER_THRESHOLDS['fair']);
+define('JITTER_POOR_MS', WATCHER_JITTER_THRESHOLDS['poor']);
 
-define('PACKET_LOSS_GOOD_PCT', 1);
-define('PACKET_LOSS_FAIR_PCT', 2);
-define('PACKET_LOSS_POOR_PCT', 5);
+define('PACKET_LOSS_GOOD_PCT', WATCHER_PACKET_LOSS_THRESHOLDS['good']);
+define('PACKET_LOSS_FAIR_PCT', WATCHER_PACKET_LOSS_THRESHOLDS['fair']);
+define('PACKET_LOSS_POOR_PCT', WATCHER_PACKET_LOSS_THRESHOLDS['poor']);
 
 // Retention period for raw metrics (25 hours)
 define("WATCHERNETWORKQUALITYRETENTIONSECONDS", 25 * 60 * 60);
@@ -67,8 +47,7 @@ function getNetworkQualityRollupFilePath($tier) {
 
 /**
  * Calculate jitter using RFC 3550 algorithm
- * J(i) = J(i-1) + (|D(i-1,i)| - J(i-1)) / 16
- * where D = difference in consecutive packet transit times
+ * Delegates to shared function in rollupBase.php
  *
  * @param string $hostname Host identifier
  * @param float $latency Current latency measurement in ms
@@ -76,62 +55,28 @@ function getNetworkQualityRollupFilePath($tier) {
  * @return float|null Calculated jitter or null if first sample
  */
 function calculateJitterRFC3550($hostname, $latency, &$state) {
-    if (!isset($state[$hostname])) {
-        $state[$hostname] = [
-            'prevLatency' => $latency,
-            'jitter' => 0.0
-        ];
-        return null;
-    }
-
-    $prevLatency = $state[$hostname]['prevLatency'];
-    $prevJitter = $state[$hostname]['jitter'];
-
-    // D = difference between consecutive latencies
-    $d = abs($latency - $prevLatency);
-
-    // RFC 3550 jitter calculation
-    $jitter = $prevJitter + ($d - $prevJitter) / 16.0;
-
-    // Update state
-    $state[$hostname]['prevLatency'] = $latency;
-    $state[$hostname]['jitter'] = $jitter;
-
-    return round($jitter, 2);
+    return calculateJitterRFC3550Generic($hostname, $latency, $state);
 }
 
 /**
  * Get quality rating based on metric value and thresholds
- *
- * @param float $value Metric value
- * @param float $good Good threshold
- * @param float $fair Fair threshold
- * @param float $poor Poor threshold
- * @return string Quality rating: good, fair, poor, or critical
+ * Delegates to shared function in rollupBase.php
  */
 function getQualityRating($value, $good, $fair, $poor) {
-    if ($value <= $good) return 'good';
-    if ($value <= $fair) return 'fair';
-    if ($value <= $poor) return 'poor';
-    return 'critical';
+    return getQualityRatingGeneric($value, $good, $fair, $poor);
 }
 
 /**
  * Get overall quality rating from individual ratings
- *
- * @param string $latencyRating
- * @param string $jitterRating
- * @param string $packetLossRating
- * @return string Overall quality rating
+ * Delegates to shared function in rollupBase.php
  */
 function getOverallQualityRating($latencyRating, $jitterRating, $packetLossRating) {
-    $ratings = [$latencyRating, $jitterRating, $packetLossRating];
-
-    if (in_array('critical', $ratings)) return 'critical';
-    if (in_array('poor', $ratings)) return 'poor';
-    if (in_array('fair', $ratings)) return 'fair';
-    return 'good';
+    return getOverallQualityRatingGeneric($latencyRating, $jitterRating, $packetLossRating);
 }
+
+// Expected sync packet rate during playback (packets per second)
+// FPP sends sync packets at ~40Hz (25ms interval) during sequence playback
+define('EXPECTED_SYNC_RATE_PER_SECOND', 40);
 
 /**
  * Collect network quality metrics from all remote systems
@@ -154,6 +99,8 @@ function collectNetworkQualityMetrics() {
 
     $playerMetrics = $comparison['player']['metrics'] ?? [];
     $playerPacketsSent = $playerMetrics['totalPacketsSent'] ?? 0;
+    $playerFppStatus = $comparison['player']['fppStatus'] ?? [];
+    $isPlaying = ($playerFppStatus['status'] ?? '') === 'playing';
 
     foreach ($comparison['remotes'] as $remote) {
         $hostname = $remote['hostname'];
@@ -175,17 +122,8 @@ function collectNetworkQualityMetrics() {
             $jitter = calculateJitterRFC3550($hostname, $latency, $_networkQualityJitterState);
         }
 
-        // Packet loss calculation
-        $packetLoss = null;
+        // Packet counts for loss calculation
         $remotePacketsReceived = $remoteMetrics['totalPacketsReceived'] ?? null;
-
-        // Only calculate packet loss if we have valid data from remote's watcher plugin
-        if ($playerPacketsSent > 0 && $remotePacketsReceived !== null && $remote['pluginInstalled']) {
-            // This is a rough estimate - actual packet loss requires sequence tracking
-            // For now, we track the ratio and any significant deviation indicates loss
-            // Store raw counts for aggregation
-            $packetLoss = 0; // Will be calculated during aggregation with window-based counting
-        }
 
         $metricEntry = [
             'timestamp' => $timestamp,
@@ -195,6 +133,7 @@ function collectNetworkQualityMetrics() {
             'jitter' => $jitter,
             'playerPacketsSent' => $playerPacketsSent,
             'remotePacketsReceived' => $remotePacketsReceived,
+            'isPlaying' => $isPlaying,
             'pluginInstalled' => $remote['pluginInstalled']
         ];
 
@@ -224,35 +163,10 @@ function collectNetworkQualityMetrics() {
 
 /**
  * Write network quality metrics to log file
- *
- * @param array $entries Array of metric entries
+ * Delegates to shared function in rollupBase.php
  */
 function writeNetworkQualityMetrics($entries) {
-    if (empty($entries)) {
-        return;
-    }
-
-    $fp = @fopen(WATCHERNETWORKQUALITYFILE, 'a');
-    if (!$fp) {
-        return;
-    }
-
-    if (flock($fp, LOCK_EX)) {
-        foreach ($entries as $entry) {
-            $timestamp = date('Y-m-d H:i:s', $entry['timestamp']);
-            $jsonData = json_encode($entry);
-            fwrite($fp, "[{$timestamp}] {$jsonData}\n");
-        }
-        fflush($fp);
-        flock($fp, LOCK_UN);
-    }
-    fclose($fp);
-
-    global $_watcherOwnershipVerified;
-    if (!isset($_watcherOwnershipVerified[WATCHERNETWORKQUALITYFILE])) {
-        ensureFppOwnership(WATCHERNETWORKQUALITYFILE);
-        $_watcherOwnershipVerified[WATCHERNETWORKQUALITYFILE] = true;
-    }
+    return writeMetricsBatchGeneric(WATCHERNETWORKQUALITYFILE, $entries);
 }
 
 /**
@@ -266,6 +180,14 @@ function readRawNetworkQualityMetrics($sinceTimestamp = 0) {
 }
 
 /**
+ * Calculate jitter from consecutive latency samples using RFC 3550 algorithm
+ * Delegates to shared function in rollupBase.php
+ */
+function calculateJitterFromLatencies($latencies) {
+    return calculateJitterFromLatencyArray($latencies);
+}
+
+/**
  * Aggregate network quality metrics for a time period, grouped by hostname
  *
  * @param array $metrics Raw metrics for the period
@@ -276,49 +198,55 @@ function aggregateNetworkQualityMetrics($metrics) {
         return null;
     }
 
-    // Group by hostname
+    // Sort by timestamp to ensure correct order for jitter calculation
+    usort($metrics, function($a, $b) {
+        return ($a['timestamp'] ?? 0) - ($b['timestamp'] ?? 0);
+    });
+
+    // Group by hostname (maintaining order for jitter calculation)
     $byHost = [];
     foreach ($metrics as $entry) {
         $hostname = $entry['hostname'] ?? 'unknown';
+        $ts = $entry['timestamp'] ?? 0;
+        $isPlaying = !empty($entry['isPlaying']);
+
         if (!isset($byHost[$hostname])) {
             $byHost[$hostname] = [
                 'latencies' => [],
-                'jitters' => [],
                 'address' => $entry['address'] ?? '',
-                'firstPlayerPackets' => null,
-                'lastPlayerPackets' => null,
-                'firstRemotePackets' => null,
-                'lastRemotePackets' => null,
+                'firstTimestamp' => $ts,
+                'lastTimestamp' => $ts,
+                // Track packet counts ONLY during playback to avoid idle->playing transition spikes
+                'firstPlayingTimestamp' => null,
+                'lastPlayingTimestamp' => null,
+                'firstPlayingPackets' => null,
+                'lastPlayingPackets' => null,
+                'playingSampleCount' => 0,
                 'sample_count' => 0
             ];
         }
 
         $byHost[$hostname]['sample_count']++;
+        $byHost[$hostname]['lastTimestamp'] = $ts;
 
         if (isset($entry['latency']) && $entry['latency'] !== null) {
             $byHost[$hostname]['latencies'][] = floatval($entry['latency']);
         }
 
-        if (isset($entry['jitter']) && $entry['jitter'] !== null) {
-            $byHost[$hostname]['jitters'][] = floatval($entry['jitter']);
-        }
+        // Track packet counts ONLY from samples where player was actively playing
+        // This prevents false packet loss spikes during idle->playing transitions
+        if ($isPlaying) {
+            $byHost[$hostname]['playingSampleCount']++;
+            $remotePkts = $entry['remotePacketsReceived'] ?? null;
 
-        // Track packet counts for window-based loss calculation
-        $playerPkts = $entry['playerPacketsSent'] ?? null;
-        $remotePkts = $entry['remotePacketsReceived'] ?? null;
-
-        if ($playerPkts !== null) {
-            if ($byHost[$hostname]['firstPlayerPackets'] === null) {
-                $byHost[$hostname]['firstPlayerPackets'] = $playerPkts;
+            if ($remotePkts !== null) {
+                if ($byHost[$hostname]['firstPlayingPackets'] === null) {
+                    $byHost[$hostname]['firstPlayingTimestamp'] = $ts;
+                    $byHost[$hostname]['firstPlayingPackets'] = $remotePkts;
+                }
+                $byHost[$hostname]['lastPlayingTimestamp'] = $ts;
+                $byHost[$hostname]['lastPlayingPackets'] = $remotePkts;
             }
-            $byHost[$hostname]['lastPlayerPackets'] = $playerPkts;
-        }
-
-        if ($remotePkts !== null) {
-            if ($byHost[$hostname]['firstRemotePackets'] === null) {
-                $byHost[$hostname]['firstRemotePackets'] = $remotePkts;
-            }
-            $byHost[$hostname]['lastRemotePackets'] = $remotePkts;
         }
     }
 
@@ -332,15 +260,16 @@ function aggregateNetworkQualityMetrics($metrics) {
 
         // Latency aggregation
         if (!empty($data['latencies'])) {
-            sort($data['latencies']);
-            $count = count($data['latencies']);
-            $hostResult['latency_min'] = round(min($data['latencies']), 1);
-            $hostResult['latency_max'] = round(max($data['latencies']), 1);
-            $hostResult['latency_avg'] = round(array_sum($data['latencies']) / $count, 1);
+            $sortedLatencies = $data['latencies'];
+            sort($sortedLatencies);
+            $count = count($sortedLatencies);
+            $hostResult['latency_min'] = round(min($sortedLatencies), 1);
+            $hostResult['latency_max'] = round(max($sortedLatencies), 1);
+            $hostResult['latency_avg'] = round(array_sum($sortedLatencies) / $count, 1);
 
             // P95 latency
             $p95Index = (int)ceil($count * 0.95) - 1;
-            $hostResult['latency_p95'] = round($data['latencies'][max(0, $p95Index)], 1);
+            $hostResult['latency_p95'] = round($sortedLatencies[max(0, $p95Index)], 1);
 
             $hostResult['latency_quality'] = getQualityRating(
                 $hostResult['latency_avg'],
@@ -348,52 +277,77 @@ function aggregateNetworkQualityMetrics($metrics) {
                 LATENCY_FAIR_MS,
                 LATENCY_POOR_MS
             );
+
+            // Calculate jitter from time-ordered latencies (not sorted)
+            $jitterResult = calculateJitterFromLatencies($data['latencies']);
+            if ($jitterResult !== null) {
+                $hostResult['jitter_avg'] = $jitterResult['avg'];
+                $hostResult['jitter_max'] = $jitterResult['max'];
+                $hostResult['jitter_quality'] = getQualityRating(
+                    $jitterResult['avg'],
+                    JITTER_GOOD_MS,
+                    JITTER_FAIR_MS,
+                    JITTER_POOR_MS
+                );
+            } else {
+                $hostResult['jitter_avg'] = null;
+                $hostResult['jitter_max'] = null;
+                $hostResult['jitter_quality'] = null;
+            }
         } else {
             $hostResult['latency_min'] = null;
             $hostResult['latency_max'] = null;
             $hostResult['latency_avg'] = null;
             $hostResult['latency_p95'] = null;
             $hostResult['latency_quality'] = null;
-        }
-
-        // Jitter aggregation
-        if (!empty($data['jitters'])) {
-            $hostResult['jitter_avg'] = round(array_sum($data['jitters']) / count($data['jitters']), 2);
-            $hostResult['jitter_max'] = round(max($data['jitters']), 2);
-            $hostResult['jitter_quality'] = getQualityRating(
-                $hostResult['jitter_avg'],
-                JITTER_GOOD_MS,
-                JITTER_FAIR_MS,
-                JITTER_POOR_MS
-            );
-        } else {
             $hostResult['jitter_avg'] = null;
             $hostResult['jitter_max'] = null;
             $hostResult['jitter_quality'] = null;
         }
 
-        // Packet loss calculation (window-based)
+        // Packet loss calculation - rate stability analysis
+        // Only calculate from samples where player was actively playing
+        // This prevents false spikes during idle->playing transitions
         $hostResult['packet_loss_pct'] = null;
         $hostResult['packet_loss_quality'] = null;
+        $hostResult['receive_rate'] = null;
 
-        if ($data['firstPlayerPackets'] !== null && $data['lastPlayerPackets'] !== null &&
-            $data['firstRemotePackets'] !== null && $data['lastRemotePackets'] !== null) {
-
-            $playerSentWindow = $data['lastPlayerPackets'] - $data['firstPlayerPackets'];
-            $remoteReceivedWindow = $data['lastRemotePackets'] - $data['firstRemotePackets'];
-
-            if ($playerSentWindow > 0) {
-                // Calculate loss as percentage of packets not received
-                $lossRatio = max(0, ($playerSentWindow - $remoteReceivedWindow) / $playerSentWindow);
-                $hostResult['packet_loss_pct'] = round($lossRatio * 100, 2);
-                $hostResult['packet_loss_quality'] = getQualityRating(
-                    $hostResult['packet_loss_pct'],
-                    PACKET_LOSS_GOOD_PCT,
-                    PACKET_LOSS_FAIR_PCT,
-                    PACKET_LOSS_POOR_PCT
-                );
-            }
+        // Use playing-only timestamps and packet counts
+        $playingTimeWindow = 0;
+        if ($data['firstPlayingTimestamp'] !== null && $data['lastPlayingTimestamp'] !== null) {
+            $playingTimeWindow = $data['lastPlayingTimestamp'] - $data['firstPlayingTimestamp'];
         }
+
+        // Need at least 2 playing samples (for first and last) to calculate rate
+        if ($data['firstPlayingPackets'] !== null && $data['lastPlayingPackets'] !== null &&
+            $data['playingSampleCount'] >= 2 && $playingTimeWindow > 0) {
+
+            $receivedInWindow = $data['lastPlayingPackets'] - $data['firstPlayingPackets'];
+            $receiveRate = $receivedInWindow / $playingTimeWindow; // packets per second
+            $hostResult['receive_rate'] = round($receiveRate, 1);
+
+            // FPP typically sends 8-12 sync packets/second during active playback
+            $minExpectedRate = 5; // Minimum acceptable packets/second
+
+            if ($receiveRate < 0.1) {
+                // Essentially no packets received during playback
+                $hostResult['packet_loss_pct'] = 100.0;
+            } else if ($receiveRate < $minExpectedRate) {
+                // Below expected rate - calculate approximate loss
+                $hostResult['packet_loss_pct'] = round((1 - $receiveRate / $minExpectedRate) * 100, 1);
+            } else {
+                // Good receive rate
+                $hostResult['packet_loss_pct'] = 0.0;
+            }
+
+            $hostResult['packet_loss_quality'] = getQualityRating(
+                $hostResult['packet_loss_pct'],
+                PACKET_LOSS_GOOD_PCT,
+                PACKET_LOSS_FAIR_PCT,
+                PACKET_LOSS_POOR_PCT
+            );
+        }
+        // If not enough playing samples, leave packet_loss as null (not enough data)
 
         // Overall quality
         $hostResult['overall_quality'] = getOverallQualityRating(
@@ -535,37 +489,25 @@ function getNetworkQualityMetrics($hoursBack = 24, $hostname = null) {
  * Returns the most recent metrics along with quality ratings
  */
 function getNetworkQualityStatus() {
-    // Get last hour of data for current status
-    $result = getNetworkQualityMetrics(1);
+    // Use raw data for current status (last hour) since it has more samples
+    // and allows proper jitter calculation from consecutive measurements
+    $rawMetrics = readRawNetworkQualityMetrics(time() - 3600);
 
-    if (!$result['success'] || empty($result['data'])) {
-        // Try to get from raw data if no rollup exists
-        $rawMetrics = readRawNetworkQualityMetrics(time() - 3600);
-        if (empty($rawMetrics)) {
-            return [
-                'success' => true,
-                'timestamp' => time(),
-                'hosts' => [],
-                'summary' => [
-                    'avgLatency' => null,
-                    'avgJitter' => null,
-                    'avgPacketLoss' => null,
-                    'overallQuality' => 'unknown'
-                ]
-            ];
-        }
-        $aggregated = aggregateNetworkQualityMetrics($rawMetrics);
-    } else {
-        // Get the most recent entry per host
-        $latestByHost = [];
-        foreach ($result['data'] as $entry) {
-            $hostname = $entry['hostname'];
-            if (!isset($latestByHost[$hostname]) || $entry['timestamp'] > $latestByHost[$hostname]['timestamp']) {
-                $latestByHost[$hostname] = $entry;
-            }
-        }
-        $aggregated = array_values($latestByHost);
+    if (empty($rawMetrics)) {
+        return [
+            'success' => true,
+            'timestamp' => time(),
+            'hosts' => [],
+            'summary' => [
+                'avgLatency' => null,
+                'avgJitter' => null,
+                'avgPacketLoss' => null,
+                'overallQuality' => 'unknown'
+            ]
+        ];
     }
+
+    $aggregated = aggregateNetworkQualityMetrics($rawMetrics);
 
     // Calculate summary statistics
     $totalLatency = 0;
@@ -692,68 +634,10 @@ function getNetworkQualityRollupTiersInfo() {
 
 /**
  * Rotate raw metrics file
+ * Delegates to shared function in rollupBase.php
  */
 function rotateNetworkQualityMetricsFile() {
-    $metricsFile = WATCHERNETWORKQUALITYFILE;
-
-    if (!file_exists($metricsFile)) {
-        return;
-    }
-
-    $fp = fopen($metricsFile, 'c+');
-    if (!$fp) {
-        return;
-    }
-
-    if (!flock($fp, LOCK_EX)) {
-        fclose($fp);
-        return;
-    }
-
-    $cutoffTime = time() - WATCHERNETWORKQUALITYRETENTIONSECONDS;
-    $recentMetrics = [];
-    $purgedCount = 0;
-
-    rewind($fp);
-    while (($line = fgets($fp)) !== false) {
-        if (preg_match('/"timestamp"\s*:\s*(\d+)/', $line, $matches)) {
-            $entryTimestamp = (int)$matches[1];
-            if ($entryTimestamp >= $cutoffTime) {
-                $recentMetrics[] = $line;
-            } else {
-                $purgedCount++;
-            }
-        }
-    }
-
-    if ($purgedCount === 0) {
-        flock($fp, LOCK_UN);
-        fclose($fp);
-        return;
-    }
-
-    $backupFile = $metricsFile . '.old';
-    $tempFile = $metricsFile . '.tmp';
-
-    $tempFp = fopen($tempFile, 'w');
-    if ($tempFp) {
-        if (!empty($recentMetrics)) {
-            fwrite($tempFp, implode('', $recentMetrics));
-        }
-        fclose($tempFp);
-
-        @unlink($backupFile);
-        rename($metricsFile, $backupFile);
-        rename($tempFile, $metricsFile);
-
-        logMessage("Network quality metrics purge: removed {$purgedCount} old entries, kept " . count($recentMetrics) . " recent entries.");
-
-        ensureFppOwnership($metricsFile);
-        ensureFppOwnership($backupFile);
-    }
-
-    flock($fp, LOCK_UN);
-    fclose($fp);
+    rotateRawMetricsFileGeneric(WATCHERNETWORKQUALITYFILE, WATCHERNETWORKQUALITYRETENTIONSECONDS);
 }
 
 ?>

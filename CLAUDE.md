@@ -10,7 +10,7 @@ Watcher is an FPP (Falcon Player) plugin that provides network connectivity moni
 
 ```bash
 # Check PHP syntax for all plugin files
-for file in /home/fpp/media/plugins/fpp-plugin-watcher/*.php /home/fpp/media/plugins/fpp-plugin-watcher/lib/*.php; do php -l "$file"; done
+find /home/fpp/media/plugins/fpp-plugin-watcher -name "*.php" -exec php -l {} \;
 
 # Chown files to fpp:fpp (required after editing)
 sudo chown -R fpp:fpp /home/fpp/media/plugins/fpp-plugin-watcher/*
@@ -45,18 +45,36 @@ sudo systemctl restart fppd
 - **remoteControlUI.php**: Remote FPP system control panel
 
 ### Library Files (/lib/)
-- **uiCommon.php**: Shared PHP functions for UI pages (CSS/JS includes, access checks)
+
+Organized into subdirectories by function:
+
+**lib/core/** - Foundation layer
 - **watcherCommon.php**: Constants, logging, network interface detection, FPP API wrappers
 - **config.php**: Configuration reading/writing, collectd service management
-- **metrics.php**: System metrics from collectd RRD files
-- **pingMetricsRollup.php**: Ping metrics aggregation into tiers (1min, 5min, 15min, 1hour)
-- **multiSyncPingMetrics.php**: Multi-sync host ping tracking and rollups
-- **falconController.php**: Falcon hardware controller communication class
-- **rollupBase.php**: Generic RRD-style rollup functions shared across metric types
 - **apiCall.php**: HTTP request helper with cURL
-- **resetNetworkAdapter.php**: Network adapter reset via FPP API
+
+**lib/metrics/** - Metrics collection and rollup
+- **rollupBase.php**: Generic RRD-style rollup functions shared across metric types
+- **pingMetrics.php**: Ping metrics aggregation into tiers (1min, 5min, 30min, 2hour)
+- **multiSyncPingMetrics.php**: Multi-sync host ping tracking and rollups
+- **networkQualityMetrics.php**: Network quality metrics (latency, jitter, packet loss)
+- **systemMetrics.php**: System metrics from collectd RRD files
+
+**lib/multisync/** - Multi-sync functionality
+- **syncStatus.php**: C++ plugin API wrapper for sync status and dashboard data
+- **comparison.php**: Player vs remote sync comparison logic
+
+**lib/controllers/** - Hardware and remote control
+- **falcon.php**: Falcon hardware controller communication class
 - **remoteControl.php**: Remote FPP instance control (restart, reboot, upgrade)
+- **networkAdapter.php**: Network adapter reset via FPP API
+
+**lib/ui/** - User interface helpers
+- **common.php**: Shared PHP functions for UI pages (CSS/JS includes, access checks)
+
+**lib/utils/** - Utilities
 - **updateCheck.php**: GitHub version checking for plugin updates
+- **mqttEvents.php**: MQTT event logging and retrieval
 
 ### Shared UI Assets
 - **js/commonUI.js**: Shared JavaScript utilities for all UI pages
@@ -81,14 +99,14 @@ sudo systemctl restart fppd
 
 ### UI Page Development
 
-All UI pages should use the shared utilities in `lib/uiCommon.php` and `js/commonUI.js`.
+All UI pages should use the shared utilities in `lib/ui/common.php` and `js/commonUI.js`.
 
 **PHP Setup (top of file):**
 ```php
 <?php
-include_once __DIR__ . '/lib/config.php';
-include_once __DIR__ . '/lib/watcherCommon.php';
-include_once __DIR__ . '/lib/uiCommon.php';
+include_once __DIR__ . '/lib/core/config.php';
+include_once __DIR__ . '/lib/core/watcherCommon.php';
+include_once __DIR__ . '/lib/ui/common.php';
 
 $config = readPluginConfig();
 $localSystem = apiCall('GET', 'http://127.0.0.1/api/fppd/status', [], true, 5) ?: [];
@@ -106,7 +124,7 @@ renderCommonJS();
 <?php endif; ?>
 ```
 
-**Available PHP Functions (lib/uiCommon.php):**
+**Available PHP Functions (lib/ui/common.php):**
 - `renderCSSIncludes($includeChartJs)` - Renders CSS and optional Chart.js includes
 - `renderCommonJS()` - Renders commonUI.js script tag
 - `checkDashboardAccess($config, $localSystem, $enabledKey)` - Checks if feature is enabled and in player mode

@@ -11,7 +11,7 @@
  * @version 1.0.0
  */
 
-include_once __DIR__ . '/watcherCommon.php';
+include_once __DIR__ . '/../core/watcherCommon.php';
 
 /**
  * Falcon Controller Product Codes

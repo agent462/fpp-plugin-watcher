@@ -17,9 +17,9 @@ $settings['pluginDirectory'] = $settings['pluginDirectory'] ?? '/home/fpp/media/
 $settings['configDirectory'] = $settings['configDirectory'] ?? '/home/fpp/media/config';
 $settings['logDirectory'] = $settings['logDirectory'] ?? '/home/fpp/media/logs';
 
-include_once __DIR__ . "/lib/watcherCommon.php";
-include_once __DIR__ . "/lib/config.php";
-include_once __DIR__ . "/lib/mqttEvents.php";
+include_once __DIR__ . "/lib/core/watcherCommon.php";
+include_once __DIR__ . "/lib/core/config.php";
+include_once __DIR__ . "/lib/utils/mqttEvents.php";
 
 $config = readPluginConfig();
 

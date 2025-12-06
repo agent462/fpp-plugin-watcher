@@ -1,11 +1,17 @@
 #!/usr/bin/php
 <?php
 include_once "/opt/fpp/www/common.php";
-include_once __DIR__ ."/lib/watcherCommon.php";
-include_once __DIR__ ."/lib/resetNetworkAdapter.php";
-include_once __DIR__ ."/lib/config.php"; //Check for Config file and bootstrap if needed
-include_once __DIR__ ."/lib/pingMetricsRollup.php"; //Rollup and rotation management
-include_once __DIR__ ."/lib/multiSyncPingMetrics.php"; //Multi-sync ping metrics
+// Core
+include_once __DIR__ ."/lib/core/watcherCommon.php";
+include_once __DIR__ ."/lib/core/config.php";
+
+// Metrics
+include_once __DIR__ ."/lib/metrics/pingMetrics.php";
+include_once __DIR__ ."/lib/metrics/multiSyncPingMetrics.php";
+include_once __DIR__ ."/lib/metrics/networkQualityMetrics.php";
+
+// Controllers
+include_once __DIR__ ."/lib/controllers/networkAdapter.php";
 
 $config = readPluginConfig(); // Load and prepare configuration
 
@@ -28,114 +34,18 @@ define("WATCHERMETRICSRETENTIONSECONDS", 25 * 60 * 60);
 
 /**
  * Purge metrics log entries older than retention period
- *
- * Called periodically to keep the metrics file from growing unbounded.
+ * Delegates to shared function in rollupBase.php
  */
 function rotateMetricsFile() {
-    $metricsFile = WATCHERPINGMETRICSFILE;
-
-    if (!file_exists($metricsFile)) {
-        return;
-    }
-
-    $fp = fopen($metricsFile, 'c+');
-    if (!$fp) {
-        return;
-    }
-
-    // Take an exclusive lock so writes pause during rotation
-    if (!flock($fp, LOCK_EX)) {
-        fclose($fp);
-        return;
-    }
-
-    // Read current metrics and keep only entries within retention period
-    $cutoffTime = time() - WATCHERMETRICSRETENTIONSECONDS;
-    $recentMetrics = [];
-    $purgedCount = 0;
-
-    rewind($fp);
-    while (($line = fgets($fp)) !== false) {
-        // Extract timestamp directly with regex - faster than JSON decode
-        // Format: [datetime] {"timestamp":1234567890,...}
-        if (preg_match('/"timestamp"\s*:\s*(\d+)/', $line, $matches)) {
-            $entryTimestamp = (int)$matches[1];
-            if ($entryTimestamp >= $cutoffTime) {
-                $recentMetrics[] = $line;
-            } else {
-                $purgedCount++;
-            }
-        }
-    }
-
-    // Only rewrite file if we actually purged entries
-    if ($purgedCount === 0) {
-        flock($fp, LOCK_UN);
-        fclose($fp);
-        return;
-    }
-
-    // Write recent metrics to new file, rename old file to backup atomically
-    $backupFile = $metricsFile . '.old';
-    $tempFile = $metricsFile . '.tmp';
-
-    // Write recent entries to temp file
-    $tempFp = fopen($tempFile, 'w');
-    if ($tempFp) {
-        if (!empty($recentMetrics)) {
-            fwrite($tempFp, implode('', $recentMetrics));
-        }
-        fclose($tempFp);
-
-        // Atomic swap: old -> backup, temp -> current
-        @unlink($backupFile);
-        rename($metricsFile, $backupFile);
-        rename($tempFile, $metricsFile);
-
-        logMessage("Metrics purge: removed {$purgedCount} old entries, kept " . count($recentMetrics) . " recent entries.");
-
-        ensureFppOwnership($metricsFile);
-        ensureFppOwnership($backupFile);
-    } else {
-        logMessage("ERROR: Unable to create temp file for metrics purge");
-    }
-
-    flock($fp, LOCK_UN);
-    fclose($fp);
+    rotateRawMetricsFileGeneric(WATCHERPINGMETRICSFILE, WATCHERMETRICSRETENTIONSECONDS);
 }
 
 /**
  * Write multiple metrics entries in a single file operation
- * Reduces I/O overhead by batching writes
+ * Delegates to shared function in rollupBase.php
  */
 function writeMetricsBatch($entries) {
-    if (empty($entries)) {
-        return;
-    }
-
-    $metricsFile = WATCHERPINGMETRICSFILE;
-    $fp = @fopen($metricsFile, 'a');
-    if (!$fp) {
-        return;
-    }
-
-    if (flock($fp, LOCK_EX)) {
-        foreach ($entries as $entry) {
-            $timestamp = date('Y-m-d H:i:s', $entry['timestamp']);
-            $jsonData = json_encode($entry);
-            fwrite($fp, "[{$timestamp}] {$jsonData}\n");
-        }
-        fflush($fp);
-        flock($fp, LOCK_UN);
-    }
-    fclose($fp);
-
-    // Check ownership once per batch
-    global $_watcherOwnershipVerified;
-    if (!isset($_watcherOwnershipVerified[$metricsFile])) {
-        ensureFppOwnership($metricsFile);
-        $_watcherOwnershipVerified[$metricsFile] = true;
-    }
+    return writeMetricsBatchGeneric(WATCHERPINGMETRICSFILE, $entries);
 }
 
 // Function to check internet connectivity and capture ping statistics
@@ -223,6 +133,12 @@ $cachedRemoteSystems = null; // Cache remote systems list
 $lastRemoteSystemsFetch = 0; // Track when remote systems were last fetched
 $remoteSystemsCacheInterval = 300; // Refresh remote systems list every 5 minutes
 
+// Network quality tracking (latency, jitter, packet loss)
+$lastNetworkQualityCheck = 0; // Track when network quality was last collected
+$lastNetworkQualityRollupCheck = 0; // Track when network quality rollups were processed
+$lastNetworkQualityRotationCheck = 0; // Track when network quality metrics rotation was checked
+$networkQualityCheckInterval = 60; // Collect network quality every 60 seconds
+
 logMessage("=== Watcher Plugin Started ===");
 logMessage("Check Interval: {$config['checkInterval']} seconds");
 logMessage("Max Failures: {$config['maxFailures']}");
@@ -283,6 +199,25 @@ while (true) {
             if (($currentTime - $lastMultiSyncRollupCheck) >= $rollupInterval) {
                 processAllMultiSyncRollups();
                 $lastMultiSyncRollupCheck = $currentTime;
+            }
+
+            // Collect network quality metrics (latency, jitter, packet loss from comparison API)
+            if (($currentTime - $lastNetworkQualityCheck) >= $networkQualityCheckInterval) {
+                collectNetworkQualityMetrics();
+                $lastNetworkQualityCheck = $currentTime;
+            }
+
+            // Rotate network quality metrics file periodically
+            $networkQualityRotationInterval = $config['metricsRotationInterval'] ?? 1800;
+            if (($currentTime - $lastNetworkQualityRotationCheck) >= $networkQualityRotationInterval) {
+                rotateNetworkQualityMetricsFile();
+                $lastNetworkQualityRotationCheck = $currentTime;
+            }
+
+            // Process network quality rollups every 60 seconds
+            if (($currentTime - $lastNetworkQualityRollupCheck) >= $rollupInterval) {
+                processAllNetworkQualityRollups();
+                $lastNetworkQualityRollupCheck = $currentTime;
             }
         }
     } else {

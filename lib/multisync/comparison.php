@@ -6,8 +6,8 @@
  * compares states, and detects synchronization issues.
  */
 
-include_once __DIR__ . '/watcherCommon.php';
-include_once __DIR__ . '/multiSyncMetrics.php';
+include_once __DIR__ . '/../core/watcherCommon.php';
+include_once __DIR__ . '/syncStatus.php';
 
 // Issue severity levels
 define('ISSUE_SEVERITY_INFO', 1);

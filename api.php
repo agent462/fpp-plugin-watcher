@@ -1,16 +1,25 @@
 <?php
-include_once __DIR__ . '/lib/watcherCommon.php';
-include_once WATCHERPLUGINDIR . '/lib/metrics.php';
-include_once WATCHERPLUGINDIR . '/lib/pingMetricsRollup.php';
-include_once WATCHERPLUGINDIR . '/lib/multiSyncPingMetrics.php';
-include_once WATCHERPLUGINDIR . '/lib/multiSyncMetrics.php';
-include_once WATCHERPLUGINDIR . '/lib/falconController.php';
-include_once WATCHERPLUGINDIR . '/lib/config.php';
-include_once WATCHERPLUGINDIR . '/lib/updateCheck.php';
-include_once WATCHERPLUGINDIR . '/lib/remoteControl.php';
-include_once WATCHERPLUGINDIR . '/lib/mqttEvents.php';
-include_once WATCHERPLUGINDIR . '/lib/multiSyncComparison.php';
-include_once WATCHERPLUGINDIR . '/lib/networkQualityMetrics.php';
+// Core
+include_once __DIR__ . '/lib/core/watcherCommon.php';
+include_once WATCHERPLUGINDIR . '/lib/core/config.php';
+
+// Metrics
+include_once WATCHERPLUGINDIR . '/lib/metrics/systemMetrics.php';
+include_once WATCHERPLUGINDIR . '/lib/metrics/pingMetrics.php';
+include_once WATCHERPLUGINDIR . '/lib/metrics/multiSyncPingMetrics.php';
+include_once WATCHERPLUGINDIR . '/lib/metrics/networkQualityMetrics.php';
+
+// Multi-sync
+include_once WATCHERPLUGINDIR . '/lib/multisync/syncStatus.php';
+include_once WATCHERPLUGINDIR . '/lib/multisync/comparison.php';
+
+// Controllers
+include_once WATCHERPLUGINDIR . '/lib/controllers/falcon.php';
+include_once WATCHERPLUGINDIR . '/lib/controllers/remoteControl.php';
+
+// Utils
+include_once WATCHERPLUGINDIR . '/lib/utils/updateCheck.php';
+include_once WATCHERPLUGINDIR . '/lib/utils/mqttEvents.php';
 /**
  * Returns the API endpoints for the fpp-plugin-watcher plugin
  */

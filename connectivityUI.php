@@ -1,5 +1,5 @@
 <?php
-include_once __DIR__ . '/lib/uiCommon.php';
+include_once __DIR__ . '/lib/ui/common.php';
 renderCSSIncludes(true);
 renderCommonJS();
 ?>

@@ -1,6 +1,6 @@
 <?php
-include_once __DIR__ . '/lib/config.php';
-include_once __DIR__ . '/lib/uiCommon.php';
+include_once __DIR__ . '/lib/core/config.php';
+include_once __DIR__ . '/lib/ui/common.php';
 $config = readPluginConfig();
 $configuredAdapter = $config['networkAdapter'] ?? 'default';
 $defaultAdapter = $configuredAdapter === 'default' ? detectActiveNetworkInterface() : $configuredAdapter;

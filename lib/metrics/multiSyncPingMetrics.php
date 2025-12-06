@@ -9,29 +9,9 @@
 
 include_once __DIR__ . "/rollupBase.php";
 
-// Define rollup tiers for multi-sync ping metrics (same structure as connectivity)
-define("WATCHERMULTISYNCROLLUPTIERS", [
-    '1min' => [
-        'interval' => 60,           // 1 minute in seconds
-        'retention' => 21600,       // Keep 6 hours (360 data points per host)
-        'label' => '1-minute averages'
-    ],
-    '5min' => [
-        'interval' => 300,          // 5 minutes in seconds
-        'retention' => 172800,      // Keep 48 hours (576 data points per host)
-        'label' => '5-minute averages'
-    ],
-    '30min' => [
-        'interval' => 1800,         // 30 minutes in seconds
-        'retention' => 1209600,     // Keep 14 days (672 data points per host)
-        'label' => '30-minute averages'
-    ],
-    '2hour' => [
-        'interval' => 7200,         // 2 hours in seconds
-        'retention' => 7776000,     // Keep 90 days (1080 data points per host)
-        'label' => '2-hour averages'
-    ]
-]);
+// Use shared tier configuration from rollupBase.php (WATCHER_ROLLUP_TIERS)
+// Alias for backward compatibility with existing code
+define("WATCHERMULTISYNCROLLUPTIERS", WATCHER_ROLLUP_TIERS);
 
 // Define rollup file paths
 define("WATCHERMULTISYNCROLLUPDIR", dirname(WATCHERMULTISYNCPINGMETRICSFILE));
@@ -52,7 +32,7 @@ function getMultiSyncRollupFilePath($tier) {
 
 /**
  * Calculate jitter using RFC 3550 algorithm
- * J(i) = J(i-1) + (|D(i-1,i)| - J(i-1)) / 16
+ * Delegates to shared function in rollupBase.php
  *
  * @param string $hostname Host identifier
  * @param float $latency Current latency measurement in ms
@@ -60,29 +40,7 @@ function getMultiSyncRollupFilePath($tier) {
  */
 function calculateMultiSyncJitter($hostname, $latency) {
     global $_multiSyncJitterState;
-
-    if (!isset($_multiSyncJitterState[$hostname])) {
-        $_multiSyncJitterState[$hostname] = [
-            'prevLatency' => $latency,
-            'jitter' => 0.0
-        ];
-        return null;
-    }
-
-    $prevLatency = $_multiSyncJitterState[$hostname]['prevLatency'];
-    $prevJitter = $_multiSyncJitterState[$hostname]['jitter'];
-
-    // D = difference between consecutive latencies
-    $d = abs($latency - $prevLatency);
-
-    // RFC 3550 jitter calculation
-    $jitter = $prevJitter + ($d - $prevJitter) / 16.0;
-
-    // Update state
-    $_multiSyncJitterState[$hostname]['prevLatency'] = $latency;
-    $_multiSyncJitterState[$hostname]['jitter'] = $jitter;
-
-    return round($jitter, 2);
+    return calculateJitterRFC3550Generic($hostname, $latency, $_multiSyncJitterState);
 }
 
 /**
@@ -168,102 +126,18 @@ function pingMultiSyncSystems($remoteSystems, $networkAdapter) {
 
 /**
  * Write multiple metrics entries in a single file operation
+ * Delegates to shared function in rollupBase.php
  */
 function writeMultiSyncMetricsBatch($entries) {
-    if (empty($entries)) {
-        return;
-    }
-
-    $metricsFile = WATCHERMULTISYNCPINGMETRICSFILE;
-    $fp = @fopen($metricsFile, 'a');
-    if (!$fp) {
-        return;
-    }
-
-    if (flock($fp, LOCK_EX)) {
-        foreach ($entries as $entry) {
-            $timestamp = date('Y-m-d H:i:s', $entry['timestamp']);
-            $jsonData = json_encode($entry);
-            fwrite($fp, "[{$timestamp}] {$jsonData}\n");
-        }
-        fflush($fp);
-        flock($fp, LOCK_UN);
-    }
-    fclose($fp);
-
-    global $_watcherOwnershipVerified;
-    if (!isset($_watcherOwnershipVerified[$metricsFile])) {
-        ensureFppOwnership($metricsFile);
-        $_watcherOwnershipVerified[$metricsFile] = true;
-    }
+    return writeMetricsBatchGeneric(WATCHERMULTISYNCPINGMETRICSFILE, $entries);
 }
 
 /**
  * Rotate multi-sync metrics file to remove old entries
+ * Delegates to shared function in rollupBase.php
  */
 function rotateMultiSyncMetricsFile() {
-    $metricsFile = WATCHERMULTISYNCPINGMETRICSFILE;
-
-    if (!file_exists($metricsFile)) {
-        return;
-    }
-
-    $fp = fopen($metricsFile, 'c+');
-    if (!$fp) {
-        return;
-    }
-
-    if (!flock($fp, LOCK_EX)) {
-        fclose($fp);
-        return;
-    }
-
-    $cutoffTime = time() - WATCHERMULTISYNCMETRICSRETENTIONSECONDS;
-    $recentMetrics = [];
-    $purgedCount = 0;
-
-    rewind($fp);
-    while (($line = fgets($fp)) !== false) {
-        if (preg_match('/"timestamp"\s*:\s*(\d+)/', $line, $matches)) {
-            $entryTimestamp = (int)$matches[1];
-            if ($entryTimestamp >= $cutoffTime) {
-                $recentMetrics[] = $line;
-            } else {
-                $purgedCount++;
-            }
-        }
-    }
-
-    if ($purgedCount === 0) {
-        flock($fp, LOCK_UN);
-        fclose($fp);
-        return;
-    }
-
-    $backupFile = $metricsFile . '.old';
-    $tempFile = $metricsFile . '.tmp';
-
-    $tempFp = fopen($tempFile, 'w');
-    if ($tempFp) {
-        if (!empty($recentMetrics)) {
-            fwrite($tempFp, implode('', $recentMetrics));
-        }
-        fclose($tempFp);
-
-        @unlink($backupFile);
-        rename($metricsFile, $backupFile);
-        rename($tempFile, $metricsFile);
-
-        logMessage("Multi-sync metrics purge: removed {$purgedCount} old entries, kept " . count($recentMetrics) . " recent entries.");
-
-        ensureFppOwnership($metricsFile);
-        ensureFppOwnership($backupFile);
-    } else {
-        logMessage("ERROR: Unable to create temp file for multi-sync metrics purge");
-    }
-
-    flock($fp, LOCK_UN);
-    fclose($fp);
+    rotateRawMetricsFileGeneric(WATCHERMULTISYNCPINGMETRICSFILE, WATCHERMULTISYNCMETRICSRETENTIONSECONDS);
 }
 
 /**

@@ -5,7 +5,7 @@
  * Provides functions for proxying commands to remote FPP instances.
  */
 
-include_once __DIR__ . '/watcherCommon.php';
+include_once __DIR__ . '/../core/watcherCommon.php';
 
 /**
  * Get status from a remote FPP instance
@@ -392,7 +392,7 @@ function streamRemoteFPPUpgrade($host, $targetVersion = null) {
  * Respects issueCheckOutputs and issueCheckSequences config settings
  */
 function getOutputDiscrepancies() {
-    include_once __DIR__ . '/config.php';
+    include_once __DIR__ . '/../core/config.php';
 
     $cacheFile = WATCHERLOGDIR . '/watcher-discrepancies-cache.json';
     $cacheMaxAge = 60; // seconds

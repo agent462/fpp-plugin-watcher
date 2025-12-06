@@ -1,5 +1,5 @@
 <?php
-include_once __DIR__ . "/watcherCommon.php";
+include_once __DIR__ . "/../core/watcherCommon.php";
 
 /**
  * Collectd hostname - hardcoded to avoid issues when user changes hostname after installing collectd.

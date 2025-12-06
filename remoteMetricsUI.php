@@ -1,7 +1,7 @@
 <?php
-include_once __DIR__ . '/lib/config.php';
-include_once __DIR__ . '/lib/watcherCommon.php';
-include_once __DIR__ . '/lib/uiCommon.php';
+include_once __DIR__ . '/lib/core/config.php';
+include_once __DIR__ . '/lib/core/watcherCommon.php';
+include_once __DIR__ . '/lib/ui/common.php';
 
 $config = readPluginConfig();
 $localSystem = apiCall('GET', 'http://127.0.0.1/api/fppd/status', [], true, 5) ?: [];

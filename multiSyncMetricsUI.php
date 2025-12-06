@@ -7,10 +7,10 @@
  * - Player vs remote comparison
  * - Real-time sync status and issues
  */
-include_once __DIR__ . '/lib/config.php';
-include_once __DIR__ . '/lib/watcherCommon.php';
-include_once __DIR__ . '/lib/uiCommon.php';
-include_once __DIR__ . '/lib/multiSyncMetrics.php';
+include_once __DIR__ . '/lib/core/config.php';
+include_once __DIR__ . '/lib/core/watcherCommon.php';
+include_once __DIR__ . '/lib/ui/common.php';
+include_once __DIR__ . '/lib/multisync/syncStatus.php';
 
 $config = readPluginConfig();
 $localSystem = apiCall('GET', 'http://127.0.0.1/api/fppd/status', [], true, 5) ?: [];
@@ -615,10 +615,8 @@ async function loadNetworkQuality() {
 
         updateQualityCard(data);
 
-        // Load charts on first load
-        if (!latencyJitterChart) {
-            await loadQualityCharts();
-        }
+        // Update charts on every refresh
+        await loadQualityCharts();
     } catch (e) {
         console.error('Error loading network quality:', e);
     }
@@ -682,14 +680,19 @@ function renderLatencyJitterChart(chartData) {
     const canvas = document.getElementById('latencyJitterChart');
     if (!canvas) return;
 
-    const ctx = canvas.getContext('2d');
-
-    if (latencyJitterChart) {
-        latencyJitterChart.destroy();
-    }
-
     const labels = chartData.labels.map(ts => new Date(ts));
 
+    // Update existing chart data inline
+    if (latencyJitterChart) {
+        latencyJitterChart.data.labels = labels;
+        latencyJitterChart.data.datasets[0].data = chartData.latency;
+        latencyJitterChart.data.datasets[1].data = chartData.jitter;
+        latencyJitterChart.update('none'); // 'none' disables animation for faster updates
+        return;
+    }
+
+    // Create chart on first load
+    const ctx = canvas.getContext('2d');
     latencyJitterChart = new Chart(ctx, {
         type: 'line',
         data: {
@@ -757,14 +760,28 @@ function renderPacketLossChart(chartData) {
     const canvas = document.getElementById('packetLossChart');
     if (!canvas) return;
 
-    const ctx = canvas.getContext('2d');
+    const labels = chartData.labels.map(ts => new Date(ts));
+    const lossData = chartData.packetLoss;
 
+    // Calculate appropriate Y-axis max based on data
+    // Filter out nulls and find max value
+    const validValues = lossData.filter(v => v !== null && v !== undefined);
+    const maxValue = validValues.length > 0 ? Math.max(...validValues) : 0;
+    // Round up to nearest 5 or 10 for cleaner axis, minimum of 5
+    const yMax = maxValue <= 5 ? 5 : Math.ceil(maxValue / 5) * 5;
+
+    // Update existing chart data inline
     if (packetLossChart) {
-        packetLossChart.destroy();
+        packetLossChart.data.labels = labels;
+        packetLossChart.data.datasets[0].data = lossData;
+        // Update Y-axis max to fit new data
+        packetLossChart.options.scales.y.max = yMax;
+        packetLossChart.update('none'); // 'none' disables animation for faster updates
+        return;
     }
 
-    const labels = chartData.labels.map(ts => new Date(ts));
-
+    // Create chart on first load
+    const ctx = canvas.getContext('2d');
     packetLossChart = new Chart(ctx, {
         type: 'line',
         data: {
@@ -772,7 +789,7 @@ function renderPacketLossChart(chartData) {
             datasets: [
                 {
                     label: 'Packet Loss (%)',
-                    data: chartData.packetLoss,
+                    data: lossData,
                     borderColor: '#dc3545',
                     backgroundColor: 'rgba(220, 53, 69, 0.1)',
                     fill: true,
@@ -804,7 +821,7 @@ function renderPacketLossChart(chartData) {
                 },
                 y: {
                     beginAtZero: true,
-                    max: 10,
+                    max: yMax,
                     title: {
                         display: true,
                         text: 'Packet Loss %'

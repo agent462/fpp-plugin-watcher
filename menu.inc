@@ -12,7 +12,7 @@
 # help menu in this example template.
 
 # Check config for conditional menu entries
-include_once __DIR__ . '/lib/config.php';
+include_once __DIR__ . '/lib/core/config.php';
 $watcherConfig = readPluginConfig();
 $showLocalMetricsMenu = !empty($watcherConfig['collectdEnabled']);
 $showConnectivityMenu = !empty($watcherConfig['connectivityCheckEnabled']);
