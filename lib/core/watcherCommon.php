@@ -268,6 +268,18 @@ function isPlayerMode() {
     return $result['mode_name'] === 'player';
 }
 
+// Check if this FPP instance is running in remote mode with multi-sync active
+function isRemoteModeWithMultiSync() {
+    $result = apiCall('GET', 'http://127.0.0.1/api/fppd/status', [], true, 5);
+
+    if ($result === false || !isset($result['mode_name'])) {
+        return false;
+    }
+
+    // Must be in remote mode and have multi-sync enabled
+    return $result['mode_name'] === 'remote' && !empty($result['multisync']);
+}
+
 /**
  * Fetch remote systems from multi-sync configuration
  * Returns an array of remote systems with hostname, address, model, version

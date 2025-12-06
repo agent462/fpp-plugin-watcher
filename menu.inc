@@ -98,9 +98,10 @@ if ($showMultiSyncPingMenu) {
 	]);
 }
 
-// Add Multi-Sync Metrics menu entry (always visible when MultiSync metrics OR ping is enabled)
-// This uses the C++ plugin for sync packet tracking
-if ($showMultiSyncMenu || $showMultiSyncPingMenu) {
+// Add Multi-Sync Metrics menu entry:
+// - Player mode: when MultiSync metrics OR ping is enabled
+// - Remote mode: when multi-sync is active in FPP (receives sync packets)
+if ($showMultiSyncMenu || $showMultiSyncPingMenu || isRemoteModeWithMultiSync()) {
 	$helpIndex = count($menuEntries) - 1;
 	array_splice($menuEntries, $helpIndex, 0, [
 		Array(
