@@ -3060,3 +3060,165 @@
     margin: 1.5rem 0 1rem; padding-bottom: 0.5rem;
     border-bottom: 2px solid #e9ecef;
 }
+
+/* Time Range Select */
+.msm-time-select {
+    padding: 0.25rem 0.5rem;
+    border: 1px solid #ced4da;
+    border-radius: 0.25rem;
+    font-size: 0.85rem;
+    color: #495057;
+    background: #fff;
+}
+
+/* ==========================================================================
+   Network Quality Card (msm-quality-*)
+
+   Usage: Network quality summary card showing latency, jitter, packet loss
+   ========================================================================== */
+
+.msm-quality-card {
+    background: #fff;
+    border: 1px solid #e9ecef;
+    border-radius: 0.5rem;
+    padding: 1rem 1.25rem;
+    margin-bottom: 1.5rem;
+}
+
+.msm-quality-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 0.75rem;
+}
+
+.msm-quality-header h3 {
+    margin: 0;
+    font-size: 1rem;
+    font-weight: 600;
+    color: #495057;
+}
+
+.msm-quality-header h3 i {
+    margin-right: 0.5rem;
+    color: #17a2b8;
+}
+
+/* Quality Indicator Badge */
+.msm-quality-indicator {
+    padding: 0.35rem 0.75rem;
+    border-radius: 1rem;
+    font-size: 0.8rem;
+    font-weight: 600;
+    text-transform: capitalize;
+}
+
+.msm-quality-indicator.msm-quality-good {
+    background: #d4edda;
+    color: #155724;
+}
+
+.msm-quality-indicator.msm-quality-fair {
+    background: #fff3cd;
+    color: #856404;
+}
+
+.msm-quality-indicator.msm-quality-poor {
+    background: #ffe5d0;
+    color: #8a4500;
+}
+
+.msm-quality-indicator.msm-quality-critical {
+    background: #f8d7da;
+    color: #721c24;
+}
+
+.msm-quality-indicator.msm-quality-unknown {
+    background: #e9ecef;
+    color: #6c757d;
+}
+
+/* Quality Metrics Grid */
+.msm-quality-grid {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 1rem;
+}
+
+@media (max-width: 600px) {
+    .msm-quality-grid {
+        grid-template-columns: 1fr;
+    }
+}
+
+.msm-quality-metric {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    padding: 0.75rem;
+    background: #f8f9fa;
+    border-radius: 0.375rem;
+}
+
+.msm-quality-label {
+    font-size: 0.7rem;
+    color: #6c757d;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    margin-bottom: 0.25rem;
+}
+
+.msm-quality-value {
+    font-size: 1.25rem;
+    font-weight: 600;
+    color: #212529;
+}
+
+/* Quality Value Color Classes */
+.msm-quality-value.msm-quality-good {
+    color: #28a745;
+}
+
+.msm-quality-value.msm-quality-fair {
+    color: #ffc107;
+}
+
+.msm-quality-value.msm-quality-poor {
+    color: #fd7e14;
+}
+
+.msm-quality-value.msm-quality-critical {
+    color: #dc3545;
+}
+
+/* Per-Host Quality Badge in Remote Cards */
+.msm-remote-quality-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.25rem;
+    padding: 0.15rem 0.4rem;
+    border-radius: 0.25rem;
+    font-size: 0.65rem;
+    font-weight: 600;
+    text-transform: uppercase;
+}
+
+.msm-remote-quality-badge.good {
+    background: rgba(40, 167, 69, 0.15);
+    color: #28a745;
+}
+
+.msm-remote-quality-badge.fair {
+    background: rgba(255, 193, 7, 0.15);
+    color: #856404;
+}
+
+.msm-remote-quality-badge.poor {
+    background: rgba(253, 126, 20, 0.15);
+    color: #fd7e14;
+}
+
+.msm-remote-quality-badge.critical {
+    background: rgba(220, 53, 69, 0.15);
+    color: #dc3545;
+}

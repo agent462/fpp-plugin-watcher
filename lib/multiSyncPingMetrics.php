@@ -40,11 +40,49 @@ define("WATCHERMULTISYNCROLLUPSTATEFILE", WATCHERMULTISYNCROLLUPDIR . "/fpp-plug
 // Retention period for raw multi-sync metrics (25 hours)
 define("WATCHERMULTISYNCMETRICSRETENTIONSECONDS", 25 * 60 * 60);
 
+// Jitter state storage (per-host previous latency for RFC 3550 calculation)
+$_multiSyncJitterState = [];
+
 /**
  * Get rollup file path for a specific tier
  */
 function getMultiSyncRollupFilePath($tier) {
     return WATCHERMULTISYNCROLLUPDIR . "/fpp-plugin-watcher-multisync-ping-{$tier}.log";
+}
+
+/**
+ * Calculate jitter using RFC 3550 algorithm
+ * J(i) = J(i-1) + (|D(i-1,i)| - J(i-1)) / 16
+ *
+ * @param string $hostname Host identifier
+ * @param float $latency Current latency measurement in ms
+ * @return float|null Calculated jitter or null if first sample
+ */
+function calculateMultiSyncJitter($hostname, $latency) {
+    global $_multiSyncJitterState;
+
+    if (!isset($_multiSyncJitterState[$hostname])) {
+        $_multiSyncJitterState[$hostname] = [
+            'prevLatency' => $latency,
+            'jitter' => 0.0
+        ];
+        return null;
+    }
+
+    $prevLatency = $_multiSyncJitterState[$hostname]['prevLatency'];
+    $prevJitter = $_multiSyncJitterState[$hostname]['jitter'];
+
+    // D = difference between consecutive latencies
+    $d = abs($latency - $prevLatency);
+
+    // RFC 3550 jitter calculation
+    $jitter = $prevJitter + ($d - $prevJitter) / 16.0;
+
+    // Update state
+    $_multiSyncJitterState[$hostname]['prevLatency'] = $latency;
+    $_multiSyncJitterState[$hostname]['jitter'] = $jitter;
+
+    return round($jitter, 2);
 }
 
 /**
@@ -99,10 +137,17 @@ function pingMultiSyncSystems($remoteSystems, $networkAdapter) {
 
         $pingResult = pingRemoteHost($address, $networkAdapter);
 
+        // Calculate jitter if we have a valid latency
+        $jitter = null;
+        if ($pingResult['success'] && $pingResult['latency'] !== null) {
+            $jitter = calculateMultiSyncJitter($hostname, $pingResult['latency']);
+        }
+
         $results[$hostname] = [
             'hostname' => $hostname,
             'address' => $address,
             'latency' => $pingResult['latency'],
+            'jitter' => $jitter,
             'success' => $pingResult['success']
         ];
 
@@ -111,6 +156,7 @@ function pingMultiSyncSystems($remoteSystems, $networkAdapter) {
             'hostname' => $hostname,
             'address' => $address,
             'latency' => $pingResult['latency'],
+            'jitter' => $jitter,
             'status' => $pingResult['success'] ? 'success' : 'failure'
         ];
     }
@@ -256,6 +302,7 @@ function aggregateMultiSyncMetrics($metrics) {
         if (!isset($byHost[$hostname])) {
             $byHost[$hostname] = [
                 'latencies' => [],
+                'jitters' => [],
                 'success_count' => 0,
                 'failure_count' => 0,
                 'address' => $entry['address'] ?? ''
@@ -264,6 +311,10 @@ function aggregateMultiSyncMetrics($metrics) {
 
         if (isset($entry['latency']) && $entry['latency'] !== null) {
             $byHost[$hostname]['latencies'][] = floatval($entry['latency']);
+        }
+
+        if (isset($entry['jitter']) && $entry['jitter'] !== null) {
+            $byHost[$hostname]['jitters'][] = floatval($entry['jitter']);
         }
 
         if (isset($entry['status']) && $entry['status'] === 'success') {
@@ -291,6 +342,15 @@ function aggregateMultiSyncMetrics($metrics) {
             $hostResult['min_latency'] = null;
             $hostResult['max_latency'] = null;
             $hostResult['avg_latency'] = null;
+        }
+
+        // Jitter aggregation
+        if (!empty($data['jitters'])) {
+            $hostResult['avg_jitter'] = round(array_sum($data['jitters']) / count($data['jitters']), 2);
+            $hostResult['max_jitter'] = round(max($data['jitters']), 2);
+        } else {
+            $hostResult['avg_jitter'] = null;
+            $hostResult['max_jitter'] = null;
         }
 
         $aggregated[] = $hostResult;

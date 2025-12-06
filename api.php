@@ -10,6 +10,7 @@ include_once WATCHERPLUGINDIR . '/lib/updateCheck.php';
 include_once WATCHERPLUGINDIR . '/lib/remoteControl.php';
 include_once WATCHERPLUGINDIR . '/lib/mqttEvents.php';
 include_once WATCHERPLUGINDIR . '/lib/multiSyncComparison.php';
+include_once WATCHERPLUGINDIR . '/lib/networkQualityMetrics.php';
 /**
  * Returns the API endpoints for the fpp-plugin-watcher plugin
  */
@@ -322,6 +323,31 @@ function getEndpointsfpppluginwatcher() {
         'method' => 'GET',
         'endpoint' => 'multisync/comparison/host',
         'callback' => 'fpppluginWatcherMultiSyncComparisonHost');
+    array_push($result, $ep);
+
+    // Network quality metrics endpoints
+    $ep = array(
+        'method' => 'GET',
+        'endpoint' => 'metrics/network-quality/current',
+        'callback' => 'fpppluginWatcherNetworkQualityCurrent');
+    array_push($result, $ep);
+
+    $ep = array(
+        'method' => 'GET',
+        'endpoint' => 'metrics/network-quality/history',
+        'callback' => 'fpppluginWatcherNetworkQualityHistory');
+    array_push($result, $ep);
+
+    $ep = array(
+        'method' => 'GET',
+        'endpoint' => 'metrics/network-quality/host',
+        'callback' => 'fpppluginWatcherNetworkQualityHost');
+    array_push($result, $ep);
+
+    $ep = array(
+        'method' => 'POST',
+        'endpoint' => 'metrics/network-quality/collect',
+        'callback' => 'fpppluginWatcherNetworkQualityCollect');
     array_push($result, $ep);
 
     return $result;
@@ -1231,6 +1257,77 @@ function fpppluginWatcherMultiSyncComparisonHost() {
     }
 
     $result = getSyncComparisonForHost($address);
+    /** @disregard P1010 */
+    return json($result);
+}
+
+// GET /api/plugin/fpp-plugin-watcher/metrics/network-quality/current
+// Returns current network quality status for all remotes
+function fpppluginWatcherNetworkQualityCurrent() {
+    $result = getNetworkQualityStatus();
+    /** @disregard P1010 */
+    return json($result);
+}
+
+// GET /api/plugin/fpp-plugin-watcher/metrics/network-quality/history?hours=X&hostname=Y
+// Returns network quality history for charting
+function fpppluginWatcherNetworkQualityHistory() {
+    $hoursBack = isset($_GET['hours']) ? intval($_GET['hours']) : 6;
+    $hostname = isset($_GET['hostname']) ? trim($_GET['hostname']) : null;
+
+    $result = getNetworkQualityHistory($hoursBack, $hostname ?: null);
+    /** @disregard P1010 */
+    return json($result);
+}
+
+// GET /api/plugin/fpp-plugin-watcher/metrics/network-quality/host?address=X
+// Returns network quality metrics for a specific host
+function fpppluginWatcherNetworkQualityHost() {
+    $address = isset($_GET['address']) ? trim($_GET['address']) : '';
+
+    if (empty($address)) {
+        /** @disregard P1010 */
+        return json(['success' => false, 'error' => 'Missing address parameter']);
+    }
+
+    // Get all metrics and filter by address
+    $allStatus = getNetworkQualityStatus();
+
+    if (!$allStatus['success']) {
+        /** @disregard P1010 */
+        return json($allStatus);
+    }
+
+    // Find the host by address
+    $hostData = null;
+    foreach ($allStatus['hosts'] as $host) {
+        if (($host['address'] ?? '') === $address) {
+            $hostData = $host;
+            break;
+        }
+    }
+
+    if ($hostData === null) {
+        /** @disregard P1010 */
+        return json([
+            'success' => true,
+            'host' => null,
+            'message' => 'No data found for this host'
+        ]);
+    }
+
+    /** @disregard P1010 */
+    return json([
+        'success' => true,
+        'host' => $hostData,
+        'timestamp' => time()
+    ]);
+}
+
+// POST /api/plugin/fpp-plugin-watcher/metrics/network-quality/collect
+// Manually trigger network quality collection
+function fpppluginWatcherNetworkQualityCollect() {
+    $result = collectNetworkQualityMetrics();
     /** @disregard P1010 */
     return json($result);
 }
