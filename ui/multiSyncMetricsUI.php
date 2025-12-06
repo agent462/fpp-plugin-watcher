@@ -134,16 +134,16 @@ renderCommonJS();
                 <span class="msm-player-metric-value" id="playerChannels">--</span>
             </div>
             <div class="msm-player-metric">
-                <span class="msm-player-metric-label">Packets Sent</span>
+                <span class="msm-player-metric-label">Sync Packets Sent</span>
                 <span class="msm-player-metric-value" id="playerPacketsSent">--</span>
             </div>
             <div class="msm-player-metric">
-                <span class="msm-player-metric-label">Packets Received</span>
+                <span class="msm-player-metric-label">Sync Packets Received</span>
                 <span class="msm-player-metric-value" id="playerPacketsReceived">--</span>
             </div>
             <?php if ($isRemoteMode): ?>
             <div class="msm-player-metric">
-                <span class="msm-player-metric-label">Avg Drift</span>
+                <span class="msm-player-metric-label">Avg Frame Drift</span>
                 <span class="msm-player-metric-value" id="playerAvgDrift">--</span>
             </div>
             <?php endif; ?>
@@ -643,10 +643,10 @@ function renderRemoteCards(remotes) {
                 <div class="msm-remote-metrics">
                     <div><span class="msm-remote-metric-label">Received Sequence</span><br><span class="msm-remote-metric-value">${escapeHtml(actualSeq) || '(none)'}</span></div>
                     <div><span class="msm-remote-metric-label">Status</span><br><span class="msm-remote-metric-value ${statusClass}">${statusDisplay}</span></div>
-                    <div><span class="msm-remote-metric-label">Packets Recv</span><br><span class="msm-remote-metric-value">${pkts}</span></div>
+                    <div><span class="msm-remote-metric-label">Sync Packets Recv</span><br><span class="msm-remote-metric-value">${pkts}</span></div>
                     <div><span class="msm-remote-metric-label">Last Sync</span><br><span class="msm-remote-metric-value">${lastSync}</span></div>
-                    <div><span class="msm-remote-metric-label">Avg Drift</span><br><span class="msm-remote-metric-value ${driftClass}">${avgDrift}f</span></div>
-                    <div><span class="msm-remote-metric-label">Max Drift</span><br><span class="msm-remote-metric-value ${driftClass}">${maxDrift !== null ? maxDrift + 'f' : '--'}</span></div>
+                    <div><span class="msm-remote-metric-label">Avg Frame Drift</span><br><span class="msm-remote-metric-value ${driftClass}">${avgDrift}f</span></div>
+                    <div><span class="msm-remote-metric-label">Max Frame Drift</span><br><span class="msm-remote-metric-value ${driftClass}">${maxDrift !== null ? maxDrift + 'f' : '--'}</span></div>
                 </div>
             `;
         } else if (remote.online) {
