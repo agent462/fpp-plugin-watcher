@@ -46,6 +46,7 @@ function fetchRemoteFppStatus($address, $timeout = 2) {
 
 /**
  * Collect sync metrics from all remote systems in parallel
+ * Fetches both watcher plugin metrics AND FPP status to cross-reference
  *
  * @param array $remoteSystems Array of remote system info from getMultiSyncRemoteSystems()
  * @param int $timeout Request timeout per host
@@ -59,24 +60,41 @@ function collectRemoteSyncMetrics($remoteSystems, $timeout = 3) {
     $mh = curl_multi_init();
     $handles = [];
 
-    // Create curl handles for each remote
+    // Create curl handles for each remote - fetch BOTH watcher plugin AND FPP status
     foreach ($remoteSystems as $system) {
         $address = $system['address'];
         $hostname = $system['hostname'];
 
         // Fetch watcher plugin metrics
-        $ch = curl_init("http://{$address}/api/plugin-apis/fpp-plugin-watcher/multisync/status");
-        curl_setopt_array($ch, [
+        $chWatcher = curl_init("http://{$address}/api/plugin-apis/fpp-plugin-watcher/multisync/status");
+        curl_setopt_array($chWatcher, [
             CURLOPT_RETURNTRANSFER => true,
             CURLOPT_TIMEOUT => $timeout,
             CURLOPT_CONNECTTIMEOUT => $timeout,
             CURLOPT_HTTPHEADER => ['Accept: application/json']
         ]);
-        curl_multi_add_handle($mh, $ch);
-        $handles[$address] = [
-            'handle' => $ch,
+        curl_multi_add_handle($mh, $chWatcher);
+        $handles["{$address}_watcher"] = [
+            'handle' => $chWatcher,
+            'address' => $address,
             'hostname' => $hostname,
             'type' => 'watcher'
+        ];
+
+        // Also fetch FPP status to see what's actually playing
+        $chFpp = curl_init("http://{$address}/api/fppd/status");
+        curl_setopt_array($chFpp, [
+            CURLOPT_RETURNTRANSFER => true,
+            CURLOPT_TIMEOUT => $timeout,
+            CURLOPT_CONNECTTIMEOUT => $timeout,
+            CURLOPT_HTTPHEADER => ['Accept: application/json']
+        ]);
+        curl_multi_add_handle($mh, $chFpp);
+        $handles["{$address}_fpp"] = [
+            'handle' => $chFpp,
+            'address' => $address,
+            'hostname' => $hostname,
+            'type' => 'fpp'
         ];
     }
 
@@ -88,9 +106,11 @@ function collectRemoteSyncMetrics($remoteSystems, $timeout = 3) {
         }
     } while ($active && $status === CURLM_OK);
 
-    // Collect results
-    $results = [];
-    foreach ($handles as $address => $info) {
+    // Collect results - group by address
+    $watcherResults = [];
+    $fppResults = [];
+
+    foreach ($handles as $key => $info) {
         $ch = $info['handle'];
         $response = curl_multi_getcontent($ch);
         $httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
@@ -98,18 +118,42 @@ function collectRemoteSyncMetrics($remoteSystems, $timeout = 3) {
         curl_multi_remove_handle($mh, $ch);
         curl_close($ch);
 
+        $address = $info['address'];
+
+        if ($info['type'] === 'watcher') {
+            $watcherResults[$address] = [
+                'httpCode' => $httpCode,
+                'response' => $response,
+                'responseTime' => round($responseTime * 1000, 1),
+                'hostname' => $info['hostname']
+            ];
+        } else {
+            $fppResults[$address] = [
+                'httpCode' => $httpCode,
+                'response' => $response
+            ];
+        }
+    }
+
+    curl_multi_close($mh);
+
+    // Combine results
+    $results = [];
+    foreach ($watcherResults as $address => $watcher) {
         $result = [
             'address' => $address,
-            'hostname' => $info['hostname'],
-            'responseTime' => round($responseTime * 1000, 1), // ms
+            'hostname' => $watcher['hostname'],
+            'responseTime' => $watcher['responseTime'],
             'pluginInstalled' => false,
             'online' => false,
             'metrics' => null,
+            'fppStatus' => null,
             'error' => null
         ];
 
-        if ($httpCode === 200 && $response) {
-            $data = json_decode($response, true);
+        // Process watcher response
+        if ($watcher['httpCode'] === 200 && $watcher['response']) {
+            $data = json_decode($watcher['response'], true);
             if ($data && !isset($data['error'])) {
                 $result['online'] = true;
                 $result['pluginInstalled'] = true;
@@ -117,18 +161,31 @@ function collectRemoteSyncMetrics($remoteSystems, $timeout = 3) {
             } else {
                 $result['error'] = $data['error'] ?? 'Invalid response';
             }
-        } elseif ($httpCode === 404) {
-            // Plugin not installed on this remote
-            $result['online'] = true; // Host is up, just no plugin
+        } elseif ($watcher['httpCode'] === 404) {
+            $result['online'] = true;
             $result['error'] = 'Watcher plugin not installed';
         } else {
-            $result['error'] = $httpCode > 0 ? "HTTP $httpCode" : 'Connection failed';
+            $result['error'] = $watcher['httpCode'] > 0 ? "HTTP {$watcher['httpCode']}" : 'Connection failed';
+        }
+
+        // Process FPP status response
+        $fpp = $fppResults[$address] ?? null;
+        if ($fpp && $fpp['httpCode'] === 200 && $fpp['response']) {
+            $fppData = json_decode($fpp['response'], true);
+            if ($fppData) {
+                $result['online'] = true; // FPP responded, so it's online
+                $result['fppStatus'] = [
+                    'status' => $fppData['status_name'] ?? 'unknown',
+                    'sequence' => $fppData['current_sequence'] ?? '',
+                    'secondsPlayed' => floatval($fppData['seconds_played'] ?? 0),
+                    'secondsRemaining' => floatval($fppData['seconds_remaining'] ?? 0)
+                ];
+            }
         }
 
         $results[$address] = $result;
     }
 
-    curl_multi_close($mh);
     return $results;
 }
 
@@ -167,58 +224,86 @@ function comparePlayerToRemote($player, $remote) {
 
     $remoteMetrics = $remote['metrics'] ?? [];
     $playerMetrics = $player['metrics'] ?? [];
+    $remoteFppStatus = $remote['fppStatus'] ?? null;
+    $playerFppStatus = $player['fppStatus'] ?? null;
 
-    // Compare sequence names
-    $playerSeq = $playerMetrics['currentMasterSequence'] ?? '';
-    $remoteSeq = $remoteMetrics['currentMasterSequence'] ?? '';
+    // Get player's current sequence from FPP status (what's actually playing)
+    $playerSeq = $playerFppStatus['sequence'] ?? ($playerMetrics['currentMasterSequence'] ?? '');
+    // Get what sync packets told the remote to play
+    $remoteSyncSeq = $remoteMetrics['currentMasterSequence'] ?? '';
+    // Get what the remote is actually playing according to FPP
+    $remoteActualSeq = $remoteFppStatus['sequence'] ?? '';
+    $remoteActualStatus = $remoteFppStatus['status'] ?? '';
 
-    if (!empty($playerSeq) && !empty($remoteSeq) && $playerSeq !== $remoteSeq) {
+    // Player playing state
+    $playerPlaying = $playerMetrics['sequencePlaying'] ?? false;
+    // What sync packets say remote should be doing
+    $remoteSyncPlaying = $remoteMetrics['sequencePlaying'] ?? false;
+    // What remote is actually doing according to FPP
+    $remoteActuallyPlaying = ($remoteActualStatus === 'playing');
+
+    // Check for missing sequence - player playing, remote got sync packets, but remote isn't actually playing
+    if ($playerPlaying && $remoteSyncPlaying && !$remoteActuallyPlaying && $remoteFppStatus !== null) {
+        $issues[] = [
+            'type' => 'missing_sequence',
+            'severity' => ISSUE_SEVERITY_CRITICAL,
+            'host' => $hostname,
+            'description' => "Missing sequence file: {$remoteSyncSeq}",
+            'expected' => $playerSeq,
+            'actual' => $remoteActualSeq ?: '(not playing)'
+        ];
+        // Don't add other issues since this is the root cause
+        return $issues;
+    }
+
+    // Compare what's actually playing (using FPP status when available)
+    if ($playerPlaying && !empty($playerSeq) && !empty($remoteActualSeq) && $playerSeq !== $remoteActualSeq) {
         $issues[] = [
             'type' => 'sequence_mismatch',
             'severity' => ISSUE_SEVERITY_CRITICAL,
             'host' => $hostname,
             'description' => "Playing different sequence",
             'expected' => $playerSeq,
-            'actual' => $remoteSeq
+            'actual' => $remoteActualSeq
         ];
     }
 
-    // Compare playback state
-    $playerPlaying = $playerMetrics['sequencePlaying'] ?? false;
-    $remotePlaying = $remoteMetrics['sequencePlaying'] ?? false;
+    // Compare playback state using actual FPP status
+    $effectiveRemotePlaying = $remoteFppStatus !== null ? $remoteActuallyPlaying : $remoteSyncPlaying;
 
-    if ($playerPlaying !== $remotePlaying) {
+    if ($playerPlaying !== $effectiveRemotePlaying) {
         $issues[] = [
             'type' => 'state_mismatch',
             'severity' => ISSUE_SEVERITY_WARNING,
             'host' => $hostname,
             'description' => $playerPlaying ? 'Remote not playing' : 'Remote playing but player idle',
             'expected' => $playerPlaying ? 'playing' : 'stopped',
-            'actual' => $remotePlaying ? 'playing' : 'stopped'
+            'actual' => $effectiveRemotePlaying ? 'playing' : 'stopped'
         ];
     }
 
-    // Check frame drift (only meaningful on remotes)
+    // Check frame drift (only meaningful on remotes) - use avg drift for alerting
     $maxDrift = abs($remoteMetrics['maxFrameDrift'] ?? 0);
     $avgDrift = abs($remoteMetrics['avgFrameDrift'] ?? 0);
+    $avgDriftRounded = round($avgDrift, 1);
 
-    if ($maxDrift > DRIFT_CRITICAL_THRESHOLD) {
+    if ($avgDrift > DRIFT_CRITICAL_THRESHOLD) {
         $issues[] = [
             'type' => 'sync_drift',
             'severity' => ISSUE_SEVERITY_CRITICAL,
             'host' => $hostname,
-            'description' => "High frame drift: {$maxDrift} frames",
+            'description' => "High average frame drift: {$avgDriftRounded} frames",
             'maxDrift' => $maxDrift,
-            'avgDrift' => round($avgDrift, 1)
+            'avgDrift' => $avgDriftRounded
         ];
-    } elseif ($maxDrift > DRIFT_WARNING_THRESHOLD) {
+    } elseif ($avgDrift > DRIFT_WARNING_THRESHOLD) {
         $issues[] = [
             'type' => 'sync_drift',
             'severity' => ISSUE_SEVERITY_WARNING,
             'host' => $hostname,
-            'description' => "Frame drift: {$maxDrift} frames",
+            'description' => "Average frame drift: {$avgDriftRounded} frames",
             'maxDrift' => $maxDrift,
-            'avgDrift' => round($avgDrift, 1)
+            'avgDrift' => $avgDriftRounded
         ];
     }
 

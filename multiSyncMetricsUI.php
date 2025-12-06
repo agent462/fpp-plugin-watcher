@@ -19,153 +19,13 @@ $localSystem = apiCall('GET', 'http://127.0.0.1/api/fppd/status', [], true, 5) ?
 $multiSyncEnabled = ($localSystem['multisync'] ?? false) === true;
 
 // FPP Mode: 2=Player, 6=Remote, 8=Master (deprecated)
-$fppMode = $localSystem['fppd'] ?? $localSystem['mode'] ?? 0;
+$fppMode = $localSystem['mode'] ?? 0;
 $isRemoteMode = ($fppMode == 6);
 $isPlayerMode = ($fppMode == 2 || $fppMode == 8);
 
 renderCSSIncludes(true);
 renderCommonJS();
 ?>
-
-<style>
-/* Layout */
-.msm-container { padding: 1.5rem; max-width: 1600px; margin: 0 auto; }
-.msm-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 1.5rem; flex-wrap: wrap; gap: 1rem; }
-.msm-header h2 { margin: 0; color: #212529; }
-.msm-header-right { display: flex; align-items: center; gap: 1rem; }
-.msm-last-update { font-size: 0.85rem; color: #6c757d; }
-
-/* Player Card */
-.msm-player-card {
-    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-    color: #fff;
-    border-radius: 0.5rem;
-    padding: 1.25rem 1.5rem;
-    margin-bottom: 1.5rem;
-}
-.msm-player-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem; }
-.msm-player-title { font-size: 1.1rem; font-weight: 600; }
-.msm-player-mode { background: rgba(255,255,255,0.2); padding: 0.25rem 0.75rem; border-radius: 1rem; font-size: 0.8rem; }
-.msm-player-metrics { display: flex; gap: 2rem; flex-wrap: wrap; }
-.msm-player-metric { display: flex; flex-direction: column; }
-.msm-player-metric-label { font-size: 0.7rem; opacity: 0.8; text-transform: uppercase; }
-.msm-player-metric-value { font-size: 1rem; font-weight: 500; }
-
-/* Stats Grid */
-.msm-stats-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 1rem; margin-bottom: 1.5rem; }
-.msm-stat-card { background: #f8f9fa; padding: 1rem; border-radius: 8px; border: 1px solid #e9ecef; text-align: center; }
-.msm-stat-value { font-size: 1.75rem; font-weight: bold; color: #212529; line-height: 1; }
-.msm-stat-label { font-size: 0.75rem; color: #6c757d; margin-top: 0.25rem; text-transform: uppercase; }
-.msm-stat-value.healthy { color: #28a745; }
-.msm-stat-value.warning { color: #ffc107; }
-.msm-stat-value.critical { color: #dc3545; }
-
-/* Issues Panel */
-.msm-issues-panel { background: #fff; border: 1px solid #dee2e6; border-radius: 0.5rem; margin-bottom: 1.5rem; }
-.msm-issues-panel.hidden { display: none; }
-.msm-issues-header {
-    display: flex; justify-content: space-between; align-items: center;
-    padding: 0.75rem 1rem;
-    background: linear-gradient(135deg, #ffc107 0%, #ff9800 100%);
-    color: #000; border-radius: 0.5rem 0.5rem 0 0; font-weight: 600;
-}
-.msm-issues-header.critical { background: linear-gradient(135deg, #dc3545 0%, #c82333 100%); color: #fff; }
-.msm-issues-body { padding: 1rem; max-height: 300px; overflow-y: auto; }
-.msm-issue-item { display: flex; align-items: flex-start; gap: 0.75rem; padding: 0.5rem 0; border-bottom: 1px solid #eee; }
-.msm-issue-item:last-child { border-bottom: none; }
-.msm-issue-icon { width: 24px; text-align: center; flex-shrink: 0; }
-.msm-issue-icon.critical { color: #dc3545; }
-.msm-issue-icon.warning { color: #ffc107; }
-.msm-issue-icon.info { color: #17a2b8; }
-.msm-issue-content { flex: 1; }
-.msm-issue-host { font-weight: 600; color: #212529; }
-.msm-issue-description { color: #495057; font-size: 0.9rem; }
-.msm-issue-details { font-size: 0.8rem; color: #6c757d; margin-top: 0.25rem; }
-
-/* Cards */
-.msm-card { background: #fff; border: 1px solid #e9ecef; border-radius: 8px; margin-bottom: 1.5rem; overflow: hidden; }
-.msm-card-header { background: #f8f9fa; padding: 0.875rem 1.25rem; border-bottom: 1px solid #e9ecef; display: flex; justify-content: space-between; align-items: center; }
-.msm-card-title { font-weight: 600; color: #212529; margin: 0; font-size: 1rem; }
-.msm-card-body { padding: 1.25rem; }
-
-/* Two Column Layout */
-.msm-two-col { display: grid; grid-template-columns: 1fr 1fr; gap: 1.5rem; }
-@media (max-width: 1200px) { .msm-two-col { grid-template-columns: 1fr; } }
-
-/* Tables */
-.msm-table { width: 100%; border-collapse: collapse; font-size: 0.9rem; }
-.msm-table th, .msm-table td { padding: 0.625rem 0.75rem; text-align: left; border-bottom: 1px solid #e9ecef; }
-.msm-table th { background: #f8f9fa; font-weight: 600; color: #495057; font-size: 0.8rem; text-transform: uppercase; }
-.msm-table tr:hover { background: #f8f9fa; }
-
-/* Remote Cards Grid */
-.msm-remotes-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 1rem; }
-.msm-remote-card { background: #fff; border: 1px solid #dee2e6; border-radius: 0.5rem; overflow: hidden; transition: box-shadow 0.2s; }
-.msm-remote-card:hover { box-shadow: 0 4px 12px rgba(0,0,0,0.1); }
-.msm-remote-card.has-issues { border-left: 4px solid #ffc107; }
-.msm-remote-card.critical { border-left: 4px solid #dc3545; }
-.msm-remote-card.offline { border-left: 4px solid #6c757d; opacity: 0.7; }
-.msm-remote-card.no-plugin { border-left: 4px solid #17a2b8; }
-.msm-remote-header { display: flex; justify-content: space-between; align-items: center; padding: 0.625rem 0.875rem; background: #f8f9fa; border-bottom: 1px solid #dee2e6; }
-.msm-remote-hostname { font-weight: 600; color: #212529; font-size: 0.95rem; }
-.msm-remote-address { font-size: 0.75rem; color: #6c757d; }
-.msm-remote-badge { font-size: 0.7rem; padding: 0.2rem 0.5rem; border-radius: 0.25rem; font-weight: 500; }
-.msm-remote-badge.online { background: #d4edda; color: #155724; }
-.msm-remote-badge.offline { background: #f8d7da; color: #721c24; }
-.msm-remote-badge.no-plugin { background: #d1ecf1; color: #0c5460; }
-.msm-remote-body { padding: 0.875rem; }
-.msm-remote-metrics { display: grid; grid-template-columns: 1fr 1fr; gap: 0.5rem; }
-.msm-remote-metric-label { font-size: 0.65rem; color: #6c757d; text-transform: uppercase; }
-.msm-remote-metric-value { font-size: 0.85rem; font-weight: 500; color: #212529; }
-.msm-remote-metric-value.good { color: #28a745; }
-.msm-remote-metric-value.warning { color: #ffc107; }
-.msm-remote-metric-value.critical { color: #dc3545; }
-.msm-remote-issues { padding: 0.5rem 0.875rem; background: #fff3cd; border-top: 1px solid #dee2e6; font-size: 0.8rem; }
-.msm-remote-issues.critical { background: #f8d7da; }
-.msm-remote-message { padding: 0.5rem 0; color: #6c757d; font-size: 0.85rem; }
-
-/* Badges */
-.msm-badge { display: inline-block; padding: 0.2rem 0.5rem; border-radius: 4px; font-size: 0.75rem; font-weight: 600; }
-.msm-badge-info { background: #d1ecf1; color: #0c5460; }
-.msm-badge-warning { background: #fff3cd; color: #856404; }
-.msm-badge-critical { background: #f8d7da; color: #721c24; }
-.msm-badge-success { background: #d4edda; color: #155724; }
-
-/* Indicators */
-.msm-indicator { display: inline-block; width: 8px; height: 8px; border-radius: 50%; margin-right: 0.5rem; }
-.msm-indicator-ok { background: #28a745; }
-.msm-indicator-warn { background: #ffc107; }
-.msm-indicator-error { background: #dc3545; }
-
-/* Notices */
-.msm-notice { border-radius: 8px; padding: 1rem 1.25rem; margin-bottom: 1.5rem; display: flex; align-items: flex-start; gap: 0.75rem; }
-.msm-notice i { font-size: 1.25rem; flex-shrink: 0; margin-top: 0.1rem; }
-.msm-notice-warning { background: #fff3cd; border: 1px solid #ffc107; }
-.msm-notice-warning i { color: #856404; }
-.msm-notice-error { background: #f8d7da; border: 1px solid #f5c6cb; }
-.msm-notice-error i { color: #721c24; }
-
-/* Empty State */
-.msm-empty { text-align: center; padding: 2rem; color: #6c757d; }
-.msm-empty i { font-size: 2.5rem; margin-bottom: 0.75rem; display: block; opacity: 0.5; }
-
-/* Refresh Button */
-.msm-refresh-btn {
-    position: fixed; bottom: 2rem; right: 2rem;
-    width: 50px; height: 50px; border-radius: 50%;
-    background: #007bff; color: white; border: none;
-    cursor: pointer; box-shadow: 0 2px 10px rgba(0,0,0,0.2);
-    transition: all 0.3s ease; z-index: 100;
-}
-.msm-refresh-btn:hover { background: #0056b3; transform: scale(1.1); }
-
-/* Section Headers */
-.msm-section-header {
-    font-size: 1rem; font-weight: 600; color: #495057;
-    margin: 1.5rem 0 1rem; padding-bottom: 0.5rem;
-    border-bottom: 2px solid #e9ecef;
-}
-</style>
 
 <div class="msm-container">
     <div class="msm-header">
@@ -530,11 +390,14 @@ function renderRemoteCards(remotes) {
         else if (remote.maxSeverity >= 2) cardClass += ' has-issues';
 
         const m = remote.metrics || {};
+        const fpp = remote.fppStatus || {};
         let metricsHtml = '';
 
         if (remote.pluginInstalled && remote.online) {
-            const seq = m.currentMasterSequence || '--';
-            const playing = m.sequencePlaying ? 'Playing' : 'Idle';
+            // Use FPP status for actual sequence/status, fall back to sync packet data
+            const actualSeq = fpp.sequence || m.currentMasterSequence || '--';
+            const actualStatus = fpp.status || (m.sequencePlaying ? 'playing' : 'idle');
+            const statusDisplay = actualStatus === 'playing' ? 'Playing' : 'Idle';
             const pkts = m.totalPacketsReceived !== undefined ? m.totalPacketsReceived.toLocaleString() : '--';
             const avgDrift = m.avgFrameDrift !== undefined ? m.avgFrameDrift.toFixed(1) : '--';
             const maxDrift = m.maxFrameDrift !== undefined ? Math.abs(m.maxFrameDrift) : null;
@@ -547,10 +410,18 @@ function renderRemoteCards(remotes) {
                 else driftClass = 'good';
             }
 
+            // Check for missing sequence scenario
+            const syncSaysPlaying = m.sequencePlaying;
+            const actuallyPlaying = actualStatus === 'playing';
+            let statusClass = actuallyPlaying ? 'good' : '';
+            if (syncSaysPlaying && !actuallyPlaying) {
+                statusClass = 'critical'; // Sync says playing but FPP isn't
+            }
+
             metricsHtml = `
                 <div class="msm-remote-metrics">
-                    <div><span class="msm-remote-metric-label">Sequence</span><br><span class="msm-remote-metric-value">${escapeHtml(seq)}</span></div>
-                    <div><span class="msm-remote-metric-label">Status</span><br><span class="msm-remote-metric-value">${playing}</span></div>
+                    <div><span class="msm-remote-metric-label">Received Sequence</span><br><span class="msm-remote-metric-value">${escapeHtml(actualSeq) || '(none)'}</span></div>
+                    <div><span class="msm-remote-metric-label">Status</span><br><span class="msm-remote-metric-value ${statusClass}">${statusDisplay}</span></div>
                     <div><span class="msm-remote-metric-label">Packets Recv</span><br><span class="msm-remote-metric-value">${pkts}</span></div>
                     <div><span class="msm-remote-metric-label">Last Sync</span><br><span class="msm-remote-metric-value">${lastSync}</span></div>
                     <div><span class="msm-remote-metric-label">Avg Drift</span><br><span class="msm-remote-metric-value ${driftClass}">${avgDrift}f</span></div>
