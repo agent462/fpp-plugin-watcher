@@ -123,6 +123,9 @@ renderCommonJS();
                 <span id="systemHostname">This System</span>
             </span>
             <span class="msm-system-mode <?php echo $isRemoteMode ? 'msm-mode-remote' : 'msm-mode-player'; ?>" id="systemMode"><?php echo $isPlayerMode ? 'Player' : ($isRemoteMode ? 'Remote' : '--'); ?></span>
+            <?php if ($isRemoteMode): ?>
+            <span class="msm-sync-health" id="syncHealthBadge" title="Overall sync health"><i class="fas fa-circle"></i> <span>--</span></span>
+            <?php endif; ?>
         </div>
         <div class="msm-system-metrics">
             <div class="msm-system-metric msm-metric-wide">
@@ -141,11 +144,11 @@ renderCommonJS();
                 <span class="msm-system-metric-label">Time</span>
                 <span class="msm-system-metric-value msm-mono" id="systemTime">--</span>
             </div>
-            <?php if ($isPlayerMode): ?>
             <div class="msm-system-metric">
                 <span class="msm-system-metric-label">Step Time</span>
                 <span class="msm-system-metric-value" id="systemStepTime">--</span>
             </div>
+            <?php if ($isPlayerMode): ?>
             <div class="msm-system-metric">
                 <span class="msm-system-metric-label">Channels</span>
                 <span class="msm-system-metric-value" id="systemChannels">--</span>
@@ -167,6 +170,10 @@ renderCommonJS();
             <div class="msm-system-metric">
                 <span class="msm-system-metric-label">Max Frame Drift</span>
                 <span class="msm-system-metric-value" id="systemMaxDrift">--</span>
+            </div>
+            <div class="msm-system-metric">
+                <span class="msm-system-metric-label">Packet Rate</span>
+                <span class="msm-system-metric-value" id="systemPacketRate">--</span>
             </div>
             <?php endif; ?>
             <div class="msm-system-metric">
@@ -207,6 +214,61 @@ renderCommonJS();
             </div>
         </div>
     </div>
+
+    <?php if ($isRemoteMode): ?>
+    <!-- Sync Source Card (Remote Mode) -->
+    <div class="msm-sync-source-card" id="syncSourceCard">
+        <div class="msm-sync-source-header">
+            <i class="fas fa-crown"></i>
+            <span>Sync Source</span>
+        </div>
+        <div class="msm-sync-source-body">
+            <div class="msm-sync-source-info">
+                <div class="msm-sync-source-main">
+                    <span class="msm-sync-source-label">Player</span>
+                    <span class="msm-sync-source-value" id="syncSourceHostname">Searching...</span>
+                </div>
+                <div class="msm-sync-source-detail">
+                    <span class="msm-sync-source-label">IP Address</span>
+                    <span class="msm-sync-source-value" id="syncSourceIP">--</span>
+                </div>
+                <div class="msm-sync-source-detail">
+                    <span class="msm-sync-source-label">Status</span>
+                    <span class="msm-sync-source-value" id="syncSourceStatus">--</span>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Local vs Sync Comparison Card (Remote Mode) -->
+    <div class="msm-comparison-card" id="comparisonCard">
+        <div class="msm-comparison-header">
+            <i class="fas fa-balance-scale"></i>
+            <span>Local vs Sync Packets</span>
+            <span class="msm-comparison-status" id="comparisonStatus">--</span>
+        </div>
+        <div class="msm-comparison-body">
+            <div class="msm-comparison-row">
+                <span class="msm-comparison-label">Sequence</span>
+                <span class="msm-comparison-local" id="compLocalSeq">--</span>
+                <span class="msm-comparison-vs">=</span>
+                <span class="msm-comparison-sync" id="compSyncSeq">--</span>
+            </div>
+            <div class="msm-comparison-row">
+                <span class="msm-comparison-label">Status</span>
+                <span class="msm-comparison-local" id="compLocalStatus">--</span>
+                <span class="msm-comparison-vs">=</span>
+                <span class="msm-comparison-sync" id="compSyncStatus">--</span>
+            </div>
+            <div class="msm-comparison-row">
+                <span class="msm-comparison-label">Media</span>
+                <span class="msm-comparison-local" id="compLocalMedia">--</span>
+                <span class="msm-comparison-vs">=</span>
+                <span class="msm-comparison-sync" id="compSyncMedia">--</span>
+            </div>
+        </div>
+    </div>
+    <?php endif; ?>
 
     <?php if ($isPlayerMode): ?>
     <!-- Stats Summary (Player Mode Only) -->
@@ -400,6 +462,12 @@ let sequenceMeta = null;
 let lastSequenceName = null;
 let clockDriftData = {}; // Map of address -> drift_ms
 
+// Remote mode tracking
+let lastPacketCount = 0;
+let lastPacketTime = null;
+let packetRate = 0;
+let localFppStatus = null;
+
 // Quality colors
 const QUALITY_COLORS = {
     good: '#28a745',
@@ -449,9 +517,13 @@ async function loadAllData() {
         if (IS_PLAYER_MODE) {
             await loadComparison(localIssues);
         } else {
-            // Remote mode - show local issues and packet summary
+            // Remote mode - show local issues, packet summary, and remote-specific cards
             updateIssues(localIssues);
             updatePacketSummary(status);
+            updateSyncSource();
+            updateSyncHealth(status, localIssues);
+            updatePacketRate(status);
+            await updateLocalComparison(status);
         }
 
         // Load network quality and clock drift data (player mode only)
@@ -479,8 +551,8 @@ async function updateSystemCard(status) {
     document.getElementById('systemSequence').textContent = displayName;
     document.getElementById('systemStatus').textContent = status.sequencePlaying ? 'Playing' : 'Idle';
 
-    // Fetch sequence metadata if sequence changed (player mode only)
-    if (IS_PLAYER_MODE && seqName && seqName !== lastSequenceName) {
+    // Fetch sequence metadata if sequence changed (remotes have sequences too)
+    if (seqName && seqName !== lastSequenceName) {
         lastSequenceName = seqName;
         try {
             const metaResp = await fetch(`/api/sequence/${encodeURIComponent(seqName)}/meta`);
@@ -497,12 +569,19 @@ async function updateSystemCard(status) {
         lastSequenceName = null;
     }
 
+    // Determine if actively syncing
+    // For player: use sequencePlaying flag
+    // For remote: check if receiving sync packets recently (within 5 seconds)
+    const isActivelySyncing = IS_PLAYER_MODE
+        ? status.sequencePlaying
+        : (status.secondsSinceLastSync !== undefined && status.secondsSinceLastSync >= 0 && status.secondsSinceLastSync < 5);
+
     // Frame counter: current / total
     const frame = status.lastMasterFrame || 0;
     const totalFrames = sequenceMeta?.NumFrames || 0;
-    if (status.sequencePlaying && totalFrames > 0) {
+    if (isActivelySyncing && totalFrames > 0) {
         document.getElementById('systemFrame').textContent = `${frame.toLocaleString()} / ${totalFrames.toLocaleString()}`;
-    } else if (status.sequencePlaying) {
+    } else if (isActivelySyncing && frame > 0) {
         document.getElementById('systemFrame').textContent = frame.toLocaleString();
     } else {
         document.getElementById('systemFrame').textContent = '--';
@@ -512,23 +591,24 @@ async function updateSystemCard(status) {
     const secs = status.lastMasterSeconds || 0;
     const stepTime = sequenceMeta?.StepTime || 25;
     const totalSecs = totalFrames > 0 ? (totalFrames * stepTime / 1000) : 0;
-    if (status.sequencePlaying && totalSecs > 0) {
+    if (isActivelySyncing && totalSecs > 0) {
         document.getElementById('systemTime').textContent = `${formatTime(secs)} / ${formatTime(totalSecs)}`;
-    } else if (status.sequencePlaying) {
+    } else if (isActivelySyncing && secs > 0) {
         document.getElementById('systemTime').textContent = formatTime(secs);
     } else {
         document.getElementById('systemTime').textContent = '--';
     }
 
+    // Sequence metadata - show step time with calculated FPS (both modes)
+    if (sequenceMeta) {
+        const fps = Math.round(1000 / sequenceMeta.StepTime);
+        document.getElementById('systemStepTime').textContent = `${sequenceMeta.StepTime}ms (${fps}fps)`;
+    } else {
+        document.getElementById('systemStepTime').textContent = '--';
+    }
+
     // Player mode only fields
     if (IS_PLAYER_MODE) {
-        // Sequence metadata - show step time with calculated FPS
-        if (sequenceMeta) {
-            const fps = Math.round(1000 / sequenceMeta.StepTime);
-            document.getElementById('systemStepTime').textContent = `${sequenceMeta.StepTime}ms (${fps}fps)`;
-        } else {
-            document.getElementById('systemStepTime').textContent = '--';
-        }
         document.getElementById('systemChannels').textContent = sequenceMeta ? sequenceMeta.ChannelCount.toLocaleString() : '--';
         document.getElementById('systemPacketsSent').textContent = (status.totalPacketsSent || 0).toLocaleString();
     }
@@ -585,6 +665,202 @@ function updatePacketSummary(status) {
     document.getElementById('summarySyncReceived').textContent = (recv.sync || 0).toLocaleString();
     document.getElementById('summaryMediaReceived').textContent = (recv.mediaSync || 0).toLocaleString();
     document.getElementById('summaryCmdReceived').textContent = (recv.command || 0).toLocaleString();
+}
+
+// Remote mode: Update sync source card
+function updateSyncSource() {
+    const hostnameEl = document.getElementById('syncSourceHostname');
+    const ipEl = document.getElementById('syncSourceIP');
+    const statusEl = document.getElementById('syncSourceStatus');
+
+    if (!hostnameEl) return;
+
+    // Find player system from fppSystems
+    const player = fppSystems.find(s => s.fppModeString === 'player' || s.fppMode === 2);
+
+    if (player) {
+        hostnameEl.textContent = player.hostname || 'Unknown';
+        ipEl.textContent = player.address || '--';
+
+        // Check if player was recently seen (within 60 seconds)
+        const lastSeen = player.lastSeen ? new Date(player.lastSeen * 1000) : null;
+        const now = new Date();
+        const secondsAgo = lastSeen ? Math.floor((now - lastSeen) / 1000) : null;
+
+        if (secondsAgo !== null && secondsAgo < 60) {
+            statusEl.textContent = 'Online';
+            statusEl.className = 'msm-sync-source-value status-good';
+        } else if (secondsAgo !== null) {
+            statusEl.textContent = `Last seen ${secondsAgo}s ago`;
+            statusEl.className = 'msm-sync-source-value status-warning';
+        } else {
+            statusEl.textContent = 'Unknown';
+            statusEl.className = 'msm-sync-source-value';
+        }
+    } else {
+        hostnameEl.textContent = 'No player found';
+        ipEl.textContent = '--';
+        statusEl.textContent = 'Not detected';
+        statusEl.className = 'msm-sync-source-value status-warning';
+    }
+}
+
+// Remote mode: Update sync health badge
+function updateSyncHealth(status, issues) {
+    const badge = document.getElementById('syncHealthBadge');
+    if (!badge) return;
+
+    const icon = badge.querySelector('i');
+    const text = badge.querySelector('span');
+
+    const secondsSinceSync = status.secondsSinceLastSync ?? -1;
+    const avgDrift = Math.abs(status.avgFrameDrift ?? 0);
+    const hasIssues = issues && issues.length > 0;
+    const hasCriticalIssues = issues && issues.some(i => i.severity >= 3);
+
+    let health = 'good';
+    let healthText = 'Healthy';
+
+    if (hasCriticalIssues || secondsSinceSync > 30 || avgDrift > 10) {
+        health = 'critical';
+        healthText = 'Critical';
+    } else if (hasIssues || secondsSinceSync > 10 || avgDrift > 5) {
+        health = 'warning';
+        healthText = 'Warning';
+    } else if (secondsSinceSync < 0 || status.totalPacketsReceived === 0) {
+        health = 'unknown';
+        healthText = 'No Data';
+    }
+
+    badge.className = `msm-sync-health msm-sync-health-${health}`;
+    text.textContent = healthText;
+}
+
+// Remote mode: Update packet rate
+function updatePacketRate(status) {
+    const rateEl = document.getElementById('systemPacketRate');
+    if (!rateEl) return;
+
+    const currentCount = status.totalPacketsReceived || 0;
+    const now = Date.now();
+
+    if (lastPacketTime !== null && lastPacketCount > 0) {
+        const elapsed = (now - lastPacketTime) / 1000; // seconds
+        if (elapsed > 0) {
+            const packets = currentCount - lastPacketCount;
+            packetRate = packets / elapsed;
+        }
+    }
+
+    lastPacketCount = currentCount;
+    lastPacketTime = now;
+
+    if (packetRate > 0) {
+        rateEl.textContent = `${packetRate.toFixed(1)}/sec`;
+    } else {
+        rateEl.textContent = '--';
+    }
+}
+
+// Remote mode: Update local vs sync comparison
+async function updateLocalComparison(status) {
+    const localSeqEl = document.getElementById('compLocalSeq');
+    const syncSeqEl = document.getElementById('compSyncSeq');
+    const localStatusEl = document.getElementById('compLocalStatus');
+    const syncStatusEl = document.getElementById('compSyncStatus');
+    const localMediaEl = document.getElementById('compLocalMedia');
+    const syncMediaEl = document.getElementById('compSyncMedia');
+    const compStatusEl = document.getElementById('comparisonStatus');
+
+    if (!localSeqEl) return;
+
+    // Fetch local FPP status
+    try {
+        const resp = await fetch('/api/fppd/status');
+        if (resp.ok) {
+            localFppStatus = await resp.json();
+        }
+    } catch (e) {
+        console.error('Error fetching local FPP status:', e);
+    }
+
+    // Sync packet data
+    const syncSeq = (status.currentMasterSequence || '').replace(/\.fseq$/i, '') || '(none)';
+    const syncPlaying = status.sequencePlaying ? 'Playing' : 'Idle';
+    const syncMedia = status.mediaPlaying ? 'Playing' : 'Idle';
+
+    syncSeqEl.textContent = syncSeq;
+    syncStatusEl.textContent = syncPlaying;
+    syncMediaEl.textContent = syncMedia;
+
+    // Local FPP data
+    let localSeq = '(none)';
+    let localPlaying = 'Idle';
+    let localMedia = 'Idle';
+    let mismatches = 0;
+
+    if (localFppStatus) {
+        localSeq = (localFppStatus.current_sequence || '').replace(/\.fseq$/i, '') || '(none)';
+        localPlaying = localFppStatus.status_name === 'playing' ? 'Playing' : 'Idle';
+        localMedia = localFppStatus.current_song ? 'Playing' : 'Idle';
+    }
+
+    localSeqEl.textContent = localSeq;
+    localStatusEl.textContent = localPlaying;
+    localMediaEl.textContent = localMedia;
+
+    // Check for mismatches
+    const seqMatch = localSeq === syncSeq || (localSeq === '(none)' && syncSeq === '(none)');
+    const statusMatch = localPlaying === syncPlaying;
+    const mediaMatch = localMedia === syncMedia;
+
+    // Update vs indicators
+    updateComparisonVs('compLocalSeq', 'compSyncSeq', seqMatch);
+    updateComparisonVs('compLocalStatus', 'compSyncStatus', statusMatch);
+    updateComparisonVs('compLocalMedia', 'compSyncMedia', mediaMatch);
+
+    if (!seqMatch) mismatches++;
+    if (!statusMatch) mismatches++;
+    if (!mediaMatch) mismatches++;
+
+    // Update overall status
+    if (mismatches === 0) {
+        compStatusEl.textContent = 'Match';
+        compStatusEl.className = 'msm-comparison-status status-good';
+    } else {
+        compStatusEl.textContent = `${mismatches} Mismatch${mismatches > 1 ? 'es' : ''}`;
+        compStatusEl.className = 'msm-comparison-status status-critical';
+    }
+}
+
+function updateComparisonVs(localId, syncId, match) {
+    const localEl = document.getElementById(localId);
+    const syncEl = document.getElementById(syncId);
+
+    if (match) {
+        localEl.classList.remove('mismatch');
+        syncEl.classList.remove('mismatch');
+        // Find and update the vs element
+        const row = localEl.closest('.msm-comparison-row');
+        if (row) {
+            const vs = row.querySelector('.msm-comparison-vs');
+            if (vs) {
+                vs.textContent = '=';
+                vs.classList.remove('mismatch');
+            }
+        }
+    } else {
+        localEl.classList.add('mismatch');
+        syncEl.classList.add('mismatch');
+        const row = localEl.closest('.msm-comparison-row');
+        if (row) {
+            const vs = row.querySelector('.msm-comparison-vs');
+            if (vs) {
+                vs.textContent = '≠';
+                vs.classList.add('mismatch');
+            }
+        }
+    }
 }
 
 async function loadComparison(localIssues) {
@@ -709,14 +985,16 @@ function renderRemoteCards(remotes) {
             const actualStatus = fpp.status || (m.sequencePlaying ? 'playing' : 'idle');
             const statusDisplay = actualStatus === 'playing' ? 'Playing' : 'Idle';
             const pkts = m.totalPacketsReceived !== undefined ? m.totalPacketsReceived.toLocaleString() : '--';
-            const avgDrift = m.avgFrameDrift !== undefined ? m.avgFrameDrift.toFixed(1) : '--';
+            const avgDriftNum = m.avgFrameDrift !== undefined ? Math.abs(m.avgFrameDrift) : null;
+            const avgDrift = avgDriftNum !== null ? avgDriftNum.toFixed(1) : '--';
             const maxDrift = m.maxFrameDrift !== undefined ? Math.abs(m.maxFrameDrift) : null;
             const lastSync = m.secondsSinceLastSync !== undefined ? m.secondsSinceLastSync + 's' : '--';
 
+            // Use avg drift for alerting (max can spike on FPP restart)
             let driftClass = '';
-            if (maxDrift !== null) {
-                if (maxDrift > 10) driftClass = 'critical';
-                else if (maxDrift > 5) driftClass = 'warning';
+            if (avgDriftNum !== null) {
+                if (avgDriftNum > 10) driftClass = 'critical';
+                else if (avgDriftNum > 5) driftClass = 'warning';
                 else driftClass = 'good';
             }
 

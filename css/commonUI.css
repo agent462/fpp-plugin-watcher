@@ -3613,3 +3613,217 @@
     color: #6c757d;
     font-size: 0.85em;
 }
+
+/* ==============================================
+   Remote Mode - Sync Health Badge
+   ============================================== */
+.msm-sync-health {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.4rem;
+    padding: 0.25rem 0.6rem;
+    border-radius: 4px;
+    font-size: 0.8rem;
+    font-weight: 500;
+    margin-left: auto;
+}
+
+.msm-sync-health i {
+    font-size: 0.6rem;
+}
+
+.msm-sync-health-good {
+    background: rgba(40, 167, 69, 0.15);
+    color: #28a745;
+}
+
+.msm-sync-health-warning {
+    background: rgba(255, 193, 7, 0.15);
+    color: #e6a800;
+}
+
+.msm-sync-health-critical {
+    background: rgba(220, 53, 69, 0.15);
+    color: #dc3545;
+}
+
+.msm-sync-health-unknown {
+    background: rgba(108, 117, 125, 0.15);
+    color: #6c757d;
+}
+
+/* ==============================================
+   Remote Mode - Sync Source Card
+   ============================================== */
+.msm-sync-source-card {
+    background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%);
+    border: 1px solid rgba(255, 193, 7, 0.3);
+    border-radius: 8px;
+    padding: 1rem;
+    margin-bottom: 1.5rem;
+}
+
+.msm-sync-source-header {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    color: #ffc107;
+    font-weight: 600;
+    margin-bottom: 0.75rem;
+    padding-bottom: 0.5rem;
+    border-bottom: 1px solid rgba(255, 193, 7, 0.2);
+}
+
+.msm-sync-source-header i {
+    font-size: 1rem;
+}
+
+.msm-sync-source-body {
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+}
+
+.msm-sync-source-info {
+    display: flex;
+    flex-direction: column;
+    gap: 0.4rem;
+}
+
+.msm-sync-source-main {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 0.4rem 0;
+}
+
+.msm-sync-source-main .msm-sync-source-value {
+    font-size: 1.1rem;
+    font-weight: 600;
+    color: #fff;
+}
+
+.msm-sync-source-detail {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 0.25rem 0;
+}
+
+.msm-sync-source-label {
+    color: #adb5bd;
+    font-size: 0.85rem;
+}
+
+.msm-sync-source-value {
+    color: #e9ecef;
+    font-size: 0.9rem;
+}
+
+.msm-sync-source-value.status-good {
+    color: #28a745;
+}
+
+.msm-sync-source-value.status-warning {
+    color: #ffc107;
+}
+
+.msm-sync-source-value.status-critical {
+    color: #dc3545;
+}
+
+/* ==============================================
+   Remote Mode - Local vs Sync Comparison Card
+   ============================================== */
+.msm-comparison-card {
+    background: #1a1a2e;
+    border: 1px solid rgba(23, 162, 184, 0.3);
+    border-radius: 8px;
+    padding: 1rem;
+    margin-bottom: 1.5rem;
+}
+
+.msm-comparison-header {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    color: #17a2b8;
+    font-weight: 600;
+    margin-bottom: 0.75rem;
+    padding-bottom: 0.5rem;
+    border-bottom: 1px solid rgba(23, 162, 184, 0.2);
+}
+
+.msm-comparison-header i {
+    font-size: 1rem;
+}
+
+.msm-comparison-status {
+    margin-left: auto;
+    padding: 0.2rem 0.5rem;
+    border-radius: 4px;
+    font-size: 0.75rem;
+    font-weight: 500;
+}
+
+.msm-comparison-status.status-good {
+    background: rgba(40, 167, 69, 0.15);
+    color: #28a745;
+}
+
+.msm-comparison-status.status-warning {
+    background: rgba(255, 193, 7, 0.15);
+    color: #e6a800;
+}
+
+.msm-comparison-status.status-critical {
+    background: rgba(220, 53, 69, 0.15);
+    color: #dc3545;
+}
+
+.msm-comparison-body {
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+}
+
+.msm-comparison-row {
+    display: grid;
+    grid-template-columns: 80px 1fr 30px 1fr;
+    align-items: center;
+    gap: 0.5rem;
+    padding: 0.4rem 0.5rem;
+    background: rgba(255, 255, 255, 0.03);
+    border-radius: 4px;
+}
+
+.msm-comparison-label {
+    color: #adb5bd;
+    font-size: 0.8rem;
+    font-weight: 500;
+}
+
+.msm-comparison-local,
+.msm-comparison-sync {
+    color: #e9ecef;
+    font-size: 0.85rem;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.msm-comparison-vs {
+    text-align: center;
+    color: #28a745;
+    font-weight: 600;
+    font-size: 0.9rem;
+}
+
+.msm-comparison-vs.mismatch {
+    color: #dc3545;
+}
+
+.msm-comparison-local.mismatch,
+.msm-comparison-sync.mismatch {
+    color: #ffc107;
+}
