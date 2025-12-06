@@ -6,7 +6,7 @@
  * Events are stored in a compact JSON-lines format for space efficiency.
  */
 
-include_once __DIR__ . '/watcherCommon.php';
+include_once __DIR__ . '/../core/watcherCommon.php';
 
 /**
  * Event type constants (short keys for compact storage)

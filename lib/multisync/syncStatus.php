@@ -6,8 +6,8 @@
  * API endpoints for UI dashboard display.
  */
 
-include_once __DIR__ . '/watcherCommon.php';
-include_once __DIR__ . '/apiCall.php';
+include_once __DIR__ . '/../core/watcherCommon.php';
+include_once __DIR__ . '/../core/apiCall.php';
 
 // API base URL for C++ plugin endpoints
 define('WATCHER_MULTISYNC_API_BASE', 'http://127.0.0.1/api/plugin-apis/fpp-plugin-watcher/multisync');

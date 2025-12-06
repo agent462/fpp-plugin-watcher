@@ -7,8 +7,8 @@
 <?php
 // Include FPP common functions and configuration
 include_once "/opt/fpp/www/common.php";
-include_once __DIR__ . "/lib/watcherCommon.php";
-include_once __DIR__ . "/lib/config.php";
+include_once __DIR__ . "/lib/core/watcherCommon.php";
+include_once __DIR__ . "/lib/core/config.php";
 
 $statusMessage = '';
 $statusType = '';
@@ -151,7 +151,7 @@ $resetState = readResetState();
 // Count remote systems for display
 $remoteSystemCount = 0;
 if ($isPlayerMode) {
-    include_once __DIR__ . '/lib/apiCall.php';
+    include_once __DIR__ . '/lib/core/apiCall.php';
     $multiSyncData = apiCall('GET', 'http://127.0.0.1/api/fppd/multiSyncSystems', [], true, 5);
     if ($multiSyncData && isset($multiSyncData['systems']) && is_array($multiSyncData['systems'])) {
         foreach ($multiSyncData['systems'] as $system) {

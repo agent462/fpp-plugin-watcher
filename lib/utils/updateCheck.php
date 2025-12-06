@@ -5,7 +5,7 @@
  * Provides functions for checking plugin updates from GitHub.
  */
 
-include_once __DIR__ . '/watcherCommon.php';
+include_once __DIR__ . '/../core/watcherCommon.php';
 
 define('WATCHER_GITHUB_URL', 'https://raw.githubusercontent.com/agent462/fpp-plugin-watcher/main/pluginInfo.json');
 define('FPP_RELEASES_URL', 'https://api.github.com/repos/FalconChristmas/fpp/releases?per_page=10');

@@ -1,5 +1,5 @@
 <?php
-include_once __DIR__ . "/apiCall.php";
+include_once __DIR__ . "/../core/apiCall.php";
 
 /**
  * Reset network adapter using the most effective method for the interface type
