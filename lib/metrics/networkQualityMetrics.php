@@ -11,9 +11,9 @@
 include_once __DIR__ . "/rollupBase.php";
 include_once __DIR__ . "/../multisync/comparison.php";
 
-// Network quality log file
-define("WATCHERNETWORKQUALITYFILE", WATCHERLOGDIR . "/" . WATCHERPLUGINNAME . "-network-quality.log");
-define("WATCHERNETWORKQUALITYROLLUPSTATEFILE", WATCHERLOGDIR . "/" . WATCHERPLUGINNAME . "-network-quality-rollup-state.json");
+// Network quality log file (using centralized data directory)
+define("WATCHERNETWORKQUALITYFILE", WATCHERNETWORKQUALITYDIR . "/raw.log");
+define("WATCHERNETWORKQUALITYROLLUPSTATEFILE", WATCHERNETWORKQUALITYDIR . "/rollup-state.json");
 
 // Use shared tier configuration from rollupBase.php (WATCHER_ROLLUP_TIERS)
 // Alias for backward compatibility with existing code
@@ -42,7 +42,7 @@ $_networkQualityJitterState = [];
  * Get rollup file path for a specific tier
  */
 function getNetworkQualityRollupFilePath($tier) {
-    return WATCHERLOGDIR . "/" . WATCHERPLUGINNAME . "-network-quality-{$tier}.log";
+    return WATCHERNETWORKQUALITYDIR . "/{$tier}.log";
 }
 
 /**

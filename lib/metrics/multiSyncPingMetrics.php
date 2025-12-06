@@ -13,9 +13,9 @@ include_once __DIR__ . "/rollupBase.php";
 // Alias for backward compatibility with existing code
 define("WATCHERMULTISYNCROLLUPTIERS", WATCHER_ROLLUP_TIERS);
 
-// Define rollup file paths
-define("WATCHERMULTISYNCROLLUPDIR", dirname(WATCHERMULTISYNCPINGMETRICSFILE));
-define("WATCHERMULTISYNCROLLUPSTATEFILE", WATCHERMULTISYNCROLLUPDIR . "/fpp-plugin-watcher-multisync-rollup-state.json");
+// Define rollup file paths (using centralized data directory)
+define("WATCHERMULTISYNCROLLUPDIR", WATCHERMULTISYNCPINGDIR);
+define("WATCHERMULTISYNCROLLUPSTATEFILE", WATCHERMULTISYNCPINGDIR . "/rollup-state.json");
 
 // Retention period for raw multi-sync metrics (25 hours)
 define("WATCHERMULTISYNCMETRICSRETENTIONSECONDS", 25 * 60 * 60);
@@ -27,7 +27,7 @@ $_multiSyncJitterState = [];
  * Get rollup file path for a specific tier
  */
 function getMultiSyncRollupFilePath($tier) {
-    return WATCHERMULTISYNCROLLUPDIR . "/fpp-plugin-watcher-multisync-ping-{$tier}.log";
+    return WATCHERMULTISYNCPINGDIR . "/{$tier}.log";
 }
 
 /**

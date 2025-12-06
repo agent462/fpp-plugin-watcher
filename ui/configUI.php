@@ -444,6 +444,28 @@ if ($isPlayerMode) {
                 </button>
             </div>
         </form>
+
+        <!-- Data Management Panel (outside form) -->
+        <div class="settingsPanel collapsed">
+            <div class="panelHeader" onclick="watcherTogglePanel(this)">
+                <div class="panelTitle">
+                    <i class="fas fa-database"></i>
+                    Data Management
+                </div>
+                <i class="fas fa-chevron-down panelToggle"></i>
+            </div>
+            <div class="panelBody">
+                <div class="dataWarning">
+                    <i class="fas fa-exclamation-triangle"></i>
+                    <span>Clearing data will remove historical metrics. Data will rebuild over time as new metrics are collected.</span>
+                </div>
+                <div class="dataStatsContainer" id="dataStatsContainer">
+                    <div class="dataStatsLoading">
+                        <i class="fas fa-spinner fa-spin"></i> Loading data statistics...
+                    </div>
+                </div>
+            </div>
+        </div>
     </div>
 
     <script>
@@ -537,4 +559,100 @@ if ($isPlayerMode) {
                 btn.innerHTML = originalHtml;
             }
         }
+
+        // Format bytes to human readable
+        function formatBytes(bytes) {
+            if (bytes === 0) return '0 B';
+            const k = 1024;
+            const sizes = ['B', 'KB', 'MB', 'GB'];
+            const i = Math.floor(Math.log(bytes) / Math.log(k));
+            return parseFloat((bytes / Math.pow(k, i)).toFixed(1)) + ' ' + sizes[i];
+        }
+
+        // Load data statistics
+        async function loadDataStats() {
+            const container = document.getElementById('dataStatsContainer');
+
+            try {
+                const response = await fetch('/api/plugin/fpp-plugin-watcher/data/stats');
+                const result = await response.json();
+
+                if (!result.success) {
+                    container.innerHTML = '<div class="dataStatsError">Failed to load data statistics</div>';
+                    return;
+                }
+
+                let html = '<table class="dataStatsTable"><thead><tr><th>Category</th><th>Files</th><th>Size</th><th>Action</th></tr></thead><tbody>';
+
+                let totalSize = 0;
+                let totalFiles = 0;
+
+                for (const [key, category] of Object.entries(result.categories)) {
+                    totalSize += category.totalSize;
+                    totalFiles += category.fileCount;
+
+                    html += `<tr>
+                        <td>
+                            <strong>${escapeHtml(category.name)}</strong>
+                            <div class="dataDesc">${escapeHtml(category.description)}</div>
+                        </td>
+                        <td>${category.fileCount}</td>
+                        <td>${formatBytes(category.totalSize)}</td>
+                        <td>
+                            <button type="button" class="buttons btn-sm btn-outline-danger"
+                                onclick="clearDataCategory('${escapeHtml(key)}', '${escapeHtml(category.name)}')"
+                                ${category.fileCount === 0 ? 'disabled' : ''}>
+                                <i class="fas fa-trash"></i> Clear
+                            </button>
+                        </td>
+                    </tr>`;
+                }
+
+                html += `</tbody><tfoot><tr><td><strong>Total</strong></td><td>${totalFiles}</td><td>${formatBytes(totalSize)}</td><td></td></tr></tfoot></table>`;
+
+                container.innerHTML = html;
+            } catch (error) {
+                container.innerHTML = '<div class="dataStatsError">Error loading data statistics: ' + escapeHtml(error.message) + '</div>';
+            }
+        }
+
+        // Clear data for a category
+        async function clearDataCategory(category, categoryName) {
+            if (!confirm(`Are you sure you want to clear all ${categoryName} data?\n\nThis action cannot be undone.`)) {
+                return;
+            }
+
+            try {
+                const response = await fetch(`/api/plugin/fpp-plugin-watcher/data/${encodeURIComponent(category)}`, {
+                    method: 'DELETE'
+                });
+
+                const result = await response.json();
+
+                if (result.success) {
+                    loadDataStats();
+                } else {
+                    alert('Failed to clear data: ' + (result.errors?.join(', ') || 'Unknown error'));
+                }
+            } catch (error) {
+                alert('Error clearing data: ' + error.message);
+            }
+        }
+
+        // Load data stats when Data Management panel is expanded
+        document.addEventListener('DOMContentLoaded', function() {
+            const dataPanel = document.querySelector('.settingsPanel:has(#dataStatsContainer)');
+            if (dataPanel) {
+                const observer = new MutationObserver(function(mutations) {
+                    mutations.forEach(function(mutation) {
+                        if (mutation.type === 'attributes' && mutation.attributeName === 'class') {
+                            if (!dataPanel.classList.contains('collapsed')) {
+                                loadDataStats();
+                            }
+                        }
+                    });
+                });
+                observer.observe(dataPanel, { attributes: true });
+            }
+        });
     </script>
