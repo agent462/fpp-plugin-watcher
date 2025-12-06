@@ -54,7 +54,7 @@ renderCommonJS();
                         <dd>Round-trip time to reach each remote system. Lower is better. Good: &lt;50ms, Fair: 50-100ms, Poor: &gt;100ms</dd>
                         <dt>Jitter</dt>
                         <dd>Variation in latency over time (RFC 3550). High jitter can cause sync glitches. Good: &lt;10ms, Fair: 10-25ms</dd>
-                        <dt>Packet Loss</dt>
+                        <dt>Sync Packet Loss</dt>
                         <dd>Estimated based on sync packet receive rate during playback. FPP sends sync packets every 10 frames (~2-4/sec depending on sequence frame rate).</dd>
                     </dl>
                 </div>
@@ -222,7 +222,7 @@ renderCommonJS();
                 <span class="msm-quality-value" id="qualityJitter">--</span>
             </div>
             <div class="msm-quality-metric">
-                <span class="msm-quality-label">Packet Loss <i class="fas fa-info-circle" style="color: #6c757d; cursor: help; margin-left: 3px; opacity: 0.7;" title="Estimated by comparing expected sync rate (based on sequence step time) with actual packets received. Best-effort detection - may not catch every lost packet."></i></span>
+                <span class="msm-quality-label">Sync Packet Loss <i class="fas fa-info-circle" style="color: #6c757d; cursor: help; margin-left: 3px; opacity: 0.7;" title="Estimated by comparing expected sync rate (based on sequence step time) with actual packets received. Best-effort detection - may not catch every lost packet."></i></span>
                 <span class="msm-quality-value" id="qualityPacketLoss">--</span>
             </div>
         </div>
@@ -266,7 +266,7 @@ renderCommonJS();
         </div>
         <div class="msm-card">
             <div class="msm-card-header">
-                <h3 class="msm-card-title"><i class="fas fa-chart-line"></i> Packet Loss <i class="fas fa-info-circle" style="color: #6c757d; cursor: help; font-size: 0.75em; opacity: 0.7;" title="Estimated by comparing expected sync rate (based on sequence step time) with actual packets received. Best-effort detection - may not catch every lost packet."></i></h3>
+                <h3 class="msm-card-title"><i class="fas fa-chart-line"></i> Sync Packet Loss <i class="fas fa-info-circle" style="color: #6c757d; cursor: help; font-size: 0.75em; opacity: 0.7;" title="Estimated by comparing expected sync rate (based on sequence step time) with actual packets received. Best-effort detection - may not catch every lost packet."></i></h3>
             </div>
             <div class="msm-card-body">
                 <canvas id="packetLossChart" height="200"></canvas>
