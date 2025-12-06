@@ -32,15 +32,15 @@ define("WATCHERPINGROLLUPTIERS", [
     ]
 ]);
 
-// Define rollup file paths
-define("WATCHERPINGROLLUPDIR", dirname(WATCHERPINGMETRICSFILE));
-define("WATCHERPINGROLLUPSTATEFILE", WATCHERPINGROLLUPDIR . "/fpp-plugin-watcher-ping-rollup-state.json");
+// Define rollup file paths (using centralized data directory)
+define("WATCHERPINGROLLUPDIR", WATCHERPINGDIR);
+define("WATCHERPINGROLLUPSTATEFILE", WATCHERPINGDIR . "/rollup-state.json");
 
 /**
  * Get rollup file path for a specific tier
  */
 function getPingRollupFilePath($tier) {
-    return WATCHERPINGROLLUPDIR . "/fpp-plugin-watcher-ping-{$tier}.log";
+    return WATCHERPINGDIR . "/{$tier}.log";
 }
 
 /**

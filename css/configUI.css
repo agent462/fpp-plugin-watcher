@@ -27,3 +27,112 @@
 .badge i {
     font-size: 0.7rem;
 }
+
+/* Data Management Section */
+.dataWarning {
+    display: flex;
+    align-items: flex-start;
+    gap: 0.75rem;
+    padding: 0.75rem 1rem;
+    background: #fff3cd;
+    border: 1px solid #ffc107;
+    border-radius: 0.375rem;
+    color: #856404;
+    margin-bottom: 1rem;
+    font-size: 0.875rem;
+}
+
+.dataWarning i {
+    color: #ffc107;
+    font-size: 1rem;
+    flex-shrink: 0;
+    margin-top: 0.1rem;
+}
+
+.dataStatsContainer {
+    min-height: 100px;
+}
+
+.dataStatsLoading,
+.dataStatsError {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.5rem;
+    padding: 2rem;
+    color: #6c757d;
+}
+
+.dataStatsError {
+    color: #dc3545;
+}
+
+.dataStatsTable {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 0.875rem;
+}
+
+.dataStatsTable th,
+.dataStatsTable td {
+    padding: 0.75rem;
+    text-align: left;
+    border-bottom: 1px solid #dee2e6;
+}
+
+.dataStatsTable th {
+    background: #f8f9fa;
+    font-weight: 600;
+    color: #495057;
+}
+
+.dataStatsTable th:nth-child(2),
+.dataStatsTable th:nth-child(3),
+.dataStatsTable td:nth-child(2),
+.dataStatsTable td:nth-child(3) {
+    text-align: center;
+    width: 80px;
+}
+
+.dataStatsTable th:nth-child(4),
+.dataStatsTable td:nth-child(4) {
+    text-align: center;
+    width: 100px;
+}
+
+.dataStatsTable tbody tr:hover {
+    background: #f8f9fa;
+}
+
+.dataStatsTable tfoot td {
+    background: #f8f9fa;
+    font-weight: 600;
+    border-top: 2px solid #dee2e6;
+}
+
+.dataDesc {
+    font-size: 0.75rem;
+    color: #6c757d;
+    margin-top: 0.25rem;
+}
+
+.btn-sm {
+    padding: 0.25rem 0.5rem;
+    font-size: 0.75rem;
+}
+
+.btn-outline-danger {
+    color: #dc3545;
+    border-color: #dc3545;
+    background: transparent;
+}
+
+.btn-outline-danger:hover:not(:disabled) {
+    background: #dc3545;
+    color: white;
+}
+
+.btn-outline-danger:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+}

@@ -359,6 +359,19 @@ function getEndpointsfpppluginwatcher() {
         'callback' => 'fpppluginWatcherNetworkQualityCollect');
     array_push($result, $ep);
 
+    // Data management endpoints
+    $ep = array(
+        'method' => 'GET',
+        'endpoint' => 'data/stats',
+        'callback' => 'fpppluginWatcherDataStats');
+    array_push($result, $ep);
+
+    $ep = array(
+        'method' => 'DELETE',
+        'endpoint' => 'data/:category',
+        'callback' => 'fpppluginWatcherDataClear');
+    array_push($result, $ep);
+
     return $result;
 }
 
@@ -1337,6 +1350,37 @@ function fpppluginWatcherNetworkQualityHost() {
 // Manually trigger network quality collection
 function fpppluginWatcherNetworkQualityCollect() {
     $result = collectNetworkQualityMetrics();
+    /** @disregard P1010 */
+    return json($result);
+}
+
+// GET /api/plugin/fpp-plugin-watcher/data/stats
+// Get statistics about stored data files
+function fpppluginWatcherDataStats() {
+    $stats = getDataDirectoryStats();
+    /** @disregard P1010 */
+    return json([
+        'success' => true,
+        'categories' => $stats
+    ]);
+}
+
+// DELETE /api/plugin/fpp-plugin-watcher/data/:category
+// Clear all data files in a specific category
+function fpppluginWatcherDataClear() {
+    global $args;
+
+    $category = $args['category'] ?? '';
+
+    if (empty($category)) {
+        /** @disregard P1010 */
+        return json([
+            'success' => false,
+            'error' => 'Category parameter is required'
+        ]);
+    }
+
+    $result = clearDataCategory($category);
     /** @disregard P1010 */
     return json($result);
 }

@@ -3,7 +3,19 @@
 # Manage collectd service based on plugin configuration
 # This runs on every FPP startup to ensure collectd state matches configuration
 
+PLUGIN_DIR="/home/fpp/media/plugins/fpp-plugin-watcher"
 CONFIG_FILE="/home/fpp/media/config/plugin.fpp-plugin-watcher"
+DATA_DIR="/home/fpp/media/plugin-data/fpp-plugin-watcher"
+
+# Create data directories for metrics storage
+echo "Watcher: Ensuring data directories exist..."
+mkdir -p "$DATA_DIR/ping" "$DATA_DIR/multisync-ping" "$DATA_DIR/network-quality" "$DATA_DIR/mqtt" "$DATA_DIR/connectivity"
+chown -R fpp:fpp "$DATA_DIR"
+
+# Run one-time data migration (script checks marker file internally)
+if [ -f "$PLUGIN_DIR/scripts/migrateData.php" ]; then
+    /usr/bin/php "$PLUGIN_DIR/scripts/migrateData.php"
+fi
 
 if [ -f "$CONFIG_FILE" ]; then
     # Read collectdEnabled setting from config file (trim whitespace and quotes)

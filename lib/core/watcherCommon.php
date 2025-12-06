@@ -4,19 +4,30 @@ include_once __DIR__ . "/apiCall.php";
 
 global $settings;
 
-$_watcherPluginInfo = @json_decode(file_get_contents(__DIR__ . '/../pluginInfo.json'), true); // Parse version from pluginInfo.json
+$_watcherPluginInfo = @json_decode(file_get_contents(__DIR__ . '/../../pluginInfo.json'), true); // Parse version from pluginInfo.json
 define("WATCHERPLUGINNAME", 'fpp-plugin-watcher');
 define("WATCHERVERSION", 'v' . ($_watcherPluginInfo['version'] ?? '0.0.0'));
 define("WATCHERPLUGINDIR", $settings['pluginDirectory']."/".WATCHERPLUGINNAME."/");
 define("WATCHERCONFIGFILELOCATION", $settings['configDirectory']."/plugin.".WATCHERPLUGINNAME);
 define("WATCHERLOGDIR", $settings['logDirectory']);
 define("WATCHERLOGFILE", WATCHERLOGDIR."/".WATCHERPLUGINNAME.".log");
-define("WATCHERPINGMETRICSFILE", WATCHERLOGDIR."/".WATCHERPLUGINNAME."-ping-metrics.log");
-define("WATCHERMULTISYNCPINGMETRICSFILE", WATCHERLOGDIR."/".WATCHERPLUGINNAME."-multisync-ping-metrics.log");
-define("WATCHERRESETSTATEFILE", WATCHERLOGDIR."/".WATCHERPLUGINNAME."-reset-state.json");
 define("WATCHERFPPUSER", 'fpp');
 define("WATCHERFPPGROUP", 'fpp');
-define("WATCHERMQTTEVENTSFILE", WATCHERLOGDIR."/".WATCHERPLUGINNAME."-mqtt-events.log");
+
+// Data directory for metrics storage (plugin-data location)
+define("WATCHERDATADIR", $settings['mediaDirectory']."/plugin-data/".WATCHERPLUGINNAME);
+define("WATCHERPINGDIR", WATCHERDATADIR."/ping");
+define("WATCHERMULTISYNCPINGDIR", WATCHERDATADIR."/multisync-ping");
+define("WATCHERNETWORKQUALITYDIR", WATCHERDATADIR."/network-quality");
+define("WATCHERMQTTDIR", WATCHERDATADIR."/mqtt");
+define("WATCHERCONNECTIVITYDIR", WATCHERDATADIR."/connectivity");
+
+// Data file paths (now in plugin-data subdirectories)
+define("WATCHERPINGMETRICSFILE", WATCHERPINGDIR."/raw.log");
+define("WATCHERMULTISYNCPINGMETRICSFILE", WATCHERMULTISYNCPINGDIR."/raw.log");
+define("WATCHERRESETSTATEFILE", WATCHERCONNECTIVITYDIR."/reset-state.json");
+define("WATCHERMQTTEVENTSFILE", WATCHERMQTTDIR."/events.log");
+define("WATCHERMIGRATIONMARKER", WATCHERDATADIR."/.migration-complete");
 define("WATCHERDEFAULTSETTINGS",
     array(
         'connectivityCheckEnabled' => false,
@@ -491,5 +502,154 @@ function restartConnectivityDaemon() {
     logMessage("Connectivity daemon restarted");
 
     return true;
+}
+
+/**
+ * Ensure all data directories exist with proper ownership
+ */
+function ensureDataDirectories() {
+    $dirs = [
+        WATCHERDATADIR,
+        WATCHERPINGDIR,
+        WATCHERMULTISYNCPINGDIR,
+        WATCHERNETWORKQUALITYDIR,
+        WATCHERMQTTDIR,
+        WATCHERCONNECTIVITYDIR
+    ];
+
+    foreach ($dirs as $dir) {
+        if (!is_dir($dir)) {
+            @mkdir($dir, 0755, true);
+            ensureFppOwnership($dir);
+        }
+    }
+}
+
+/**
+ * Get data category definitions for file management
+ * Returns array of category => [name, dir, files pattern]
+ */
+function getDataCategories() {
+    return [
+        'ping' => [
+            'name' => 'Ping Metrics',
+            'dir' => WATCHERPINGDIR,
+            'description' => 'Connectivity ping history and rollups'
+        ],
+        'multisync-ping' => [
+            'name' => 'Multi-Sync Ping',
+            'dir' => WATCHERMULTISYNCPINGDIR,
+            'description' => 'Multi-sync host ping history and rollups'
+        ],
+        'network-quality' => [
+            'name' => 'Network Quality',
+            'dir' => WATCHERNETWORKQUALITYDIR,
+            'description' => 'Network quality metrics (latency, jitter, packet loss)'
+        ],
+        'mqtt' => [
+            'name' => 'MQTT Events',
+            'dir' => WATCHERMQTTDIR,
+            'description' => 'MQTT event history'
+        ],
+        'connectivity' => [
+            'name' => 'Connectivity State',
+            'dir' => WATCHERCONNECTIVITYDIR,
+            'description' => 'Network adapter reset state'
+        ]
+    ];
+}
+
+/**
+ * Get statistics for all data directories
+ * Returns array with category => [files => [], totalSize => int, fileCount => int]
+ */
+function getDataDirectoryStats() {
+    $categories = getDataCategories();
+    $stats = [];
+
+    foreach ($categories as $key => $category) {
+        $dir = $category['dir'];
+        $categoryStats = [
+            'name' => $category['name'],
+            'description' => $category['description'],
+            'files' => [],
+            'totalSize' => 0,
+            'fileCount' => 0
+        ];
+
+        if (is_dir($dir)) {
+            $files = scandir($dir);
+            foreach ($files as $file) {
+                if ($file === '.' || $file === '..') continue;
+                $filePath = $dir . '/' . $file;
+                if (is_file($filePath)) {
+                    $size = filesize($filePath);
+                    $categoryStats['files'][] = [
+                        'name' => $file,
+                        'size' => $size,
+                        'modified' => filemtime($filePath)
+                    ];
+                    $categoryStats['totalSize'] += $size;
+                    $categoryStats['fileCount']++;
+                }
+            }
+        }
+
+        $stats[$key] = $categoryStats;
+    }
+
+    return $stats;
+}
+
+/**
+ * Clear all data files in a specific category
+ * @param string $category Category key (ping, multisync-ping, network-quality, mqtt, connectivity)
+ * @return array [success => bool, deleted => int, errors => []]
+ */
+function clearDataCategory($category) {
+    $categories = getDataCategories();
+
+    if (!isset($categories[$category])) {
+        return ['success' => false, 'deleted' => 0, 'errors' => ['Invalid category']];
+    }
+
+    $dir = $categories[$category]['dir'];
+    $deleted = 0;
+    $errors = [];
+
+    if (!is_dir($dir)) {
+        return ['success' => true, 'deleted' => 0, 'errors' => []];
+    }
+
+    $files = scandir($dir);
+    foreach ($files as $file) {
+        if ($file === '.' || $file === '..') continue;
+        $filePath = $dir . '/' . $file;
+        if (is_file($filePath)) {
+            if (@unlink($filePath)) {
+                $deleted++;
+            } else {
+                $errors[] = "Failed to delete: $file";
+            }
+        }
+    }
+
+    logMessage("Cleared data category '$category': deleted $deleted files" . (count($errors) > 0 ? ", errors: " . implode(', ', $errors) : ''));
+
+    return [
+        'success' => count($errors) === 0,
+        'deleted' => $deleted,
+        'errors' => $errors
+    ];
+}
+
+/**
+ * Format bytes into human-readable size
+ */
+function formatBytesSize($bytes) {
+    if ($bytes < 1024) return $bytes . ' B';
+    if ($bytes < 1048576) return round($bytes / 1024, 1) . ' KB';
+    if ($bytes < 1073741824) return round($bytes / 1048576, 1) . ' MB';
+    return round($bytes / 1073741824, 1) . ' GB';
 }
 ?>
