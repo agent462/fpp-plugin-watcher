@@ -38,6 +38,51 @@ define("WATCHERNETWORKQUALITYRETENTIONSECONDS", 25 * 60 * 60);
 // Jitter state storage (per-host previous latency for RFC 3550 calculation)
 $_networkQualityJitterState = [];
 
+// Cache for sequence step times (avoids repeated API calls)
+$_sequenceStepTimeCache = [];
+
+/**
+ * Get step time for a sequence (cached)
+ * Returns step time in ms, or null if unavailable
+ */
+function getSequenceStepTime($sequenceName) {
+    global $_sequenceStepTimeCache;
+
+    if (empty($sequenceName)) {
+        return null;
+    }
+
+    // Check cache first
+    if (isset($_sequenceStepTimeCache[$sequenceName])) {
+        return $_sequenceStepTimeCache[$sequenceName];
+    }
+
+    // Fetch from API (only on cache miss)
+    $encoded = urlencode($sequenceName);
+    $meta = apiCall('GET', "http://127.0.0.1/api/sequence/{$encoded}/meta", [], true, 2);
+
+    if ($meta && isset($meta['StepTime'])) {
+        $_sequenceStepTimeCache[$sequenceName] = intval($meta['StepTime']);
+        return $_sequenceStepTimeCache[$sequenceName];
+    }
+
+    // Cache null to avoid repeated failed lookups
+    $_sequenceStepTimeCache[$sequenceName] = null;
+    return null;
+}
+
+/**
+ * Calculate expected sync packet rate based on step time
+ * FPP sends sync every 10 frames after frame 32
+ */
+function getExpectedSyncRate($stepTimeMs) {
+    if ($stepTimeMs === null || $stepTimeMs <= 0) {
+        return 2; // Default: assume 50ms (20fps) = 2 pkt/s
+    }
+    $fps = 1000 / $stepTimeMs;
+    return $fps / 10; // Sync sent every 10 frames
+}
+
 /**
  * Get rollup file path for a specific tier
  */
@@ -102,6 +147,16 @@ function collectNetworkQualityMetrics() {
     $playerFppStatus = $comparison['player']['fppStatus'] ?? [];
     $isPlaying = ($playerFppStatus['status'] ?? '') === 'playing';
 
+    // Get sequence step time when playing (cached lookup)
+    $stepTime = null;
+    if ($isPlaying) {
+        // Try 'sequence' first (from comparison data), then 'current_sequence' (from raw fppd/status)
+        $currentSeq = $playerFppStatus['sequence'] ?? $playerFppStatus['current_sequence'] ?? '';
+        if (!empty($currentSeq)) {
+            $stepTime = getSequenceStepTime($currentSeq);
+        }
+    }
+
     foreach ($comparison['remotes'] as $remote) {
         $hostname = $remote['hostname'];
         $address = $remote['address'];
@@ -134,6 +189,7 @@ function collectNetworkQualityMetrics() {
             'playerPacketsSent' => $playerPacketsSent,
             'remotePacketsReceived' => $remotePacketsReceived,
             'isPlaying' => $isPlaying,
+            'stepTime' => $stepTime,
             'pluginInstalled' => $remote['pluginInstalled']
         ];
 
@@ -213,6 +269,7 @@ function aggregateNetworkQualityMetrics($metrics) {
         if (!isset($byHost[$hostname])) {
             $byHost[$hostname] = [
                 'latencies' => [],
+                'stepTimes' => [],
                 'address' => $entry['address'] ?? '',
                 'firstTimestamp' => $ts,
                 'lastTimestamp' => $ts,
@@ -238,6 +295,12 @@ function aggregateNetworkQualityMetrics($metrics) {
         if ($isPlaying) {
             $byHost[$hostname]['playingSampleCount']++;
             $remotePkts = $entry['remotePacketsReceived'] ?? null;
+            $stepTime = $entry['stepTime'] ?? null;
+
+            // Track step times for expected rate calculation
+            if ($stepTime !== null) {
+                $byHost[$hostname]['stepTimes'][] = $stepTime;
+            }
 
             if ($remotePkts !== null) {
                 if ($byHost[$hostname]['firstPlayingPackets'] === null) {
@@ -305,9 +368,10 @@ function aggregateNetworkQualityMetrics($metrics) {
             $hostResult['jitter_quality'] = null;
         }
 
-        // Packet loss calculation - rate stability analysis
-        // Only calculate from samples where player was actively playing
-        // This prevents false spikes during idle->playing transitions
+        // Packet loss estimation based on receive rate during playback
+        // Note: playerPacketsSent counts ALL packet types (channel data, sync, media, commands)
+        // while remotePacketsReceived only counts sync packets - direct comparison is invalid.
+        // Instead, we use receive rate stability during playback as a proxy for network quality.
         $hostResult['packet_loss_pct'] = null;
         $hostResult['packet_loss_quality'] = null;
         $hostResult['receive_rate'] = null;
@@ -318,34 +382,61 @@ function aggregateNetworkQualityMetrics($metrics) {
             $playingTimeWindow = $data['lastPlayingTimestamp'] - $data['firstPlayingTimestamp'];
         }
 
-        // Need at least 2 playing samples (for first and last) to calculate rate
+        // Need at least 2 playing samples and meaningful time window
         if ($data['firstPlayingPackets'] !== null && $data['lastPlayingPackets'] !== null &&
             $data['playingSampleCount'] >= 2 && $playingTimeWindow > 0) {
 
-            $receivedInWindow = $data['lastPlayingPackets'] - $data['firstPlayingPackets'];
-            $receiveRate = $receivedInWindow / $playingTimeWindow; // packets per second
-            $hostResult['receive_rate'] = round($receiveRate, 1);
+            $remoteReceivedDelta = $data['lastPlayingPackets'] - $data['firstPlayingPackets'];
 
-            // FPP typically sends 8-12 sync packets/second during active playback
-            $minExpectedRate = 5; // Minimum acceptable packets/second
-
-            if ($receiveRate < 0.1) {
-                // Essentially no packets received during playback
-                $hostResult['packet_loss_pct'] = 100.0;
-            } else if ($receiveRate < $minExpectedRate) {
-                // Below expected rate - calculate approximate loss
-                $hostResult['packet_loss_pct'] = round((1 - $receiveRate / $minExpectedRate) * 100, 1);
+            // Handle counter reset (plugin restart) - delta goes negative
+            if ($remoteReceivedDelta < 0) {
+                // Counter was reset, can't calculate meaningful rate
+                $hostResult['receive_rate'] = null;
+                $hostResult['packet_loss_pct'] = null;
+                $hostResult['packet_loss_quality'] = null;
             } else {
-                // Good receive rate
-                $hostResult['packet_loss_pct'] = 0.0;
-            }
+                // Calculate receive rate (sync packets per second during playback)
+                $receiveRate = $remoteReceivedDelta / $playingTimeWindow;
+                $hostResult['receive_rate'] = round($receiveRate, 1);
 
-            $hostResult['packet_loss_quality'] = getQualityRating(
-                $hostResult['packet_loss_pct'],
-                PACKET_LOSS_GOOD_PCT,
-                PACKET_LOSS_FAIR_PCT,
-                PACKET_LOSS_POOR_PCT
-            );
+                // FPP rate-limits sync packets: every 4 frames initially, then every 10 frames
+                // after frame 32. See MultiSync.cpp SendSeqSyncPacket() for details.
+                // Expected rate = fps / 10 (e.g., 20fps = 2 pkt/s, 40fps = 4 pkt/s)
+                //
+                // Use median step time from samples to calculate expected rate
+                $stepTimes = $data['stepTimes'] ?? [];
+                if (!empty($stepTimes)) {
+                    sort($stepTimes);
+                    $medianStepTime = $stepTimes[intval(count($stepTimes) / 2)];
+                    $expectedRate = getExpectedSyncRate($medianStepTime);
+                } else {
+                    $expectedRate = 2; // Default: assume 50ms (20fps) = 2 pkt/s
+                }
+
+                if ($receiveRate >= $expectedRate) {
+                    // At or above expected steady-state - no loss
+                    $hostResult['packet_loss_pct'] = 0.0;
+                } else if ($receiveRate >= $expectedRate * 0.5) {
+                    // 50-100% of expected - some loss
+                    $hostResult['packet_loss_pct'] = round((1 - $receiveRate / $expectedRate) * 100, 1);
+                } else if ($receiveRate >= 0.5) {
+                    // Below 50% of expected - significant loss
+                    $hostResult['packet_loss_pct'] = round((1 - $receiveRate / $expectedRate) * 100, 1);
+                } else if ($receiveRate >= 0.1) {
+                    // Almost no packets - severe loss
+                    $hostResult['packet_loss_pct'] = round((1 - $receiveRate / $expectedRate) * 100, 1);
+                } else {
+                    // No packets at all
+                    $hostResult['packet_loss_pct'] = 100.0;
+                }
+
+                $hostResult['packet_loss_quality'] = getQualityRating(
+                    $hostResult['packet_loss_pct'],
+                    PACKET_LOSS_GOOD_PCT,
+                    PACKET_LOSS_FAIR_PCT,
+                    PACKET_LOSS_POOR_PCT
+                );
+            }
         }
         // If not enough playing samples, leave packet_loss as null (not enough data)
 

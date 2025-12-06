@@ -35,6 +35,50 @@ renderCommonJS();
             <button class="btn btn-sm btn-outline-secondary" onclick="loadAllData()">
                 <i class="fas fa-sync-alt"></i> Refresh
             </button>
+            <button class="btn btn-sm btn-outline-info msm-help-btn" onclick="toggleHelpTooltip()" title="Help">
+                <i class="fas fa-question-circle"></i>
+            </button>
+        </div>
+
+        <!-- Help Tooltip -->
+        <div class="msm-help-tooltip" id="helpTooltip">
+            <div class="msm-help-header">
+                <span><i class="fas fa-info-circle"></i> Metrics Guide</span>
+                <button class="msm-help-close" onclick="toggleHelpTooltip()">&times;</button>
+            </div>
+            <div class="msm-help-body">
+                <div class="msm-help-section">
+                    <h4>Network Quality</h4>
+                    <dl>
+                        <dt>Latency</dt>
+                        <dd>Round-trip time to reach each remote system. Lower is better. Good: &lt;50ms, Fair: 50-100ms, Poor: &gt;100ms</dd>
+                        <dt>Jitter</dt>
+                        <dd>Variation in latency over time (RFC 3550). High jitter can cause sync glitches. Good: &lt;10ms, Fair: 10-25ms</dd>
+                        <dt>Packet Loss</dt>
+                        <dd>Estimated based on sync packet receive rate during playback. FPP sends sync packets every 10 frames (~2-4/sec depending on sequence frame rate).</dd>
+                    </dl>
+                </div>
+                <div class="msm-help-section">
+                    <h4>Sync Metrics</h4>
+                    <dl>
+                        <dt>Drift</dt>
+                        <dd>Frame difference between player and remote. Positive = remote is ahead, negative = behind. &gt;5 frames may be noticeable.</dd>
+                        <dt>Step Time</dt>
+                        <dd>Milliseconds per frame from sequence file. Common values: 25ms (40fps), 50ms (20fps).</dd>
+                        <dt>Last Sync</dt>
+                        <dd>Time since last sync packet was received. Should be &lt;1 second during active playback.</dd>
+                    </dl>
+                </div>
+                <div class="msm-help-section">
+                    <h4>Packet Types</h4>
+                    <dl>
+                        <dt>Sync Packets</dt>
+                        <dd>Sequence sync commands (open/start/stop/sync). Sent by player, received by remotes.</dd>
+                        <dt>Media Packets</dt>
+                        <dd>Audio sync for media playback. Keeps audio in sync across systems.</dd>
+                    </dl>
+                </div>
+            </div>
         </div>
     </div>
 
@@ -65,7 +109,7 @@ renderCommonJS();
             <span class="msm-player-mode" id="playerMode"><?php echo $isPlayerMode ? 'Player' : ($isRemoteMode ? 'Remote' : '--'); ?></span>
         </div>
         <div class="msm-player-metrics">
-            <div class="msm-player-metric">
+            <div class="msm-player-metric msm-metric-wide">
                 <span class="msm-player-metric-label">Sequence</span>
                 <span class="msm-player-metric-value" id="playerSequence">--</span>
             </div>
@@ -74,8 +118,20 @@ renderCommonJS();
                 <span class="msm-player-metric-value" id="playerStatus">--</span>
             </div>
             <div class="msm-player-metric">
-                <span class="msm-player-metric-label">Frame / Seconds</span>
-                <span class="msm-player-metric-value" id="playerPosition">--</span>
+                <span class="msm-player-metric-label">Frame</span>
+                <span class="msm-player-metric-value msm-mono" id="playerFrame">--</span>
+            </div>
+            <div class="msm-player-metric">
+                <span class="msm-player-metric-label">Time</span>
+                <span class="msm-player-metric-value msm-mono" id="playerTime">--</span>
+            </div>
+            <div class="msm-player-metric">
+                <span class="msm-player-metric-label">Step Time</span>
+                <span class="msm-player-metric-value" id="playerStepTime">--</span>
+            </div>
+            <div class="msm-player-metric">
+                <span class="msm-player-metric-label">Channels</span>
+                <span class="msm-player-metric-value" id="playerChannels">--</span>
             </div>
             <div class="msm-player-metric">
                 <span class="msm-player-metric-label">Packets Sent</span>
@@ -94,6 +150,38 @@ renderCommonJS();
             <div class="msm-player-metric">
                 <span class="msm-player-metric-label">Last Sync</span>
                 <span class="msm-player-metric-value" id="playerLastSync">--</span>
+            </div>
+        </div>
+        <!-- Sequence Lifecycle Metrics -->
+        <div class="msm-player-lifecycle">
+            <div class="msm-lifecycle-header">
+                <i class="fas fa-film"></i> Sequence Lifecycle
+            </div>
+            <div class="msm-lifecycle-grid">
+                <div class="msm-lifecycle-item">
+                    <span class="msm-lifecycle-label">Open</span>
+                    <span class="msm-lifecycle-value" id="lcSeqOpenPlayer">0</span>
+                </div>
+                <div class="msm-lifecycle-item">
+                    <span class="msm-lifecycle-label">Start</span>
+                    <span class="msm-lifecycle-value" id="lcSeqStartPlayer">0</span>
+                </div>
+                <div class="msm-lifecycle-item">
+                    <span class="msm-lifecycle-label">Stop</span>
+                    <span class="msm-lifecycle-value" id="lcSeqStopPlayer">0</span>
+                </div>
+                <div class="msm-lifecycle-item">
+                    <span class="msm-lifecycle-label">Sync Pkts</span>
+                    <span class="msm-lifecycle-value" id="lcSyncPackets">0</span>
+                </div>
+                <div class="msm-lifecycle-item">
+                    <span class="msm-lifecycle-label">Media Pkts</span>
+                    <span class="msm-lifecycle-value" id="lcMediaPackets">0</span>
+                </div>
+                <div class="msm-lifecycle-item">
+                    <span class="msm-lifecycle-label">Cmd Pkts</span>
+                    <span class="msm-lifecycle-value" id="lcCmdPackets">0</span>
+                </div>
             </div>
         </div>
     </div>
@@ -187,49 +275,40 @@ renderCommonJS();
     </div>
     <?php endif; ?>
 
-    <!-- Packet Statistics & Systems Table -->
-    <div class="msm-two-col">
-        <!-- Packet Stats -->
-        <div class="msm-card">
-            <div class="msm-card-header">
-                <h3 class="msm-card-title"><i class="fas fa-chart-bar"></i> Packet Statistics</h3>
-                <button class="btn btn-sm btn-outline-secondary" onclick="resetMetrics()">
-                    <i class="fas fa-undo"></i> Reset
-                </button>
-            </div>
-            <div class="msm-card-body">
-                <table class="msm-table">
-                    <thead>
-                        <tr><th>Type</th><th>Sent</th><th>Received</th></tr>
-                    </thead>
-                    <tbody id="packetStatsBody">
-                        <tr><td>Sequence Sync</td><td id="pktSyncSent">--</td><td id="pktSyncRecv">--</td></tr>
-                        <tr><td>Media Sync</td><td id="pktMediaSyncSent">--</td><td id="pktMediaSyncRecv">--</td></tr>
-                        <tr><td>Blank</td><td id="pktBlankSent">--</td><td id="pktBlankRecv">--</td></tr>
-                        <tr><td>Plugin</td><td id="pktPluginSent">--</td><td id="pktPluginRecv">--</td></tr>
-                        <tr><td>Command</td><td id="pktCommandSent">--</td><td id="pktCommandRecv">--</td></tr>
-                    </tbody>
-                </table>
-                <div style="margin-top: 1rem; font-size: 0.8rem; color: #6c757d;">
-                    <strong>Lifecycle:</strong>
-                    Seq Open: <span id="lcSeqOpen">0</span> |
-                    Start: <span id="lcSeqStart">0</span> |
-                    Stop: <span id="lcSeqStop">0</span>
-                </div>
-            </div>
+    <!-- All Systems Packet Metrics Table -->
+    <div class="msm-card">
+        <div class="msm-card-header">
+            <h3 class="msm-card-title"><i class="fas fa-chart-bar"></i> System Packet Metrics</h3>
+            <button class="btn btn-sm btn-outline-secondary" onclick="resetMetrics()">
+                <i class="fas fa-undo"></i> Reset
+            </button>
         </div>
-
-        <!-- FPP Systems -->
-        <div class="msm-card">
-            <div class="msm-card-header">
-                <h3 class="msm-card-title"><i class="fas fa-server"></i> Discovered Systems</h3>
-            </div>
-            <div class="msm-card-body" id="fppSystemsContainer" style="max-height: 400px; overflow-y: auto;">
-                <div class="msm-empty">
-                    <i class="fas fa-spinner fa-spin"></i>
-                    <p>Loading systems...</p>
-                </div>
-            </div>
+        <div class="msm-packet-info">
+            <i class="fas fa-info-circle"></i>
+            <span>Packet counts may differ between systems. MultiSync uses UDP broadcast which does not guarantee delivery.
+            Counters reset when FPP restarts, and remotes only count packets while actively listening.
+            Small differences are normal; large gaps may indicate network issues.</span>
+        </div>
+        <div class="msm-card-body msm-table-wrapper">
+            <table class="msm-packet-table" id="systemsPacketTable">
+                <thead>
+                    <tr>
+                        <th data-sort="status" class="msm-th-sortable">Status</th>
+                        <th data-sort="hostname" class="msm-th-sortable msm-th-sorted-asc">Host</th>
+                        <th data-sort="address" class="msm-th-sortable">IP</th>
+                        <th data-sort="type" class="msm-th-sortable">Type</th>
+                        <th data-sort="mode" class="msm-th-sortable">Mode</th>
+                        <th data-sort="syncSent" class="msm-th-sortable msm-th-right" title="Sync Sent">Sync<i class="fas fa-arrow-up"></i></th>
+                        <th data-sort="syncRecv" class="msm-th-sortable msm-th-right" title="Sync Received">Sync<i class="fas fa-arrow-down"></i></th>
+                        <th data-sort="mediaSent" class="msm-th-sortable msm-th-right" title="Media Sent">Media<i class="fas fa-arrow-up"></i></th>
+                        <th data-sort="mediaRecv" class="msm-th-sortable msm-th-right" title="Media Received">Media<i class="fas fa-arrow-down"></i></th>
+                        <th data-sort="total" class="msm-th-sortable msm-th-right">Total</th>
+                    </tr>
+                </thead>
+                <tbody id="systemsPacketBody">
+                    <tr><td colspan="10" class="msm-td-loading"><i class="fas fa-spinner fa-spin"></i> Loading...</td></tr>
+                </tbody>
+            </table>
         </div>
     </div>
 
@@ -244,6 +323,12 @@ const IS_REMOTE_MODE = <?php echo $isRemoteMode ? 'true' : 'false'; ?>;
 let refreshInterval = null;
 let latencyJitterChart = null;
 let packetLossChart = null;
+let localStatus = null;
+let fppSystems = [];
+let systemsData = [];
+let currentSort = { column: 'hostname', direction: 'asc' };
+let sequenceMeta = null;
+let lastSequenceName = null;
 
 // Quality colors
 const QUALITY_COLORS = {
@@ -258,17 +343,29 @@ async function loadAllData() {
     try {
         document.querySelector('.msm-refresh-btn i').classList.add('fa-spin');
 
-        // Load local status from C++ plugin
-        const statusResp = await fetch('/api/plugin-apis/fpp-plugin-watcher/multisync/status');
+        // Load local status from C++ plugin and FPP systems in parallel
+        const [statusResp, systemsResp] = await Promise.all([
+            fetch('/api/plugin-apis/fpp-plugin-watcher/multisync/status'),
+            fetch('/api/fppd/multiSyncSystems')
+        ]);
+
         if (!statusResp.ok) {
             showPluginError('C++ plugin not responding. Restart FPP to load the plugin.');
             return;
         }
 
         const status = await statusResp.json();
+        localStatus = status;
+
+        // Parse FPP systems
+        if (systemsResp.ok) {
+            const sysData = await systemsResp.json();
+            fppSystems = sysData.systems || [];
+        }
+
         hidePluginError();
-        updatePlayerCard(status);
-        updatePacketStats(status);
+        await updatePlayerCard(status);
+        updateLifecycleMetrics(status);
 
         // Load issues from C++ plugin
         const issuesResp = await fetch('/api/plugin-apis/fpp-plugin-watcher/multisync/issues');
@@ -278,17 +375,15 @@ async function loadAllData() {
             localIssues = issuesData.issues || [];
         }
 
-        // If player mode, also load comparison data
+        // If player mode, also load comparison data (which will render systems table)
         if (IS_PLAYER_MODE) {
             await loadComparison(localIssues);
         } else {
-            // Remote mode - just show local issues
+            // Remote mode - just show local issues and local-only systems table
             updateStats(0, 0, 0, localIssues.length);
             updateIssues(localIssues);
+            renderSystemsPacketTable([], status);
         }
-
-        // Load FPP systems
-        await loadFppSystems();
 
         // Load network quality data (player mode only)
         if (IS_PLAYER_MODE) {
@@ -304,14 +399,63 @@ async function loadAllData() {
     }
 }
 
-function updatePlayerCard(status) {
+async function updatePlayerCard(status) {
     document.getElementById('playerHostname').textContent = '<?php echo htmlspecialchars($localSystem['host_name'] ?? gethostname()); ?>';
-    document.getElementById('playerSequence').textContent = status.currentMasterSequence || 'None';
+
+    const seqName = status.currentMasterSequence || '';
+    const displayName = seqName.replace(/\.fseq$/i, '') || 'None';
+    document.getElementById('playerSequence').textContent = displayName;
     document.getElementById('playerStatus').textContent = status.sequencePlaying ? 'Playing' : 'Idle';
 
+    // Fetch sequence metadata if sequence changed
+    if (seqName && seqName !== lastSequenceName) {
+        lastSequenceName = seqName;
+        try {
+            const metaResp = await fetch(`/api/sequence/${encodeURIComponent(seqName)}/meta`);
+            if (metaResp.ok) {
+                sequenceMeta = await metaResp.json();
+            } else {
+                sequenceMeta = null;
+            }
+        } catch (e) {
+            sequenceMeta = null;
+        }
+    } else if (!seqName) {
+        sequenceMeta = null;
+        lastSequenceName = null;
+    }
+
+    // Frame counter: current / total
     const frame = status.lastMasterFrame || 0;
-    const secs = status.lastMasterSeconds !== undefined ? status.lastMasterSeconds.toFixed(1) : '0';
-    document.getElementById('playerPosition').textContent = status.sequencePlaying ? `${frame} / ${secs}s` : '--';
+    const totalFrames = sequenceMeta?.NumFrames || 0;
+    if (status.sequencePlaying && totalFrames > 0) {
+        document.getElementById('playerFrame').textContent = `${frame.toLocaleString()} / ${totalFrames.toLocaleString()}`;
+    } else if (status.sequencePlaying) {
+        document.getElementById('playerFrame').textContent = frame.toLocaleString();
+    } else {
+        document.getElementById('playerFrame').textContent = '--';
+    }
+
+    // Time: elapsed / total
+    const secs = status.lastMasterSeconds || 0;
+    const stepTime = sequenceMeta?.StepTime || 25;
+    const totalSecs = totalFrames > 0 ? (totalFrames * stepTime / 1000) : 0;
+    if (status.sequencePlaying && totalSecs > 0) {
+        document.getElementById('playerTime').textContent = `${formatTime(secs)} / ${formatTime(totalSecs)}`;
+    } else if (status.sequencePlaying) {
+        document.getElementById('playerTime').textContent = formatTime(secs);
+    } else {
+        document.getElementById('playerTime').textContent = '--';
+    }
+
+    // Sequence metadata - show step time with calculated FPS
+    if (sequenceMeta) {
+        const fps = Math.round(1000 / sequenceMeta.StepTime);
+        document.getElementById('playerStepTime').textContent = `${sequenceMeta.StepTime}ms (${fps}fps)`;
+    } else {
+        document.getElementById('playerStepTime').textContent = '--';
+    }
+    document.getElementById('playerChannels').textContent = sequenceMeta ? sequenceMeta.ChannelCount.toLocaleString() : '--';
 
     document.getElementById('playerPacketsSent').textContent = (status.totalPacketsSent || 0).toLocaleString();
     document.getElementById('playerPacketsReceived').textContent = (status.totalPacketsReceived || 0).toLocaleString();
@@ -324,25 +468,29 @@ function updatePlayerCard(status) {
     document.getElementById('playerLastSync').textContent = formatTimeSince(status.secondsSinceLastSync);
 }
 
-function updatePacketStats(status) {
+function formatTime(seconds) {
+    const mins = Math.floor(seconds / 60);
+    const secs = Math.floor(seconds % 60);
+    return `${mins}:${secs.toString().padStart(2, '0')}`;
+}
+
+function updateLifecycleMetrics(status) {
     const sent = status.packetsSent || {};
     const recv = status.packetsReceived || {};
 
-    document.getElementById('pktSyncSent').textContent = (sent.sync || 0).toLocaleString();
-    document.getElementById('pktSyncRecv').textContent = (recv.sync || 0).toLocaleString();
-    document.getElementById('pktMediaSyncSent').textContent = (sent.mediaSync || 0).toLocaleString();
-    document.getElementById('pktMediaSyncRecv').textContent = (recv.mediaSync || 0).toLocaleString();
-    document.getElementById('pktBlankSent').textContent = (sent.blank || 0).toLocaleString();
-    document.getElementById('pktBlankRecv').textContent = (recv.blank || 0).toLocaleString();
-    document.getElementById('pktPluginSent').textContent = (sent.plugin || 0).toLocaleString();
-    document.getElementById('pktPluginRecv').textContent = (recv.plugin || 0).toLocaleString();
-    document.getElementById('pktCommandSent').textContent = (sent.command || 0).toLocaleString();
-    document.getElementById('pktCommandRecv').textContent = (recv.command || 0).toLocaleString();
-
+    // Update player lifecycle metrics in player card
     const lc = status.lifecycle || {};
-    document.getElementById('lcSeqOpen').textContent = lc.seqOpen || 0;
-    document.getElementById('lcSeqStart').textContent = lc.seqStart || 0;
-    document.getElementById('lcSeqStop').textContent = lc.seqStop || 0;
+    document.getElementById('lcSeqOpenPlayer').textContent = (lc.seqOpen || 0).toLocaleString();
+    document.getElementById('lcSeqStartPlayer').textContent = (lc.seqStart || 0).toLocaleString();
+    document.getElementById('lcSeqStopPlayer').textContent = (lc.seqStop || 0).toLocaleString();
+
+    // Show related packet counts (sent + received) for lifecycle context
+    const syncTotal = (sent.sync || 0) + (recv.sync || 0);
+    const mediaTotal = (sent.mediaSync || 0) + (recv.mediaSync || 0);
+    const cmdTotal = (sent.command || 0) + (recv.command || 0);
+    document.getElementById('lcSyncPackets').textContent = syncTotal.toLocaleString();
+    document.getElementById('lcMediaPackets').textContent = mediaTotal.toLocaleString();
+    document.getElementById('lcCmdPackets').textContent = cmdTotal.toLocaleString();
 }
 
 async function loadComparison(localIssues) {
@@ -365,6 +513,9 @@ async function loadComparison(localIssues) {
 
         // Render remote cards
         renderRemoteCards(data.remotes);
+
+        // Render systems packet metrics table (local + remotes)
+        renderSystemsPacketTable(data.remotes, localStatus);
     } catch (e) {
         console.error('Error loading comparison:', e);
     }
@@ -524,73 +675,196 @@ function renderRemoteCards(remotes) {
     }).join('');
 }
 
-async function loadFppSystems() {
-    const container = document.getElementById('fppSystemsContainer');
+function renderSystemsPacketTable(remotes, local) {
+    const tbody = document.getElementById('systemsPacketBody');
+    if (!tbody) return;
 
-    try {
-        const resp = await fetch('/api/fppd/multiSyncSystems');
-        if (!resp.ok) {
-            container.innerHTML = '<p class="text-muted">Unable to load systems</p>';
-            return;
-        }
+    // Build data array for sorting
+    systemsData = [];
 
-        const data = await resp.json();
-        const systems = data.systems || [];
+    // Find local system in fppSystems to get type info
+    const localFpp = fppSystems.find(s => s.local === 1) || {};
+    const localSent = local?.packetsSent || {};
+    const localRecv = local?.packetsReceived || {};
+    const localHostname = '<?php echo htmlspecialchars($localSystem['host_name'] ?? gethostname()); ?>';
 
-        if (systems.length === 0) {
-            container.innerHTML = `<div class="msm-empty"><i class="fas fa-server"></i><p>No systems discovered</p></div>`;
-            return;
-        }
+    // Add local system
+    systemsData.push({
+        isLocal: true,
+        status: 'local',
+        hostname: localHostname,
+        address: localFpp.address || '127.0.0.1',
+        type: localFpp.type || 'FPP',
+        mode: IS_PLAYER_MODE ? 'Player' : (IS_REMOTE_MODE ? 'Remote' : localFpp.fppModeString || '--'),
+        syncSent: localSent.sync || 0,
+        syncRecv: localRecv.sync || 0,
+        mediaSent: localSent.mediaSync || 0,
+        mediaRecv: localRecv.mediaSync || 0,
+        blankSent: localSent.blank || 0,
+        blankRecv: localRecv.blank || 0,
+        hasMetrics: true
+    });
 
-        // Quick ping for bridge nodes
-        const bridgeSystems = systems.filter(s => s.local !== 1 && s.typeId >= 128);
-        let pingStatus = {};
+    // Add remote systems from comparison data
+    if (remotes && remotes.length > 0) {
+        remotes.forEach(remote => {
+            const fppInfo = fppSystems.find(s => s.address === remote.address) || {};
+            const m = remote.metrics || {};
+            const sent = m.packetsSent || {};
+            const recv = m.packetsReceived || {};
 
-        if (bridgeSystems.length > 0) {
-            try {
-                const ipParams = bridgeSystems.map(s => `ips[]=${encodeURIComponent(s.address)}`).join('&');
-                const pingResp = await fetch(`/api/plugin/fpp-plugin-watcher/ping/check?${ipParams}`);
-                if (pingResp.ok) {
-                    const pingData = await pingResp.json();
-                    pingStatus = pingData.results || {};
-                }
-            } catch (e) { }
-        }
-
-        let html = `<table class="msm-table">
-            <thead><tr><th>Status</th><th>Host</th><th>IP</th><th>Type</th><th>Mode</th></tr></thead>
-            <tbody>`;
-
-        systems.forEach(sys => {
-            const isLocal = sys.local === 1;
-            const isBridge = sys.typeId >= 128;
-            const ping = pingStatus[sys.address];
-
-            let isOnline = isLocal || (isBridge ? (ping && ping.reachable) : true);
-            let label = isLocal ? 'Local' : (isOnline ? 'Online' : 'Offline');
-            const indicatorClass = isOnline ? 'msm-indicator-ok' : 'msm-indicator-error';
-
-            html += `<tr>
-                <td><span class="msm-indicator ${indicatorClass}"></span>${escapeHtml(label)}</td>
-                <td>${escapeHtml(sys.hostname)}</td>
-                <td>${escapeHtml(sys.address)}</td>
-                <td>${escapeHtml(sys.type)}</td>
-                <td>${escapeHtml(sys.fppModeString)}</td>
-            </tr>`;
+            systemsData.push({
+                isLocal: false,
+                status: !remote.online ? 'offline' : (!remote.pluginInstalled ? 'no-plugin' : 'online'),
+                hostname: remote.hostname || fppInfo.hostname || remote.address,
+                address: remote.address,
+                type: fppInfo.type || '--',
+                mode: fppInfo.fppModeString || '--',
+                syncSent: sent.sync || 0,
+                syncRecv: recv.sync || 0,
+                mediaSent: sent.mediaSync || 0,
+                mediaRecv: recv.mediaSync || 0,
+                blankSent: sent.blank || 0,
+                blankRecv: recv.blank || 0,
+                hasMetrics: remote.online && remote.pluginInstalled
+            });
         });
-
-        html += '</tbody></table>';
-        container.innerHTML = html;
-    } catch (e) {
-        console.error('Error loading systems:', e);
-        container.innerHTML = '<p class="text-muted">Error loading systems</p>';
     }
+
+    // Add any FPP systems not in comparison (bridge devices, etc.)
+    fppSystems.forEach(sys => {
+        if (sys.local === 1) return;
+        if (systemsData.some(s => s.address === sys.address)) return;
+
+        systemsData.push({
+            isLocal: false,
+            status: 'unknown',
+            hostname: sys.hostname,
+            address: sys.address,
+            type: sys.type || '--',
+            mode: sys.fppModeString || '--',
+            syncSent: 0, syncRecv: 0, mediaSent: 0, mediaRecv: 0, blankSent: 0, blankRecv: 0,
+            hasMetrics: false
+        });
+    });
+
+    sortAndRenderTable();
+    setupTableSorting();
+}
+
+function sortAndRenderTable() {
+    const tbody = document.getElementById('systemsPacketBody');
+    if (!tbody || systemsData.length === 0) return;
+
+    // Sort data
+    const col = currentSort.column;
+    const dir = currentSort.direction === 'asc' ? 1 : -1;
+
+    systemsData.sort((a, b) => {
+        // Local always first
+        if (a.isLocal && !b.isLocal) return -1;
+        if (!a.isLocal && b.isLocal) return 1;
+
+        let valA = a[col];
+        let valB = b[col];
+
+        // Status ordering: local > online > no-plugin > offline > unknown
+        if (col === 'status') {
+            const order = { local: 0, online: 1, 'no-plugin': 2, offline: 3, unknown: 4 };
+            valA = order[valA] ?? 5;
+            valB = order[valB] ?? 5;
+        }
+
+        if (typeof valA === 'string') {
+            return dir * valA.localeCompare(valB);
+        }
+        return dir * (valA - valB);
+    });
+
+    // Render rows
+    tbody.innerHTML = systemsData.map(row => {
+        const statusClass = row.isLocal ? 'msm-status-local' :
+            (row.status === 'online' ? 'msm-status-online' :
+             row.status === 'offline' ? 'msm-status-offline' :
+             row.status === 'no-plugin' ? 'msm-status-noplugin' : 'msm-status-unknown');
+
+        const statusLabel = row.isLocal ? 'Local' :
+            (row.status === 'online' ? 'Online' :
+             row.status === 'offline' ? 'Offline' :
+             row.status === 'no-plugin' ? 'No Plugin' : '--');
+
+        const total = row.syncSent + row.syncRecv + row.mediaSent + row.mediaRecv + row.blankSent + row.blankRecv;
+
+        const dimClass = !row.hasMetrics && !row.isLocal ? 'msm-row-dim' : '';
+
+        return `<tr class="${dimClass}">
+            <td><span class="msm-status-badge ${statusClass}">${statusLabel}</span></td>
+            <td>${row.isLocal ? '<i class="fas fa-home msm-home-icon"></i>' : ''}${escapeHtml(row.hostname)}</td>
+            <td class="msm-td-mono">${escapeHtml(row.address)}</td>
+            <td>${escapeHtml(row.type)}</td>
+            <td>${escapeHtml(row.mode)}</td>
+            <td class="msm-td-num msm-td-sent">${row.hasMetrics ? row.syncSent.toLocaleString() : '--'}</td>
+            <td class="msm-td-num msm-td-recv">${row.hasMetrics ? row.syncRecv.toLocaleString() : '--'}</td>
+            <td class="msm-td-num msm-td-sent">${row.hasMetrics ? row.mediaSent.toLocaleString() : '--'}</td>
+            <td class="msm-td-num msm-td-recv">${row.hasMetrics ? row.mediaRecv.toLocaleString() : '--'}</td>
+            <td class="msm-td-num msm-td-total">${row.hasMetrics ? total.toLocaleString() : '--'}</td>
+        </tr>`;
+    }).join('');
+}
+
+function setupTableSorting() {
+    const table = document.getElementById('systemsPacketTable');
+    if (!table) return;
+
+    table.querySelectorAll('th[data-sort]').forEach(th => {
+        th.onclick = () => {
+            const col = th.dataset.sort;
+            if (currentSort.column === col) {
+                currentSort.direction = currentSort.direction === 'asc' ? 'desc' : 'asc';
+            } else {
+                currentSort.column = col;
+                currentSort.direction = 'asc';
+            }
+
+            // Update header classes
+            table.querySelectorAll('th').forEach(h => {
+                h.classList.remove('msm-th-sorted-asc', 'msm-th-sorted-desc');
+            });
+            th.classList.add(currentSort.direction === 'asc' ? 'msm-th-sorted-asc' : 'msm-th-sorted-desc');
+
+            sortAndRenderTable();
+        };
+    });
 }
 
 async function resetMetrics() {
-    if (!confirm('Reset all multi-sync metrics?')) return;
+    // Get list of remotes with plugin installed
+    const remotesWithPlugin = systemsData.filter(s => !s.isLocal && s.hasMetrics);
+    const remoteCount = remotesWithPlugin.length;
+
+    const msg = remoteCount > 0
+        ? `Reset multi-sync metrics on this system and ${remoteCount} remote${remoteCount > 1 ? 's' : ''}?`
+        : 'Reset all multi-sync metrics?';
+
+    if (!confirm(msg)) return;
+
     try {
-        await fetch('/api/plugin-apis/fpp-plugin-watcher/multisync/reset', { method: 'POST' });
+        // Reset local
+        const requests = [
+            fetch('/api/plugin-apis/fpp-plugin-watcher/multisync/reset', { method: 'POST' })
+        ];
+
+        // Reset all remotes with plugin in parallel
+        remotesWithPlugin.forEach(remote => {
+            requests.push(
+                fetch(`http://${remote.address}/api/plugin-apis/fpp-plugin-watcher/multisync/reset`, {
+                    method: 'POST',
+                    mode: 'cors'
+                }).catch(e => console.warn(`Failed to reset ${remote.hostname}:`, e))
+            );
+        });
+
+        await Promise.all(requests);
         await loadAllData();
     } catch (e) {
         console.error('Error resetting:', e);
@@ -845,9 +1119,24 @@ function hidePluginError() {
     document.getElementById('pluginError').style.display = 'none';
 }
 
+function toggleHelpTooltip() {
+    const tooltip = document.getElementById('helpTooltip');
+    tooltip.classList.toggle('show');
+}
+
+// Close help tooltip when clicking outside
+document.addEventListener('click', (e) => {
+    const tooltip = document.getElementById('helpTooltip');
+    const helpBtn = document.querySelector('.msm-help-btn');
+    if (tooltip && tooltip.classList.contains('show') &&
+        !tooltip.contains(e.target) && !helpBtn.contains(e.target)) {
+        tooltip.classList.remove('show');
+    }
+});
+
 document.addEventListener('DOMContentLoaded', () => {
     loadAllData();
-    refreshInterval = setInterval(loadAllData, 5000);
+    refreshInterval = setInterval(loadAllData, 2000);
 });
 
 window.addEventListener('beforeunload', () => {

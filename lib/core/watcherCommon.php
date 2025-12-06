@@ -527,7 +527,7 @@ function ensureDataDirectories() {
 
 /**
  * Get data category definitions for file management
- * Returns array of category => [name, dir, files pattern]
+ * Returns array of category => [name, dir, description, showFiles, warning]
  */
 function getDataCategories() {
     return [
@@ -555,6 +555,14 @@ function getDataCategories() {
             'name' => 'Connectivity State',
             'dir' => WATCHERCONNECTIVITYDIR,
             'description' => 'Network adapter reset state'
+        ],
+        'collectd' => [
+            'name' => 'Collectd RRD Data',
+            'dir' => '/var/lib/collectd/rrd',
+            'description' => 'System metrics collected by collectd (CPU, memory, disk, etc.)',
+            'showFiles' => false,
+            'recursive' => true,
+            'warning' => 'Collectd uses fixed-size RRD files. Deleting these files will not free storage space unless collectd is disabled first.'
         ]
     ];
 }
@@ -569,29 +577,41 @@ function getDataDirectoryStats() {
 
     foreach ($categories as $key => $category) {
         $dir = $category['dir'];
+        $showFiles = $category['showFiles'] ?? true;
         $categoryStats = [
             'name' => $category['name'],
             'description' => $category['description'],
             'files' => [],
             'totalSize' => 0,
-            'fileCount' => 0
+            'fileCount' => 0,
+            'showFiles' => $showFiles,
+            'recursive' => $category['recursive'] ?? false,
+            'warning' => $category['warning'] ?? null
         ];
 
         if (is_dir($dir)) {
-            $files = scandir($dir);
-            foreach ($files as $file) {
-                if ($file === '.' || $file === '..') continue;
-                $filePath = $dir . '/' . $file;
-                if (is_file($filePath)) {
-                    $size = filesize($filePath);
-                    $categoryStats['files'][] = [
-                        'name' => $file,
-                        'size' => $size,
-                        'modified' => filemtime($filePath)
-                    ];
-                    $categoryStats['totalSize'] += $size;
-                    $categoryStats['fileCount']++;
+            if ($showFiles) {
+                // Standard behavior: list individual files
+                $files = scandir($dir);
+                foreach ($files as $file) {
+                    if ($file === '.' || $file === '..') continue;
+                    $filePath = $dir . '/' . $file;
+                    if (is_file($filePath)) {
+                        $size = filesize($filePath);
+                        $categoryStats['files'][] = [
+                            'name' => $file,
+                            'size' => $size,
+                            'modified' => filemtime($filePath)
+                        ];
+                        $categoryStats['totalSize'] += $size;
+                        $categoryStats['fileCount']++;
+                    }
                 }
+            } else {
+                // For directories like collectd: calculate total size recursively
+                $sizeInfo = getDirectorySizeRecursive($dir);
+                $categoryStats['totalSize'] = $sizeInfo['size'];
+                $categoryStats['fileCount'] = $sizeInfo['count'];
             }
         }
 
@@ -602,8 +622,36 @@ function getDataDirectoryStats() {
 }
 
 /**
+ * Calculate total size of a directory recursively
+ * @param string $dir Directory path
+ * @return array ['size' => int, 'count' => int]
+ */
+function getDirectorySizeRecursive($dir) {
+    $size = 0;
+    $count = 0;
+
+    if (!is_dir($dir)) {
+        return ['size' => 0, 'count' => 0];
+    }
+
+    $iterator = new RecursiveIteratorIterator(
+        new RecursiveDirectoryIterator($dir, RecursiveDirectoryIterator::SKIP_DOTS),
+        RecursiveIteratorIterator::LEAVES_ONLY
+    );
+
+    foreach ($iterator as $file) {
+        if ($file->isFile()) {
+            $size += $file->getSize();
+            $count++;
+        }
+    }
+
+    return ['size' => $size, 'count' => $count];
+}
+
+/**
  * Clear all data files in a specific category
- * @param string $category Category key (ping, multisync-ping, network-quality, mqtt, connectivity)
+ * @param string $category Category key (ping, multisync-ping, network-quality, mqtt, connectivity, collectd)
  * @return array [success => bool, deleted => int, errors => []]
  */
 function clearDataCategory($category) {
@@ -614,6 +662,7 @@ function clearDataCategory($category) {
     }
 
     $dir = $categories[$category]['dir'];
+    $recursive = $categories[$category]['recursive'] ?? false;
     $deleted = 0;
     $errors = [];
 
@@ -621,15 +670,23 @@ function clearDataCategory($category) {
         return ['success' => true, 'deleted' => 0, 'errors' => []];
     }
 
-    $files = scandir($dir);
-    foreach ($files as $file) {
-        if ($file === '.' || $file === '..') continue;
-        $filePath = $dir . '/' . $file;
-        if (is_file($filePath)) {
-            if (@unlink($filePath)) {
-                $deleted++;
-            } else {
-                $errors[] = "Failed to delete: $file";
+    if ($recursive) {
+        // Recursive deletion for directories like collectd
+        $result = clearDirectoryRecursive($dir);
+        $deleted = $result['deleted'];
+        $errors = $result['errors'];
+    } else {
+        // Standard flat directory deletion
+        $files = scandir($dir);
+        foreach ($files as $file) {
+            if ($file === '.' || $file === '..') continue;
+            $filePath = $dir . '/' . $file;
+            if (is_file($filePath)) {
+                if (@unlink($filePath)) {
+                    $deleted++;
+                } else {
+                    $errors[] = "Failed to delete: $file";
+                }
             }
         }
     }
@@ -644,6 +701,76 @@ function clearDataCategory($category) {
 }
 
 /**
+ * Recursively delete all files in a directory (keeps directory structure)
+ * @param string $dir Directory path
+ * @return array ['deleted' => int, 'errors' => []]
+ */
+function clearDirectoryRecursive($dir) {
+    $deleted = 0;
+    $errors = [];
+
+    if (!is_dir($dir)) {
+        return ['deleted' => 0, 'errors' => []];
+    }
+
+    $iterator = new RecursiveIteratorIterator(
+        new RecursiveDirectoryIterator($dir, RecursiveDirectoryIterator::SKIP_DOTS),
+        RecursiveIteratorIterator::LEAVES_ONLY
+    );
+
+    foreach ($iterator as $file) {
+        if ($file->isFile()) {
+            $filePath = $file->getPathname();
+            if (@unlink($filePath)) {
+                $deleted++;
+            } else {
+                $errors[] = "Failed to delete: " . $file->getFilename();
+            }
+        }
+    }
+
+    return ['deleted' => $deleted, 'errors' => $errors];
+}
+
+/**
+ * Delete a specific file within a category
+ * @param string $category Category key
+ * @param string $filename Filename to delete (basename only, no path)
+ * @return array [success => bool, error => string|null]
+ */
+function clearDataFile($category, $filename) {
+    $categories = getDataCategories();
+
+    if (!isset($categories[$category])) {
+        return ['success' => false, 'error' => 'Invalid category'];
+    }
+
+    // Sanitize filename - only allow basename, no directory traversal
+    $filename = basename($filename);
+    if (empty($filename) || $filename === '.' || $filename === '..') {
+        return ['success' => false, 'error' => 'Invalid filename'];
+    }
+
+    $dir = $categories[$category]['dir'];
+    $filePath = $dir . '/' . $filename;
+
+    if (!file_exists($filePath)) {
+        return ['success' => false, 'error' => 'File not found'];
+    }
+
+    if (!is_file($filePath)) {
+        return ['success' => false, 'error' => 'Not a file'];
+    }
+
+    if (@unlink($filePath)) {
+        logMessage("Deleted file '$filename' from category '$category'");
+        return ['success' => true, 'error' => null];
+    }
+
+    return ['success' => false, 'error' => 'Failed to delete file'];
+}
+
+/**
  * Format bytes into human-readable size
  */
 function formatBytesSize($bytes) {
@@ -651,5 +778,61 @@ function formatBytesSize($bytes) {
     if ($bytes < 1048576) return round($bytes / 1024, 1) . ' KB';
     if ($bytes < 1073741824) return round($bytes / 1048576, 1) . ' MB';
     return round($bytes / 1073741824, 1) . ' GB';
+}
+
+/**
+ * Get the last N lines of a file in a category
+ * @param string $category Category key
+ * @param string $filename Filename
+ * @param int $lines Number of lines to return
+ * @return array [success => bool, content => string, error => string|null]
+ */
+function tailDataFile($category, $filename, $lines = 100) {
+    $categories = getDataCategories();
+
+    if (!isset($categories[$category])) {
+        return ['success' => false, 'content' => '', 'error' => 'Invalid category'];
+    }
+
+    // Sanitize filename
+    $filename = basename($filename);
+    if (empty($filename) || $filename === '.' || $filename === '..') {
+        return ['success' => false, 'content' => '', 'error' => 'Invalid filename'];
+    }
+
+    $dir = $categories[$category]['dir'];
+    $filePath = $dir . '/' . $filename;
+
+    if (!file_exists($filePath)) {
+        return ['success' => false, 'content' => '', 'error' => 'File not found'];
+    }
+
+    if (!is_file($filePath) || !is_readable($filePath)) {
+        return ['success' => false, 'content' => '', 'error' => 'Cannot read file'];
+    }
+
+    // Use tail command for efficiency on large files
+    $output = [];
+    $returnVar = 0;
+    exec('tail -n ' . intval($lines) . ' ' . escapeshellarg($filePath) . ' 2>&1', $output, $returnVar);
+
+    if ($returnVar !== 0) {
+        // Fallback to PHP if tail fails
+        $content = file_get_contents($filePath);
+        if ($content === false) {
+            return ['success' => false, 'content' => '', 'error' => 'Failed to read file'];
+        }
+        $allLines = explode("\n", $content);
+        $output = array_slice($allLines, -$lines);
+    }
+
+    return [
+        'success' => true,
+        'content' => implode("\n", $output),
+        'filename' => $filename,
+        'category' => $category,
+        'lines' => count($output),
+        'error' => null
+    ];
 }
 ?>

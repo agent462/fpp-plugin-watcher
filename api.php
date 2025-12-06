@@ -153,7 +153,9 @@ function getEndpointsfpppluginwatcher() {
 
         // Data management
         ['method' => 'GET', 'endpoint' => 'data/stats', 'callback' => 'fpppluginWatcherDataStats'],
+        ['method' => 'GET', 'endpoint' => 'data/:category/:filename/tail', 'callback' => 'fpppluginWatcherDataTail'],
         ['method' => 'DELETE', 'endpoint' => 'data/:category', 'callback' => 'fpppluginWatcherDataClear'],
+        ['method' => 'DELETE', 'endpoint' => 'data/:category/:filename', 'callback' => 'fpppluginWatcherDataClearFile'],
     ];
 }
 
@@ -1003,12 +1005,29 @@ function fpppluginWatcherDataStats() {
     ]);
 }
 
+// GET /api/plugin/fpp-plugin-watcher/data/:category/:filename/tail
+// Get the last N lines of a file
+function fpppluginWatcherDataTail() {
+    $category = params('category');
+    $filename = params('filename');
+    $lines = isset($_GET['lines']) ? max(1, min(1000, intval($_GET['lines']))) : 100;
+
+    if (empty($category) || empty($filename)) {
+        /** @disregard P1010 */
+        return json(['success' => false, 'error' => 'Category and filename required']);
+    }
+
+    $result = tailDataFile($category, $filename, $lines);
+    /** @disregard P1010 */
+    return json($result);
+}
+
 // DELETE /api/plugin/fpp-plugin-watcher/data/:category
 // Clear all data files in a specific category
+// URL: /api/plugin/fpp-plugin-watcher/data/{category}
 function fpppluginWatcherDataClear() {
-    global $args;
-
-    $category = $args['category'] ?? '';
+    // Use limonade's params() function to get route parameters
+    $category = params('category');
 
     if (empty($category)) {
         /** @disregard P1010 */
@@ -1019,6 +1038,27 @@ function fpppluginWatcherDataClear() {
     }
 
     $result = clearDataCategory($category);
+    /** @disregard P1010 */
+    return json($result);
+}
+
+// DELETE /api/plugin/fpp-plugin-watcher/data/:category/:filename
+// Delete a specific file within a category
+// URL: /api/plugin/fpp-plugin-watcher/data/{category}/{filename}
+function fpppluginWatcherDataClearFile() {
+    // Use limonade's params() function to get route parameters
+    $category = params('category');
+    $filename = params('filename');
+
+    if (empty($category) || empty($filename)) {
+        /** @disregard P1010 */
+        return json([
+            'success' => false,
+            'error' => 'Category and filename parameters are required'
+        ]);
+    }
+
+    $result = clearDataFile($category, $filename);
     /** @disregard P1010 */
     return json($result);
 }
