@@ -216,55 +216,103 @@ renderCommonJS();
     </div>
 
     <?php if ($isRemoteMode): ?>
-    <!-- Sync Source Card (Remote Mode) -->
-    <div class="msm-sync-source-card" id="syncSourceCard">
-        <div class="msm-sync-source-header">
-            <i class="fas fa-crown"></i>
-            <span>Sync Source</span>
+    <!-- Issues Panel (Remote Mode - shown first) -->
+    <div class="msm-issues-panel hidden" id="issuesPanel">
+        <div class="msm-issues-header" id="issuesHeader">
+            <span><i class="fas fa-exclamation-triangle"></i> Issues Detected</span>
+            <span id="issueCount">0</span>
         </div>
-        <div class="msm-sync-source-body">
-            <div class="msm-sync-source-info">
-                <div class="msm-sync-source-main">
-                    <span class="msm-sync-source-label">Player</span>
-                    <span class="msm-sync-source-value" id="syncSourceHostname">Searching...</span>
+        <div class="msm-issues-body" id="issuesList"></div>
+    </div>
+
+    <!-- Packet Summary Card (Remote Mode) -->
+    <div class="msm-card">
+        <div class="msm-card-header">
+            <h3 class="msm-card-title"><i class="fas fa-chart-bar"></i> Packet Summary</h3>
+            <button class="btn btn-sm btn-outline-secondary" onclick="resetMetrics()">
+                <i class="fas fa-undo"></i> Reset
+            </button>
+        </div>
+        <div class="msm-card-body">
+            <div class="msm-packet-summary">
+                <div class="msm-packet-summary-item">
+                    <i class="fas fa-arrow-down"></i>
+                    <div class="msm-packet-summary-content">
+                        <span class="msm-packet-summary-value" id="summaryTotalReceived">--</span>
+                        <span class="msm-packet-summary-label">Total Packets Received</span>
+                    </div>
                 </div>
-                <div class="msm-sync-source-detail">
-                    <span class="msm-sync-source-label">IP Address</span>
-                    <span class="msm-sync-source-value" id="syncSourceIP">--</span>
+                <div class="msm-packet-summary-item">
+                    <i class="fas fa-sync"></i>
+                    <div class="msm-packet-summary-content">
+                        <span class="msm-packet-summary-value" id="summarySyncReceived">--</span>
+                        <span class="msm-packet-summary-label">Sync Packets</span>
+                    </div>
                 </div>
-                <div class="msm-sync-source-detail">
-                    <span class="msm-sync-source-label">Status</span>
-                    <span class="msm-sync-source-value" id="syncSourceStatus">--</span>
+                <div class="msm-packet-summary-item">
+                    <i class="fas fa-music"></i>
+                    <div class="msm-packet-summary-content">
+                        <span class="msm-packet-summary-value" id="summaryMediaReceived">--</span>
+                        <span class="msm-packet-summary-label">Media Packets</span>
+                    </div>
+                </div>
+                <div class="msm-packet-summary-item">
+                    <i class="fas fa-terminal"></i>
+                    <div class="msm-packet-summary-content">
+                        <span class="msm-packet-summary-value" id="summaryCmdReceived">--</span>
+                        <span class="msm-packet-summary-label">Command Packets</span>
+                    </div>
                 </div>
             </div>
         </div>
     </div>
 
-    <!-- Local vs Sync Comparison Card (Remote Mode) -->
-    <div class="msm-comparison-card" id="comparisonCard">
-        <div class="msm-comparison-header">
-            <i class="fas fa-balance-scale"></i>
-            <span>Local vs Sync Packets</span>
-            <span class="msm-comparison-status" id="comparisonStatus">--</span>
+    <!-- Side-by-side: Sync Source + Comparison (Remote Mode) -->
+    <div class="msm-remote-cards-row">
+        <!-- Sync Source Card -->
+        <div class="msm-sync-source-card" id="syncSourceCard">
+            <div class="msm-sync-source-header">
+                <i class="fas fa-crown"></i>
+                <span>Sync Source</span>
+            </div>
+            <div class="msm-sync-source-body">
+                <div class="msm-sync-source-info">
+                    <div class="msm-sync-source-main">
+                        <span class="msm-sync-source-label">Player</span>
+                        <span class="msm-sync-source-value" id="syncSourceHostname">Searching...</span>
+                    </div>
+                    <div class="msm-sync-source-detail">
+                        <span class="msm-sync-source-label">IP Address</span>
+                        <span class="msm-sync-source-value" id="syncSourceIP">--</span>
+                    </div>
+                    <div class="msm-sync-source-detail">
+                        <span class="msm-sync-source-label">Status</span>
+                        <span class="msm-sync-source-value" id="syncSourceStatus">--</span>
+                    </div>
+                </div>
+            </div>
         </div>
-        <div class="msm-comparison-body">
-            <div class="msm-comparison-row">
-                <span class="msm-comparison-label">Sequence</span>
-                <span class="msm-comparison-local" id="compLocalSeq">--</span>
-                <span class="msm-comparison-vs">=</span>
-                <span class="msm-comparison-sync" id="compSyncSeq">--</span>
+
+        <!-- Local vs Sync Comparison Card -->
+        <div class="msm-comparison-card" id="comparisonCard">
+            <div class="msm-comparison-header">
+                <i class="fas fa-balance-scale"></i>
+                <span>Local vs Sync Packets</span>
+                <span class="msm-comparison-status" id="comparisonStatus">--</span>
             </div>
-            <div class="msm-comparison-row">
-                <span class="msm-comparison-label">Status</span>
-                <span class="msm-comparison-local" id="compLocalStatus">--</span>
-                <span class="msm-comparison-vs">=</span>
-                <span class="msm-comparison-sync" id="compSyncStatus">--</span>
-            </div>
-            <div class="msm-comparison-row">
-                <span class="msm-comparison-label">Media</span>
-                <span class="msm-comparison-local" id="compLocalMedia">--</span>
-                <span class="msm-comparison-vs">=</span>
-                <span class="msm-comparison-sync" id="compSyncMedia">--</span>
+            <div class="msm-comparison-body">
+                <div class="msm-comparison-row">
+                    <span class="msm-comparison-label">Sequence</span>
+                    <span class="msm-comparison-local" id="compLocalSeq">--</span>
+                    <span class="msm-comparison-vs">=</span>
+                    <span class="msm-comparison-sync" id="compSyncSeq">--</span>
+                </div>
+                <div class="msm-comparison-row">
+                    <span class="msm-comparison-label">Status</span>
+                    <span class="msm-comparison-local" id="compLocalStatus">--</span>
+                    <span class="msm-comparison-vs">=</span>
+                    <span class="msm-comparison-sync" id="compSyncStatus">--</span>
+                </div>
             </div>
         </div>
     </div>
@@ -314,7 +362,8 @@ renderCommonJS();
     </div>
     <?php endif; ?>
 
-    <!-- Issues Panel -->
+    <?php if ($isPlayerMode): ?>
+    <!-- Issues Panel (Player Mode) -->
     <div class="msm-issues-panel hidden" id="issuesPanel">
         <div class="msm-issues-header" id="issuesHeader">
             <span><i class="fas fa-exclamation-triangle"></i> Issues Detected</span>
@@ -323,7 +372,6 @@ renderCommonJS();
         <div class="msm-issues-body" id="issuesList"></div>
     </div>
 
-    <?php if ($isPlayerMode): ?>
     <!-- Remote Systems (Player Mode) -->
     <h3 class="msm-section-header"><i class="fas fa-satellite-dish"></i> Remote Systems Sync Status</h3>
     <div class="msm-remotes-grid" id="remotesGrid">
@@ -397,48 +445,6 @@ renderCommonJS();
                     <tr><td colspan="11" class="msm-td-loading"><i class="fas fa-spinner fa-spin"></i> Loading...</td></tr>
                 </tbody>
             </table>
-        </div>
-    </div>
-    <?php else: ?>
-    <!-- Packet Summary Card (Remote Mode) -->
-    <div class="msm-card">
-        <div class="msm-card-header">
-            <h3 class="msm-card-title"><i class="fas fa-chart-bar"></i> Packet Summary</h3>
-            <button class="btn btn-sm btn-outline-secondary" onclick="resetMetrics()">
-                <i class="fas fa-undo"></i> Reset
-            </button>
-        </div>
-        <div class="msm-card-body">
-            <div class="msm-packet-summary">
-                <div class="msm-packet-summary-item">
-                    <i class="fas fa-arrow-down"></i>
-                    <div class="msm-packet-summary-content">
-                        <span class="msm-packet-summary-value" id="summaryTotalReceived">--</span>
-                        <span class="msm-packet-summary-label">Total Packets Received</span>
-                    </div>
-                </div>
-                <div class="msm-packet-summary-item">
-                    <i class="fas fa-sync"></i>
-                    <div class="msm-packet-summary-content">
-                        <span class="msm-packet-summary-value" id="summarySyncReceived">--</span>
-                        <span class="msm-packet-summary-label">Sync Packets</span>
-                    </div>
-                </div>
-                <div class="msm-packet-summary-item">
-                    <i class="fas fa-music"></i>
-                    <div class="msm-packet-summary-content">
-                        <span class="msm-packet-summary-value" id="summaryMediaReceived">--</span>
-                        <span class="msm-packet-summary-label">Media Packets</span>
-                    </div>
-                </div>
-                <div class="msm-packet-summary-item">
-                    <i class="fas fa-terminal"></i>
-                    <div class="msm-packet-summary-content">
-                        <span class="msm-packet-summary-value" id="summaryCmdReceived">--</span>
-                        <span class="msm-packet-summary-label">Command Packets</span>
-                    </div>
-                </div>
-            </div>
         </div>
     </div>
     <?php endif; ?>
@@ -768,8 +774,6 @@ async function updateLocalComparison(status) {
     const syncSeqEl = document.getElementById('compSyncSeq');
     const localStatusEl = document.getElementById('compLocalStatus');
     const syncStatusEl = document.getElementById('compSyncStatus');
-    const localMediaEl = document.getElementById('compLocalMedia');
-    const syncMediaEl = document.getElementById('compSyncMedia');
     const compStatusEl = document.getElementById('comparisonStatus');
 
     if (!localSeqEl) return;
@@ -787,41 +791,33 @@ async function updateLocalComparison(status) {
     // Sync packet data
     const syncSeq = (status.currentMasterSequence || '').replace(/\.fseq$/i, '') || '(none)';
     const syncPlaying = status.sequencePlaying ? 'Playing' : 'Idle';
-    const syncMedia = status.mediaPlaying ? 'Playing' : 'Idle';
 
     syncSeqEl.textContent = syncSeq;
     syncStatusEl.textContent = syncPlaying;
-    syncMediaEl.textContent = syncMedia;
 
     // Local FPP data
     let localSeq = '(none)';
     let localPlaying = 'Idle';
-    let localMedia = 'Idle';
     let mismatches = 0;
 
     if (localFppStatus) {
         localSeq = (localFppStatus.current_sequence || '').replace(/\.fseq$/i, '') || '(none)';
         localPlaying = localFppStatus.status_name === 'playing' ? 'Playing' : 'Idle';
-        localMedia = localFppStatus.current_song ? 'Playing' : 'Idle';
     }
 
     localSeqEl.textContent = localSeq;
     localStatusEl.textContent = localPlaying;
-    localMediaEl.textContent = localMedia;
 
-    // Check for mismatches
+    // Check for mismatches (sequence and status only - media is optional for remotes)
     const seqMatch = localSeq === syncSeq || (localSeq === '(none)' && syncSeq === '(none)');
     const statusMatch = localPlaying === syncPlaying;
-    const mediaMatch = localMedia === syncMedia;
 
     // Update vs indicators
     updateComparisonVs('compLocalSeq', 'compSyncSeq', seqMatch);
     updateComparisonVs('compLocalStatus', 'compSyncStatus', statusMatch);
-    updateComparisonVs('compLocalMedia', 'compSyncMedia', mediaMatch);
 
     if (!seqMatch) mismatches++;
     if (!statusMatch) mismatches++;
-    if (!mediaMatch) mismatches++;
 
     // Update overall status
     if (mismatches === 0) {
