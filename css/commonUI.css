@@ -3827,3 +3827,24 @@
 .msm-comparison-sync.mismatch {
     color: #ffc107;
 }
+
+/* ==============================================
+   Remote Mode - Side-by-Side Card Row
+   ============================================== */
+.msm-remote-cards-row {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 1rem;
+    margin-bottom: 1.5rem;
+}
+
+.msm-remote-cards-row .msm-sync-source-card,
+.msm-remote-cards-row .msm-comparison-card {
+    margin-bottom: 0;
+}
+
+@media (max-width: 768px) {
+    .msm-remote-cards-row {
+        grid-template-columns: 1fr;
+    }
+}

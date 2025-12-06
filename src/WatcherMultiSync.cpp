@@ -570,12 +570,17 @@ private:
             issues.append(issue);
         }
 
-        // Check drift
-        if (m_frameDriftSamples > 0 && m_maxFrameDrift > MAX_FRAME_DRIFT) {
+        // Check drift (use average, not max - max can spike on FPP restart)
+        double avgDrift = m_frameDriftSamples > 0 ? (m_frameDriftSum / m_frameDriftSamples) : 0.0;
+        if (m_frameDriftSamples > 0 && avgDrift > MAX_FRAME_DRIFT) {
             Json::Value issue;
             issue["type"] = "sync_drift";
-            issue["description"] = "Maximum frame drift of " + std::to_string(m_maxFrameDrift) + " frames detected";
-            issue["severity"] = m_maxFrameDrift > MAX_FRAME_DRIFT * 2 ? 3 : 2;
+            char buf[64];
+            snprintf(buf, sizeof(buf), "Average frame drift of %.1f frames detected", avgDrift);
+            issue["description"] = buf;
+            issue["severity"] = avgDrift > MAX_FRAME_DRIFT * 2 ? 3 : 2;
+            issue["avgDrift"] = avgDrift;
+            issue["maxDrift"] = m_maxFrameDrift;
             issues.append(issue);
         }
 
