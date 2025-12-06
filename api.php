@@ -141,6 +141,10 @@ function getEndpointsfpppluginwatcher() {
         // MultiSync comparison
         ['method' => 'GET', 'endpoint' => 'multisync/comparison', 'callback' => 'fpppluginWatcherMultiSyncComparison'],
         ['method' => 'GET', 'endpoint' => 'multisync/comparison/host', 'callback' => 'fpppluginWatcherMultiSyncComparisonHost'],
+        ['method' => 'GET', 'endpoint' => 'multisync/clock-drift', 'callback' => 'fpppluginWatcherMultiSyncClockDrift'],
+
+        // System time
+        ['method' => 'GET', 'endpoint' => 'time', 'callback' => 'fpppluginWatcherTime'],
         ['method' => 'GET', 'endpoint' => 'outputs/discrepancies', 'callback' => 'fpppluginWatcherOutputDiscrepancies'],
 
         // MQTT events
@@ -940,6 +944,123 @@ function fpppluginWatcherMultiSyncComparisonHost() {
     if (!filter_var($address, FILTER_VALIDATE_IP)) return apiError('Invalid IP address');
     /** @disregard P1010 */
     return json(getSyncComparisonForHost($address));
+}
+
+// GET /api/plugin/fpp-plugin-watcher/time
+// Returns current Unix timestamp in milliseconds for clock sync measurement
+function fpppluginWatcherTime() {
+    /** @disregard P1010 */
+    return json([
+        'success' => true,
+        'time_ms' => round(microtime(true) * 1000),
+        'time_s' => time()
+    ]);
+}
+
+// GET /api/plugin/fpp-plugin-watcher/multisync/clock-drift
+// Measures system clock drift between player and all remote systems
+function fpppluginWatcherMultiSyncClockDrift() {
+    $remoteSystems = getMultiSyncRemoteSystems();
+    if (empty($remoteSystems)) {
+        /** @disregard P1010 */
+        return json(['success' => true, 'hosts' => [], 'message' => 'No remote systems']);
+    }
+
+    // Get local time at start
+    $localTimeStart = microtime(true) * 1000;
+
+    // Parallel fetch from all remotes using curl_multi
+    $mh = curl_multi_init();
+    $handles = [];
+    $timeout = 2;
+
+    foreach ($remoteSystems as $system) {
+        $ch = curl_init("http://{$system['address']}/api/plugin/fpp-plugin-watcher/time");
+        curl_setopt_array($ch, [
+            CURLOPT_RETURNTRANSFER => true,
+            CURLOPT_TIMEOUT => $timeout,
+            CURLOPT_CONNECTTIMEOUT => $timeout,
+            CURLOPT_HTTPHEADER => ['Accept: application/json']
+        ]);
+        curl_multi_add_handle($mh, $ch);
+        $handles[$system['address']] = [
+            'handle' => $ch,
+            'hostname' => $system['hostname'],
+            'requestStart' => microtime(true) * 1000
+        ];
+    }
+
+    // Execute all requests in parallel
+    do {
+        $status = curl_multi_exec($mh, $active);
+        if ($active) curl_multi_select($mh);
+    } while ($active && $status === CURLM_OK);
+
+    // Get local time at end (for RTT calculation)
+    $localTimeEnd = microtime(true) * 1000;
+
+    // Collect results
+    $hosts = [];
+    foreach ($handles as $address => $info) {
+        $ch = $info['handle'];
+        $response = curl_multi_getcontent($ch);
+        $httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+        $totalTime = curl_getinfo($ch, CURLINFO_TOTAL_TIME);
+        curl_multi_remove_handle($mh, $ch);
+        curl_close($ch);
+
+        $hostResult = [
+            'address' => $address,
+            'hostname' => $info['hostname'],
+            'online' => false,
+            'hasPlugin' => false,
+            'drift_ms' => null,
+            'rtt_ms' => null
+        ];
+
+        if ($httpCode === 200 && $response) {
+            $data = json_decode($response, true);
+            if ($data && isset($data['time_ms'])) {
+                $hostResult['online'] = true;
+                $hostResult['hasPlugin'] = true;
+
+                // RTT in milliseconds
+                $rtt = $totalTime * 1000;
+                $hostResult['rtt_ms'] = round($rtt, 1);
+
+                // Calculate drift: remote_time - local_time, adjusted for half RTT
+                // Positive drift = remote is ahead, negative = remote is behind
+                $remoteTime = $data['time_ms'];
+                $localTimeMid = $info['requestStart'] + ($rtt / 2);
+                $drift = $remoteTime - $localTimeMid;
+                $hostResult['drift_ms'] = round($drift);
+            }
+        } elseif ($httpCode > 0) {
+            // Got a response but not our time endpoint (plugin not installed)
+            $hostResult['online'] = true;
+            $hostResult['hasPlugin'] = false;
+        }
+
+        $hosts[] = $hostResult;
+    }
+    curl_multi_close($mh);
+
+    // Calculate summary stats
+    $drifts = array_filter(array_column($hosts, 'drift_ms'), function($v) { return $v !== null; });
+    $summary = [
+        'hostsChecked' => count($hosts),
+        'hostsWithPlugin' => count(array_filter($hosts, function($h) { return $h['hasPlugin']; })),
+        'avgDrift' => count($drifts) > 0 ? round(array_sum($drifts) / count($drifts)) : null,
+        'maxDrift' => count($drifts) > 0 ? max(array_map('abs', $drifts)) : null
+    ];
+
+    /** @disregard P1010 */
+    return json([
+        'success' => true,
+        'localTime' => round($localTimeStart),
+        'hosts' => $hosts,
+        'summary' => $summary
+    ]);
 }
 
 // GET /api/plugin/fpp-plugin-watcher/metrics/network-quality/current
