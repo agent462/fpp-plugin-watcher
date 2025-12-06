@@ -8,7 +8,7 @@ $defaultAdapter = $configuredAdapter === 'default' ? detectActiveNetworkInterfac
 renderCSSIncludes(true);
 renderCommonJS();
 ?>
-<script>window.config = { defaultAdapter: <?php echo json_encode($defaultAdapter); ?> };</script>
+<script>window.config = { defaultAdapter: <?php echo json_encode($defaultAdapter, JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT); ?> };</script>
 
 <div class="metricsContainer">
     <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1.5rem;">

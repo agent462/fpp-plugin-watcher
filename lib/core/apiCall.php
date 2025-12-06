@@ -20,7 +20,9 @@ function apiCall($method, $uri, $data = [], $returnResponse = false, $timeout = 
         curl_setopt($ch, CURLOPT_POST, true);
         curl_setopt($ch, CURLOPT_HTTPHEADER, $headers ?: ['Content-Type: application/json']);
         if (!empty($data)) {
-            settype($data, "string");
+            if (is_array($data)) {
+                $data = json_encode($data);
+            }
             curl_setopt($ch, CURLOPT_POSTFIELDS, $data);
         }
     }
@@ -34,8 +36,12 @@ function apiCall($method, $uri, $data = [], $returnResponse = false, $timeout = 
             }
             curl_setopt($ch, CURLOPT_POSTFIELDS, $data);
         }
+    }
+    // Handle DELETE requests
+    elseif ($method === 'DELETE') {
+        curl_setopt($ch, CURLOPT_CUSTOMREQUEST, 'DELETE');
+        curl_setopt($ch, CURLOPT_HTTPHEADER, $headers ?: ['Content-Type: application/json']);
     } else {
-        // Handle other methods if needed, or throw an error
         curl_close($ch);
         return false; // Unsupported method
     }

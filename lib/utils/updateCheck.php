@@ -64,6 +64,7 @@ function checkWatcherUpdate() {
  */
 function getLatestFPPRelease() {
     // Check cache first
+    $cacheData = null;
     if (file_exists(FPP_RELEASE_CACHE_FILE)) {
         $cacheData = json_decode(file_get_contents(FPP_RELEASE_CACHE_FILE), true);
         if ($cacheData && isset($cacheData['timestamp']) &&
@@ -84,7 +85,7 @@ function getLatestFPPRelease() {
     $response = @file_get_contents(FPP_RELEASES_URL, false, $ctx);
     if ($response === false) {
         // Return cached data if available, even if expired
-        if (isset($cacheData['release'])) {
+        if ($cacheData && isset($cacheData['release'])) {
             return $cacheData['release'];
         }
         return null;
