@@ -269,6 +269,7 @@ function aggregateNetworkQualityMetrics($metrics) {
         if (!isset($byHost[$hostname])) {
             $byHost[$hostname] = [
                 'latencies' => [],
+                'jitters' => [],  // Pre-calculated jitter values from raw data
                 'stepTimes' => [],
                 'address' => $entry['address'] ?? '',
                 'firstTimestamp' => $ts,
@@ -288,6 +289,11 @@ function aggregateNetworkQualityMetrics($metrics) {
 
         if (isset($entry['latency']) && $entry['latency'] !== null) {
             $byHost[$hostname]['latencies'][] = floatval($entry['latency']);
+        }
+
+        // Collect pre-calculated jitter from raw data (used when not enough samples for recalculation)
+        if (isset($entry['jitter']) && $entry['jitter'] !== null) {
+            $byHost[$hostname]['jitters'][] = floatval($entry['jitter']);
         }
 
         // Track packet counts ONLY from samples where player was actively playing
@@ -342,12 +348,42 @@ function aggregateNetworkQualityMetrics($metrics) {
             );
 
             // Calculate jitter from time-ordered latencies (not sorted)
+            // Falls back to pre-calculated jitter values from raw data if not enough latency samples
             $jitterResult = calculateJitterFromLatencies($data['latencies']);
             if ($jitterResult !== null) {
                 $hostResult['jitter_avg'] = $jitterResult['avg'];
                 $hostResult['jitter_max'] = $jitterResult['max'];
+            } else if (!empty($data['jitters'])) {
+                // Use pre-calculated jitter values from raw data
+                $hostResult['jitter_avg'] = round(array_sum($data['jitters']) / count($data['jitters']), 2);
+                $hostResult['jitter_max'] = round(max($data['jitters']), 2);
+            } else {
+                $hostResult['jitter_avg'] = null;
+                $hostResult['jitter_max'] = null;
+            }
+
+            if ($hostResult['jitter_avg'] !== null) {
                 $hostResult['jitter_quality'] = getQualityRating(
-                    $jitterResult['avg'],
+                    $hostResult['jitter_avg'],
+                    JITTER_GOOD_MS,
+                    JITTER_FAIR_MS,
+                    JITTER_POOR_MS
+                );
+            } else {
+                $hostResult['jitter_quality'] = null;
+            }
+        } else {
+            $hostResult['latency_min'] = null;
+            $hostResult['latency_max'] = null;
+            $hostResult['latency_avg'] = null;
+            $hostResult['latency_p95'] = null;
+            $hostResult['latency_quality'] = null;
+            // Still check for pre-calculated jitter even without latency data
+            if (!empty($data['jitters'])) {
+                $hostResult['jitter_avg'] = round(array_sum($data['jitters']) / count($data['jitters']), 2);
+                $hostResult['jitter_max'] = round(max($data['jitters']), 2);
+                $hostResult['jitter_quality'] = getQualityRating(
+                    $hostResult['jitter_avg'],
                     JITTER_GOOD_MS,
                     JITTER_FAIR_MS,
                     JITTER_POOR_MS
@@ -357,15 +393,6 @@ function aggregateNetworkQualityMetrics($metrics) {
                 $hostResult['jitter_max'] = null;
                 $hostResult['jitter_quality'] = null;
             }
-        } else {
-            $hostResult['latency_min'] = null;
-            $hostResult['latency_max'] = null;
-            $hostResult['latency_avg'] = null;
-            $hostResult['latency_p95'] = null;
-            $hostResult['latency_quality'] = null;
-            $hostResult['jitter_avg'] = null;
-            $hostResult['jitter_max'] = null;
-            $hostResult['jitter_quality'] = null;
         }
 
         // Packet loss estimation based on receive rate during playback
@@ -646,8 +673,16 @@ function getNetworkQualityStatus() {
 
 /**
  * Get network quality history for charting
+ * For time ranges up to 6 hours, uses raw data to ensure jitter values.
+ * For longer ranges, uses rollup data for efficiency.
  */
 function getNetworkQualityHistory($hoursBack = 6, $hostname = null) {
+    // For time ranges up to 6 hours, use raw data to ensure we have jitter values
+    // (rollup buckets may only have 1 sample which isn't enough for jitter calculation)
+    if ($hoursBack <= 6) {
+        return getNetworkQualityHistoryFromRaw($hoursBack, $hostname);
+    }
+
     $result = getNetworkQualityMetrics($hoursBack, $hostname);
 
     if (!$result['success']) {
@@ -713,6 +748,143 @@ function getNetworkQualityHistory($hoursBack = 6, $hostname = null) {
         'success' => true,
         'chartData' => $chartData,
         'tier_info' => $result['tier_info'] ?? null
+    ];
+}
+
+/**
+ * Get network quality history from raw data (for short time ranges)
+ * Calculates packet loss across consecutive samples for accuracy
+ */
+function getNetworkQualityHistoryFromRaw($hoursBack, $hostname = null) {
+    $endTime = time();
+    $startTime = $endTime - ($hoursBack * 3600);
+
+    $rawMetrics = readRawNetworkQualityMetrics($startTime);
+
+    // Filter by hostname if specified
+    if ($hostname !== null) {
+        $rawMetrics = array_filter($rawMetrics, function($entry) use ($hostname) {
+            return ($entry['hostname'] ?? '') === $hostname;
+        });
+        $rawMetrics = array_values($rawMetrics);
+    }
+
+    if (empty($rawMetrics)) {
+        return [
+            'success' => true,
+            'chartData' => ['labels' => [], 'latency' => [], 'jitter' => [], 'packetLoss' => []],
+            'tier_info' => ['tier' => 'raw', 'interval' => 60, 'label' => '1 minute (raw)']
+        ];
+    }
+
+    // Sort by timestamp
+    usort($rawMetrics, function($a, $b) {
+        return ($a['timestamp'] ?? 0) - ($b['timestamp'] ?? 0);
+    });
+
+    // Group by host and calculate packet loss between consecutive playing samples
+    $byHost = [];
+    foreach ($rawMetrics as $entry) {
+        $host = $entry['hostname'] ?? 'unknown';
+        if (!isset($byHost[$host])) {
+            $byHost[$host] = [];
+        }
+        $byHost[$host][] = $entry;
+    }
+
+    // Calculate packet loss for each sample based on consecutive playing samples
+    $packetLossByHostTime = [];
+    foreach ($byHost as $host => $samples) {
+        $prevPlaying = null;
+        foreach ($samples as $sample) {
+            $ts = $sample['timestamp'] ?? 0;
+            $isPlaying = !empty($sample['isPlaying']);
+            $remotePkts = $sample['remotePacketsReceived'] ?? null;
+            $stepTime = $sample['stepTime'] ?? null;
+
+            if ($isPlaying && $remotePkts !== null && $prevPlaying !== null) {
+                $timeDelta = $ts - $prevPlaying['timestamp'];
+                $pktDelta = $remotePkts - $prevPlaying['packets'];
+
+                // Handle counter reset (negative delta)
+                if ($pktDelta >= 0 && $timeDelta > 0) {
+                    $receiveRate = $pktDelta / $timeDelta;
+                    $expectedRate = getExpectedSyncRate($stepTime ?? $prevPlaying['stepTime'] ?? 25);
+
+                    if ($receiveRate >= $expectedRate) {
+                        $packetLossByHostTime[$host][$ts] = 0.0;
+                    } else if ($expectedRate > 0) {
+                        $loss = (1 - $receiveRate / $expectedRate) * 100;
+                        $packetLossByHostTime[$host][$ts] = min(100, max(0, round($loss, 1)));
+                    }
+                }
+            }
+
+            if ($isPlaying && $remotePkts !== null) {
+                $prevPlaying = [
+                    'timestamp' => $ts,
+                    'packets' => $remotePkts,
+                    'stepTime' => $stepTime
+                ];
+            }
+        }
+    }
+
+    // Group raw samples into 1-minute buckets
+    $buckets = [];
+    foreach ($rawMetrics as $entry) {
+        $ts = $entry['timestamp'] ?? 0;
+        if ($ts < $startTime) continue;
+
+        $bucketTs = floor($ts / 60) * 60;
+        if (!isset($buckets[$bucketTs])) {
+            $buckets[$bucketTs] = [];
+        }
+        $buckets[$bucketTs][] = $entry;
+    }
+
+    ksort($buckets);
+
+    // Build chart data
+    $chartData = [
+        'labels' => [],
+        'latency' => [],
+        'jitter' => [],
+        'packetLoss' => []
+    ];
+
+    foreach ($buckets as $bucketTs => $bucketMetrics) {
+        $chartData['labels'][] = $bucketTs * 1000; // JS timestamp
+
+        $latencies = [];
+        $jitters = [];
+        $losses = [];
+
+        foreach ($bucketMetrics as $entry) {
+            $host = $entry['hostname'] ?? 'unknown';
+            $ts = $entry['timestamp'] ?? 0;
+
+            if (isset($entry['latency']) && $entry['latency'] !== null) {
+                $latencies[] = floatval($entry['latency']);
+            }
+            if (isset($entry['jitter']) && $entry['jitter'] !== null) {
+                $jitters[] = floatval($entry['jitter']);
+            }
+            // Use pre-calculated packet loss for this sample
+            if (isset($packetLossByHostTime[$host][$ts])) {
+                $losses[] = $packetLossByHostTime[$host][$ts];
+            }
+        }
+
+        $chartData['latency'][] = !empty($latencies) ? round(array_sum($latencies) / count($latencies), 1) : null;
+        $chartData['jitter'][] = !empty($jitters) ? round(array_sum($jitters) / count($jitters), 2) : null;
+        $chartData['packetLoss'][] = !empty($losses) ? round(array_sum($losses) / count($losses), 1) : null;
+    }
+
+    return [
+        'success' => true,
+        'chartData' => $chartData,
+        'tier_info' => ['tier' => 'raw', 'interval' => 60, 'label' => '1 minute (raw)']
     ];
 }
 
