@@ -118,6 +118,28 @@ renderCommonJS();
         </div>
     </div>
 
+    <!-- Network Quality Card -->
+    <div class="msm-quality-card" id="qualityCard">
+        <div class="msm-quality-header">
+            <h3><i class="fas fa-signal"></i> Network Quality</h3>
+            <span class="msm-quality-indicator" id="overallQuality">--</span>
+        </div>
+        <div class="msm-quality-grid">
+            <div class="msm-quality-metric">
+                <span class="msm-quality-label">Avg Latency</span>
+                <span class="msm-quality-value" id="qualityLatency">--</span>
+            </div>
+            <div class="msm-quality-metric">
+                <span class="msm-quality-label">Avg Jitter</span>
+                <span class="msm-quality-value" id="qualityJitter">--</span>
+            </div>
+            <div class="msm-quality-metric">
+                <span class="msm-quality-label">Packet Loss</span>
+                <span class="msm-quality-value" id="qualityPacketLoss">--</span>
+            </div>
+        </div>
+    </div>
+
     <!-- Issues Panel -->
     <div class="msm-issues-panel hidden" id="issuesPanel">
         <div class="msm-issues-header" id="issuesHeader">
@@ -134,6 +156,33 @@ renderCommonJS();
         <div class="msm-empty">
             <i class="fas fa-spinner fa-spin"></i>
             <p>Loading remote systems...</p>
+        </div>
+    </div>
+    <?php endif; ?>
+
+    <!-- Network Quality Charts -->
+    <?php if ($isPlayerMode): ?>
+    <div class="msm-two-col">
+        <div class="msm-card">
+            <div class="msm-card-header">
+                <h3 class="msm-card-title"><i class="fas fa-wave-square"></i> Latency & Jitter</h3>
+                <select id="qualityTimeRange" class="msm-time-select" onchange="loadQualityCharts()">
+                    <option value="1">1 Hour</option>
+                    <option value="6" selected>6 Hours</option>
+                    <option value="24">24 Hours</option>
+                </select>
+            </div>
+            <div class="msm-card-body">
+                <canvas id="latencyJitterChart" height="200"></canvas>
+            </div>
+        </div>
+        <div class="msm-card">
+            <div class="msm-card-header">
+                <h3 class="msm-card-title"><i class="fas fa-chart-line"></i> Packet Loss</h3>
+            </div>
+            <div class="msm-card-body">
+                <canvas id="packetLossChart" height="200"></canvas>
+            </div>
         </div>
     </div>
     <?php endif; ?>
@@ -193,6 +242,17 @@ renderCommonJS();
 const IS_PLAYER_MODE = <?php echo $isPlayerMode ? 'true' : 'false'; ?>;
 const IS_REMOTE_MODE = <?php echo $isRemoteMode ? 'true' : 'false'; ?>;
 let refreshInterval = null;
+let latencyJitterChart = null;
+let packetLossChart = null;
+
+// Quality colors
+const QUALITY_COLORS = {
+    good: '#28a745',
+    fair: '#ffc107',
+    poor: '#fd7e14',
+    critical: '#dc3545',
+    unknown: '#6c757d'
+};
 
 async function loadAllData() {
     try {
@@ -229,6 +289,11 @@ async function loadAllData() {
 
         // Load FPP systems
         await loadFppSystems();
+
+        // Load network quality data (player mode only)
+        if (IS_PLAYER_MODE) {
+            await loadNetworkQuality();
+        }
 
         updateLastRefresh();
     } catch (e) {
@@ -538,6 +603,216 @@ function formatTimeSince(seconds) {
     if (seconds < 3600) return Math.floor(seconds / 60) + 'm';
     if (seconds < 86400) return Math.floor(seconds / 3600) + 'h';
     return Math.floor(seconds / 86400) + 'd';
+}
+
+async function loadNetworkQuality() {
+    try {
+        const resp = await fetch('/api/plugin/fpp-plugin-watcher/metrics/network-quality/current');
+        if (!resp.ok) return;
+
+        const data = await resp.json();
+        if (!data.success) return;
+
+        updateQualityCard(data);
+
+        // Load charts on first load
+        if (!latencyJitterChart) {
+            await loadQualityCharts();
+        }
+    } catch (e) {
+        console.error('Error loading network quality:', e);
+    }
+}
+
+function updateQualityCard(data) {
+    const summary = data.summary || {};
+
+    // Update quality indicator
+    const qualityEl = document.getElementById('overallQuality');
+    const quality = summary.overallQuality || 'unknown';
+    qualityEl.textContent = quality.charAt(0).toUpperCase() + quality.slice(1);
+    qualityEl.className = 'msm-quality-indicator msm-quality-' + quality;
+
+    // Update metrics
+    const latency = summary.avgLatency;
+    document.getElementById('qualityLatency').textContent = latency !== null ? latency + 'ms' : '--';
+
+    const jitter = summary.avgJitter;
+    document.getElementById('qualityJitter').textContent = jitter !== null ? jitter + 'ms' : '--';
+
+    const packetLoss = summary.avgPacketLoss;
+    document.getElementById('qualityPacketLoss').textContent = packetLoss !== null ? packetLoss + '%' : '--';
+
+    // Apply quality colors to values
+    if (data.hosts && data.hosts.length > 0) {
+        const host = data.hosts[0]; // Use first host for now
+        applyQualityClass('qualityLatency', host.latency_quality);
+        applyQualityClass('qualityJitter', host.jitter_quality);
+        applyQualityClass('qualityPacketLoss', host.packet_loss_quality);
+    }
+}
+
+function applyQualityClass(elementId, quality) {
+    const el = document.getElementById(elementId);
+    if (!el) return;
+    el.className = 'msm-quality-value';
+    if (quality) {
+        el.classList.add('msm-quality-' + quality);
+    }
+}
+
+async function loadQualityCharts() {
+    const hours = document.getElementById('qualityTimeRange')?.value || 6;
+
+    try {
+        const resp = await fetch(`/api/plugin/fpp-plugin-watcher/metrics/network-quality/history?hours=${hours}`);
+        if (!resp.ok) return;
+
+        const data = await resp.json();
+        if (!data.success || !data.chartData) return;
+
+        renderLatencyJitterChart(data.chartData);
+        renderPacketLossChart(data.chartData);
+    } catch (e) {
+        console.error('Error loading quality charts:', e);
+    }
+}
+
+function renderLatencyJitterChart(chartData) {
+    const canvas = document.getElementById('latencyJitterChart');
+    if (!canvas) return;
+
+    const ctx = canvas.getContext('2d');
+
+    if (latencyJitterChart) {
+        latencyJitterChart.destroy();
+    }
+
+    const labels = chartData.labels.map(ts => new Date(ts));
+
+    latencyJitterChart = new Chart(ctx, {
+        type: 'line',
+        data: {
+            labels: labels,
+            datasets: [
+                {
+                    label: 'Latency (ms)',
+                    data: chartData.latency,
+                    borderColor: '#17a2b8',
+                    backgroundColor: 'rgba(23, 162, 184, 0.1)',
+                    fill: true,
+                    tension: 0.3,
+                    yAxisID: 'y'
+                },
+                {
+                    label: 'Jitter (ms)',
+                    data: chartData.jitter,
+                    borderColor: '#ffc107',
+                    backgroundColor: 'rgba(255, 193, 7, 0.1)',
+                    fill: false,
+                    tension: 0.3,
+                    yAxisID: 'y'
+                }
+            ]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            interaction: {
+                mode: 'index',
+                intersect: false
+            },
+            plugins: {
+                legend: {
+                    display: true,
+                    position: 'top'
+                }
+            },
+            scales: {
+                x: {
+                    type: 'time',
+                    time: {
+                        displayFormats: {
+                            minute: 'HH:mm',
+                            hour: 'HH:mm'
+                        }
+                    },
+                    ticks: {
+                        maxTicksLimit: 8
+                    }
+                },
+                y: {
+                    beginAtZero: true,
+                    title: {
+                        display: true,
+                        text: 'Milliseconds'
+                    }
+                }
+            }
+        }
+    });
+}
+
+function renderPacketLossChart(chartData) {
+    const canvas = document.getElementById('packetLossChart');
+    if (!canvas) return;
+
+    const ctx = canvas.getContext('2d');
+
+    if (packetLossChart) {
+        packetLossChart.destroy();
+    }
+
+    const labels = chartData.labels.map(ts => new Date(ts));
+
+    packetLossChart = new Chart(ctx, {
+        type: 'line',
+        data: {
+            labels: labels,
+            datasets: [
+                {
+                    label: 'Packet Loss (%)',
+                    data: chartData.packetLoss,
+                    borderColor: '#dc3545',
+                    backgroundColor: 'rgba(220, 53, 69, 0.1)',
+                    fill: true,
+                    tension: 0.3
+                }
+            ]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            plugins: {
+                legend: {
+                    display: true,
+                    position: 'top'
+                }
+            },
+            scales: {
+                x: {
+                    type: 'time',
+                    time: {
+                        displayFormats: {
+                            minute: 'HH:mm',
+                            hour: 'HH:mm'
+                        }
+                    },
+                    ticks: {
+                        maxTicksLimit: 8
+                    }
+                },
+                y: {
+                    beginAtZero: true,
+                    max: 10,
+                    title: {
+                        display: true,
+                        text: 'Packet Loss %'
+                    }
+                }
+            }
+        }
+    });
 }
 
 function updateLastRefresh() {
