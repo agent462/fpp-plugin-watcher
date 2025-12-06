@@ -62,7 +62,7 @@ renderCommonJS();
                     <h4>Sync Metrics</h4>
                     <dl>
                         <dt>Time Drift</dt>
-                        <dd>System clock difference between player and remote. Positive = remote clock is ahead, negative = behind. Large drift (&gt;500ms) may cause sync issues. Uses NTP-style measurement accounting for network round-trip time.</dd>
+                        <dd>System clock difference between player and remote. Positive = remote clock is ahead, negative = behind. Small variations (±100ms) are normal due to network measurement limitations. Uses NTP-style calculation with multiple samples, selecting the lowest RTT for accuracy. Green: &lt;100ms, Yellow: 100ms-1s, Red: &gt;1s.</dd>
                         <dt>Step Time</dt>
                         <dd>Milliseconds per frame from sequence file. Common values: 25ms (40fps), 50ms (20fps).</dd>
                         <dt>Last Sync</dt>
@@ -222,7 +222,7 @@ renderCommonJS();
                 <span class="msm-quality-value" id="qualityJitter">--</span>
             </div>
             <div class="msm-quality-metric">
-                <span class="msm-quality-label">Packet Loss</span>
+                <span class="msm-quality-label">Packet Loss <i class="fas fa-info-circle" style="color: #6c757d; cursor: help; margin-left: 3px; opacity: 0.7;" title="Estimated by comparing expected sync rate (based on sequence step time) with actual packets received. Best-effort detection - may not catch every lost packet."></i></span>
                 <span class="msm-quality-value" id="qualityPacketLoss">--</span>
             </div>
         </div>
@@ -266,7 +266,7 @@ renderCommonJS();
         </div>
         <div class="msm-card">
             <div class="msm-card-header">
-                <h3 class="msm-card-title"><i class="fas fa-chart-line"></i> Packet Loss</h3>
+                <h3 class="msm-card-title"><i class="fas fa-chart-line"></i> Packet Loss <i class="fas fa-info-circle" style="color: #6c757d; cursor: help; font-size: 0.75em; opacity: 0.7;" title="Estimated by comparing expected sync rate (based on sequence step time) with actual packets received. Best-effort detection - may not catch every lost packet."></i></h3>
             </div>
             <div class="msm-card-body">
                 <canvas id="packetLossChart" height="200"></canvas>
@@ -298,7 +298,7 @@ renderCommonJS();
                         <th data-sort="address" class="msm-th-sortable">IP</th>
                         <th data-sort="type" class="msm-th-sortable">Type</th>
                         <th data-sort="mode" class="msm-th-sortable">Mode</th>
-                        <th data-sort="drift" class="msm-th-sortable msm-th-right" title="Time drift from player (negative = behind)">Time Drift</th>
+                        <th data-sort="drift" class="msm-th-sortable msm-th-right">Time Drift <i class="fas fa-info-circle" style="color: #6c757d; cursor: help; font-size: 0.75em; opacity: 0.7;" title="System clock difference from player. Small variations (±100ms) are normal due to measurement limitations. Uses NTP-style calculation that accounts for network round-trip time."></i></th>
                         <th data-sort="syncSent" class="msm-th-sortable msm-th-right" title="Sync Sent">Sync<i class="fas fa-arrow-up"></i></th>
                         <th data-sort="syncRecv" class="msm-th-sortable msm-th-right" title="Sync Received">Sync<i class="fas fa-arrow-down"></i></th>
                         <th data-sort="mediaSent" class="msm-th-sortable msm-th-right" title="Media Sent">Media<i class="fas fa-arrow-up"></i></th>
@@ -827,10 +827,12 @@ function sortAndRenderTable() {
             const driftMs = clockData.drift_ms;
             const absMs = Math.abs(driftMs);
             const sign = driftMs >= 0 ? '+' : '';
-            // Color code: green for <50ms, yellow for 50-500ms, red for >500ms
-            // These thresholds are for system clock drift (more tolerant than frame drift)
-            if (absMs < 50) driftClass = 'msm-drift-good';
-            else if (absMs < 500) driftClass = 'msm-drift-fair';
+            // Color code thresholds - account for network measurement variance
+            // Green: <100ms (well within acceptable range)
+            // Yellow: 100ms-1s (noticeable but may not cause issues)
+            // Red: >1s (likely to cause sync problems)
+            if (absMs < 100) driftClass = 'msm-drift-good';
+            else if (absMs < 1000) driftClass = 'msm-drift-fair';
             else driftClass = 'msm-drift-poor';
             const rttTitle = clockData.rtt_ms ? `RTT: ${clockData.rtt_ms}ms` : '';
             driftDisplay = `<span class="${driftClass}" title="${rttTitle}">${sign}${driftMs}ms</span>`;
