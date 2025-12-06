@@ -15,13 +15,15 @@ include_once __DIR__ . '/../lib/multisync/syncStatus.php';
 $config = readPluginConfig();
 $localSystem = apiCall('GET', 'http://127.0.0.1/api/fppd/status', [], true, 5) ?: [];
 
-// Check if multi-sync is enabled
+// Check if multi-sync is enabled (player-only setting)
 $multiSyncEnabled = ($localSystem['multisync'] ?? false) === true;
 
-// FPP Mode: 2=Player, 6=Remote, 8=Master (deprecated)
-$fppMode = $localSystem['mode'] ?? 0;
-$isRemoteMode = ($fppMode == 6);
-$isPlayerMode = ($fppMode == 2 || $fppMode == 8);
+// FPP Mode detection - use mode_name for clarity
+// mode_name: 'player', 'remote', 'master', 'bridge', etc.
+// mode: 2=Player, 6=Remote, 8=Master (deprecated)
+$modeName = $localSystem['mode_name'] ?? '';
+$isRemoteMode = ($modeName === 'remote');
+$isPlayerMode = ($modeName === 'player' || $modeName === 'master');
 
 renderCSSIncludes(true);
 renderCommonJS();
@@ -91,7 +93,7 @@ renderCommonJS();
         </div>
     </div>
 
-    <?php if (!$multiSyncEnabled): ?>
+    <?php if ($isPlayerMode && !$multiSyncEnabled): ?>
     <div class="msm-notice msm-notice-warning">
         <i class="fas fa-exclamation-triangle"></i>
         <div>
