@@ -469,6 +469,9 @@ if ($isPlayerMode) {
     </div>
 
     <script>
+        // Player mode flag for filtering data categories
+        const isPlayerMode = <?php echo $isPlayerMode ? 'true' : 'false'; ?>;
+
         // Toggle panel collapse
         function watcherTogglePanel(header) {
             const panel = header.closest('.settingsPanel');
@@ -587,6 +590,10 @@ if ($isPlayerMode) {
                 let totalFiles = 0;
 
                 for (const [key, category] of Object.entries(result.categories)) {
+                    // Skip player-only categories when not in player mode
+                    if (category.playerOnly && !isPlayerMode) {
+                        continue;
+                    }
                     totalSize += category.totalSize;
                     totalFiles += category.fileCount;
 

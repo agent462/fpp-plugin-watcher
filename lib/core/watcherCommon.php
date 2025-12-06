@@ -527,7 +527,7 @@ function ensureDataDirectories() {
 
 /**
  * Get data category definitions for file management
- * Returns array of category => [name, dir, description, showFiles, warning]
+ * Returns array of category => [name, dir, description, showFiles, warning, playerOnly]
  */
 function getDataCategories() {
     return [
@@ -539,17 +539,20 @@ function getDataCategories() {
         'multisync-ping' => [
             'name' => 'Multi-Sync Ping',
             'dir' => WATCHERMULTISYNCPINGDIR,
-            'description' => 'Multi-sync host ping history and rollups'
+            'description' => 'Multi-sync host ping history and rollups',
+            'playerOnly' => true
         ],
         'network-quality' => [
             'name' => 'Network Quality',
             'dir' => WATCHERNETWORKQUALITYDIR,
-            'description' => 'Network quality metrics (latency, jitter, packet loss)'
+            'description' => 'Network quality metrics (latency, jitter, packet loss)',
+            'playerOnly' => true
         ],
         'mqtt' => [
             'name' => 'MQTT Events',
             'dir' => WATCHERMQTTDIR,
-            'description' => 'MQTT event history'
+            'description' => 'MQTT event history',
+            'playerOnly' => true
         ],
         'connectivity' => [
             'name' => 'Connectivity State',
@@ -586,7 +589,8 @@ function getDataDirectoryStats() {
             'fileCount' => 0,
             'showFiles' => $showFiles,
             'recursive' => $category['recursive'] ?? false,
-            'warning' => $category['warning'] ?? null
+            'warning' => $category['warning'] ?? null,
+            'playerOnly' => $category['playerOnly'] ?? false
         ];
 
         if (is_dir($dir)) {

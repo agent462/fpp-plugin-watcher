@@ -12,6 +12,24 @@ renderCommonJS();
         <span id="lastUpdate" style="font-size: 0.875rem; color: #6c757d;"></span>
     </div>
 
+    <!-- Network Reset Warning Banner -->
+    <div id="networkResetBanner" class="warningBox" style="display: none; margin-bottom: 1.5rem;">
+        <div style="display: flex; align-items: flex-start; gap: 1rem;">
+            <i class="fas fa-exclamation-triangle" style="font-size: 1.5rem; color: #856404; margin-top: 0.25rem;"></i>
+            <div style="flex: 1;">
+                <strong style="font-size: 1.1rem;">Network Adapter Reset Triggered</strong>
+                <p id="resetDetails" style="margin: 0.5rem 0;"></p>
+                <p style="margin: 0.5rem 0; color: #856404;">
+                    <strong>Note:</strong> This may explain missing or incomplete metrics data. The connectivity check daemon
+                    is currently paused to prevent repeated resets.
+                </p>
+                <button onclick="clearNetworkResetState()" class="btn btn-warning" style="margin-top: 0.5rem;">
+                    <i class="fas fa-redo"></i> Clear State &amp; Resume Monitoring
+                </button>
+            </div>
+        </div>
+    </div>
+
     <div id="loadingIndicator" class="loadingSpinner">
         <i class="fas fa-spinner"></i>
         <p>Loading connectivity metrics data...</p>
@@ -137,6 +155,53 @@ renderCommonJS();
 const charts = {};
 let isRefreshing = false;
 
+async function checkNetworkResetState() {
+    try {
+        const data = await fetchJson('/api/plugin/fpp-plugin-watcher/connectivity/state');
+        const banner = document.getElementById('networkResetBanner');
+        const details = document.getElementById('resetDetails');
+
+        if (data.success && data.hasResetAdapter) {
+            const resetTime = data.resetTime || 'Unknown time';
+            const adapter = data.adapter || 'Unknown adapter';
+            const reason = data.reason || 'Max failures reached';
+
+            details.innerHTML = `The network adapter <strong>${escapeHtml(adapter)}</strong> was reset on <strong>${escapeHtml(resetTime)}</strong>.<br>Reason: ${escapeHtml(reason)}`;
+            banner.style.display = 'block';
+        } else {
+            banner.style.display = 'none';
+        }
+    } catch (e) {
+        console.error('Error checking network reset state:', e);
+    }
+}
+
+async function clearNetworkResetState() {
+    const btn = event.target.closest('button');
+    const originalContent = btn.innerHTML;
+    btn.disabled = true;
+    btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Clearing...';
+
+    try {
+        const response = await fetch('/api/plugin/fpp-plugin-watcher/connectivity/state/clear', { method: 'POST' });
+        const data = await response.json();
+
+        if (data.success) {
+            document.getElementById('networkResetBanner').style.display = 'none';
+            loadAllMetrics();
+        } else {
+            alert('Failed to clear reset state: ' + (data.error || 'Unknown error'));
+            btn.disabled = false;
+            btn.innerHTML = originalContent;
+        }
+    } catch (e) {
+        console.error('Error clearing reset state:', e);
+        alert('Failed to clear reset state: ' + e.message);
+        btn.disabled = false;
+        btn.innerHTML = originalContent;
+    }
+}
+
 async function loadAllMetrics() {
     if (isRefreshing) return;
     isRefreshing = true;
@@ -145,6 +210,7 @@ async function loadAllMetrics() {
     if (refreshBtn) refreshBtn.style.animation = 'spin 1s linear infinite';
 
     try {
+        await checkNetworkResetState();
         await Promise.all([updateAllCharts(), updateRawPingLatencyChart()]);
         hideElement('loadingIndicator');
         showElement('metricsContent');
