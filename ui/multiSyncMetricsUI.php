@@ -47,6 +47,7 @@ renderCommonJS();
                 <button class="msm-help-close" onclick="toggleHelpTooltip()">&times;</button>
             </div>
             <div class="msm-help-body">
+                <?php if ($isPlayerMode): ?>
                 <div class="msm-help-section">
                     <h4>Network Quality</h4>
                     <dl>
@@ -58,13 +59,19 @@ renderCommonJS();
                         <dd>Estimated based on sync packet receive rate during playback. FPP sends sync packets every 10 frames (~2-4/sec depending on sequence frame rate).</dd>
                     </dl>
                 </div>
+                <?php endif; ?>
                 <div class="msm-help-section">
                     <h4>Sync Metrics</h4>
                     <dl>
+                        <?php if ($isPlayerMode): ?>
                         <dt>Time Drift</dt>
                         <dd>System clock difference between player and remote. Positive = remote clock is ahead, negative = behind. Small variations (±100ms) are normal due to network measurement limitations. Uses NTP-style calculation with multiple samples, selecting the lowest RTT for accuracy. Green: &lt;100ms, Yellow: 100ms-1s, Red: &gt;1s.</dd>
                         <dt>Step Time</dt>
                         <dd>Milliseconds per frame from sequence file. Common values: 25ms (40fps), 50ms (20fps).</dd>
+                        <?php else: ?>
+                        <dt>Frame Drift</dt>
+                        <dd>Difference between expected and actual frame position. Calculated from sync packet timing. Positive = ahead of player, negative = behind. Good: &lt;5 frames, Warning: 5-10 frames, Critical: &gt;10 frames.</dd>
+                        <?php endif; ?>
                         <dt>Last Sync</dt>
                         <dd>Time since last sync packet was received. Should be &lt;1 second during active playback.</dd>
                     </dl>
@@ -73,9 +80,11 @@ renderCommonJS();
                     <h4>Packet Types</h4>
                     <dl>
                         <dt>Sync Packets</dt>
-                        <dd>Sequence sync commands (open/start/stop/sync). Sent by player, received by remotes.</dd>
+                        <dd>Sequence sync commands (open/start/stop/sync). <?php echo $isPlayerMode ? 'Sent by player, received by remotes.' : 'Received from player to keep sequence in sync.'; ?></dd>
                         <dt>Media Packets</dt>
                         <dd>Audio sync for media playback. Keeps audio in sync across systems.</dd>
+                        <dt>Command Packets</dt>
+                        <dd>Remote control commands (test mode, etc.).</dd>
                     </dl>
                 </div>
             </div>
@@ -100,75 +109,86 @@ renderCommonJS();
         </div>
     </div>
 
-    <!-- Player Status Card -->
-    <div class="msm-player-card" id="playerCard">
-        <div class="msm-player-header">
-            <span class="msm-player-title">
-                <i class="fas fa-crown"></i> <span id="playerHostname">This System</span>
+    <!-- System Status Card -->
+    <div class="msm-system-card" id="systemCard">
+        <div class="msm-system-header">
+            <span class="msm-system-title">
+                <?php if ($isPlayerMode): ?>
+                <i class="fas fa-crown"></i>
+                <?php else: ?>
+                <i class="fas fa-satellite-dish"></i>
+                <?php endif; ?>
+                <span id="systemHostname">This System</span>
             </span>
-            <span class="msm-player-mode" id="playerMode"><?php echo $isPlayerMode ? 'Player' : ($isRemoteMode ? 'Remote' : '--'); ?></span>
+            <span class="msm-system-mode <?php echo $isRemoteMode ? 'msm-mode-remote' : 'msm-mode-player'; ?>" id="systemMode"><?php echo $isPlayerMode ? 'Player' : ($isRemoteMode ? 'Remote' : '--'); ?></span>
         </div>
-        <div class="msm-player-metrics">
-            <div class="msm-player-metric msm-metric-wide">
-                <span class="msm-player-metric-label">Sequence</span>
-                <span class="msm-player-metric-value" id="playerSequence">--</span>
+        <div class="msm-system-metrics">
+            <div class="msm-system-metric msm-metric-wide">
+                <span class="msm-system-metric-label"><?php echo $isRemoteMode ? 'Receiving Sequence' : 'Sequence'; ?></span>
+                <span class="msm-system-metric-value" id="systemSequence">--</span>
             </div>
-            <div class="msm-player-metric">
-                <span class="msm-player-metric-label">Status</span>
-                <span class="msm-player-metric-value" id="playerStatus">--</span>
+            <div class="msm-system-metric">
+                <span class="msm-system-metric-label">Status</span>
+                <span class="msm-system-metric-value" id="systemStatus">--</span>
             </div>
-            <div class="msm-player-metric">
-                <span class="msm-player-metric-label">Frame</span>
-                <span class="msm-player-metric-value msm-mono" id="playerFrame">--</span>
+            <div class="msm-system-metric">
+                <span class="msm-system-metric-label">Frame</span>
+                <span class="msm-system-metric-value msm-mono" id="systemFrame">--</span>
             </div>
-            <div class="msm-player-metric">
-                <span class="msm-player-metric-label">Time</span>
-                <span class="msm-player-metric-value msm-mono" id="playerTime">--</span>
+            <div class="msm-system-metric">
+                <span class="msm-system-metric-label">Time</span>
+                <span class="msm-system-metric-value msm-mono" id="systemTime">--</span>
             </div>
-            <div class="msm-player-metric">
-                <span class="msm-player-metric-label">Step Time</span>
-                <span class="msm-player-metric-value" id="playerStepTime">--</span>
+            <?php if ($isPlayerMode): ?>
+            <div class="msm-system-metric">
+                <span class="msm-system-metric-label">Step Time</span>
+                <span class="msm-system-metric-value" id="systemStepTime">--</span>
             </div>
-            <div class="msm-player-metric">
-                <span class="msm-player-metric-label">Channels</span>
-                <span class="msm-player-metric-value" id="playerChannels">--</span>
+            <div class="msm-system-metric">
+                <span class="msm-system-metric-label">Channels</span>
+                <span class="msm-system-metric-value" id="systemChannels">--</span>
             </div>
-            <div class="msm-player-metric">
-                <span class="msm-player-metric-label">Sync Packets Sent</span>
-                <span class="msm-player-metric-value" id="playerPacketsSent">--</span>
-            </div>
-            <div class="msm-player-metric">
-                <span class="msm-player-metric-label">Sync Packets Received</span>
-                <span class="msm-player-metric-value" id="playerPacketsReceived">--</span>
-            </div>
-            <?php if ($isRemoteMode): ?>
-            <div class="msm-player-metric">
-                <span class="msm-player-metric-label">Avg Frame Drift</span>
-                <span class="msm-player-metric-value" id="playerAvgDrift">--</span>
+            <div class="msm-system-metric">
+                <span class="msm-system-metric-label">Sync Packets Sent</span>
+                <span class="msm-system-metric-value" id="systemPacketsSent">--</span>
             </div>
             <?php endif; ?>
-            <div class="msm-player-metric">
-                <span class="msm-player-metric-label">Last Sync</span>
-                <span class="msm-player-metric-value" id="playerLastSync">--</span>
+            <div class="msm-system-metric">
+                <span class="msm-system-metric-label">Sync Packets Received</span>
+                <span class="msm-system-metric-value" id="systemPacketsReceived">--</span>
+            </div>
+            <?php if ($isRemoteMode): ?>
+            <div class="msm-system-metric">
+                <span class="msm-system-metric-label">Avg Frame Drift</span>
+                <span class="msm-system-metric-value" id="systemAvgDrift">--</span>
+            </div>
+            <div class="msm-system-metric">
+                <span class="msm-system-metric-label">Max Frame Drift</span>
+                <span class="msm-system-metric-value" id="systemMaxDrift">--</span>
+            </div>
+            <?php endif; ?>
+            <div class="msm-system-metric">
+                <span class="msm-system-metric-label">Last Sync</span>
+                <span class="msm-system-metric-value" id="systemLastSync">--</span>
             </div>
         </div>
         <!-- Sequence Lifecycle Metrics -->
-        <div class="msm-player-lifecycle">
+        <div class="msm-lifecycle">
             <div class="msm-lifecycle-header">
-                <i class="fas fa-film"></i> Sequence Lifecycle
+                <i class="fas fa-film"></i> <?php echo $isRemoteMode ? 'Received Packets' : 'Sequence Lifecycle'; ?>
             </div>
             <div class="msm-lifecycle-grid">
                 <div class="msm-lifecycle-item">
-                    <span class="msm-lifecycle-label">Open</span>
-                    <span class="msm-lifecycle-value" id="lcSeqOpenPlayer">0</span>
+                    <span class="msm-lifecycle-label"><?php echo $isRemoteMode ? 'Seq Open' : 'Open'; ?></span>
+                    <span class="msm-lifecycle-value" id="lcSeqOpen">0</span>
                 </div>
                 <div class="msm-lifecycle-item">
-                    <span class="msm-lifecycle-label">Start</span>
-                    <span class="msm-lifecycle-value" id="lcSeqStartPlayer">0</span>
+                    <span class="msm-lifecycle-label"><?php echo $isRemoteMode ? 'Seq Start' : 'Start'; ?></span>
+                    <span class="msm-lifecycle-value" id="lcSeqStart">0</span>
                 </div>
                 <div class="msm-lifecycle-item">
-                    <span class="msm-lifecycle-label">Stop</span>
-                    <span class="msm-lifecycle-value" id="lcSeqStopPlayer">0</span>
+                    <span class="msm-lifecycle-label"><?php echo $isRemoteMode ? 'Seq Stop' : 'Stop'; ?></span>
+                    <span class="msm-lifecycle-value" id="lcSeqStop">0</span>
                 </div>
                 <div class="msm-lifecycle-item">
                     <span class="msm-lifecycle-label">Sync Pkts</span>
@@ -186,7 +206,8 @@ renderCommonJS();
         </div>
     </div>
 
-    <!-- Stats Summary -->
+    <?php if ($isPlayerMode): ?>
+    <!-- Stats Summary (Player Mode Only) -->
     <div class="msm-stats-grid" id="statsGrid">
         <div class="msm-stat-card">
             <div class="msm-stat-value" id="statRemotes">--</div>
@@ -206,7 +227,7 @@ renderCommonJS();
         </div>
     </div>
 
-    <!-- Network Quality Card -->
+    <!-- Network Quality Card (Player Mode Only) -->
     <div class="msm-quality-card" id="qualityCard">
         <div class="msm-quality-header">
             <h3><i class="fas fa-signal"></i> Network Quality</h3>
@@ -227,6 +248,7 @@ renderCommonJS();
             </div>
         </div>
     </div>
+    <?php endif; ?>
 
     <!-- Issues Panel -->
     <div class="msm-issues-panel hidden" id="issuesPanel">
@@ -275,7 +297,8 @@ renderCommonJS();
     </div>
     <?php endif; ?>
 
-    <!-- All Systems Packet Metrics Table -->
+    <?php if ($isPlayerMode): ?>
+    <!-- All Systems Packet Metrics Table (Player Mode) -->
     <div class="msm-card">
         <div class="msm-card-header">
             <h3 class="msm-card-title"><i class="fas fa-chart-bar"></i> System Packet Metrics</h3>
@@ -312,6 +335,49 @@ renderCommonJS();
             </table>
         </div>
     </div>
+    <?php else: ?>
+    <!-- Packet Summary Card (Remote Mode) -->
+    <div class="msm-card">
+        <div class="msm-card-header">
+            <h3 class="msm-card-title"><i class="fas fa-chart-bar"></i> Packet Summary</h3>
+            <button class="btn btn-sm btn-outline-secondary" onclick="resetMetrics()">
+                <i class="fas fa-undo"></i> Reset
+            </button>
+        </div>
+        <div class="msm-card-body">
+            <div class="msm-packet-summary">
+                <div class="msm-packet-summary-item">
+                    <i class="fas fa-arrow-down"></i>
+                    <div class="msm-packet-summary-content">
+                        <span class="msm-packet-summary-value" id="summaryTotalReceived">--</span>
+                        <span class="msm-packet-summary-label">Total Packets Received</span>
+                    </div>
+                </div>
+                <div class="msm-packet-summary-item">
+                    <i class="fas fa-sync"></i>
+                    <div class="msm-packet-summary-content">
+                        <span class="msm-packet-summary-value" id="summarySyncReceived">--</span>
+                        <span class="msm-packet-summary-label">Sync Packets</span>
+                    </div>
+                </div>
+                <div class="msm-packet-summary-item">
+                    <i class="fas fa-music"></i>
+                    <div class="msm-packet-summary-content">
+                        <span class="msm-packet-summary-value" id="summaryMediaReceived">--</span>
+                        <span class="msm-packet-summary-label">Media Packets</span>
+                    </div>
+                </div>
+                <div class="msm-packet-summary-item">
+                    <i class="fas fa-terminal"></i>
+                    <div class="msm-packet-summary-content">
+                        <span class="msm-packet-summary-value" id="summaryCmdReceived">--</span>
+                        <span class="msm-packet-summary-label">Command Packets</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    <?php endif; ?>
 
     <button class="msm-refresh-btn" onclick="loadAllData()" title="Refresh Data">
         <i class="fas fa-sync-alt"></i>
@@ -366,7 +432,7 @@ async function loadAllData() {
         }
 
         hidePluginError();
-        await updatePlayerCard(status);
+        await updateSystemCard(status);
         updateLifecycleMetrics(status);
 
         // Load issues from C++ plugin
@@ -381,10 +447,9 @@ async function loadAllData() {
         if (IS_PLAYER_MODE) {
             await loadComparison(localIssues);
         } else {
-            // Remote mode - just show local issues and local-only systems table
-            updateStats(0, 0, 0, localIssues.length);
+            // Remote mode - show local issues and packet summary
             updateIssues(localIssues);
-            renderSystemsPacketTable([], status);
+            updatePacketSummary(status);
         }
 
         // Load network quality and clock drift data (player mode only)
@@ -404,16 +469,16 @@ async function loadAllData() {
     }
 }
 
-async function updatePlayerCard(status) {
-    document.getElementById('playerHostname').textContent = '<?php echo htmlspecialchars($localSystem['host_name'] ?? gethostname()); ?>';
+async function updateSystemCard(status) {
+    document.getElementById('systemHostname').textContent = '<?php echo htmlspecialchars($localSystem['host_name'] ?? gethostname()); ?>';
 
     const seqName = status.currentMasterSequence || '';
     const displayName = seqName.replace(/\.fseq$/i, '') || 'None';
-    document.getElementById('playerSequence').textContent = displayName;
-    document.getElementById('playerStatus').textContent = status.sequencePlaying ? 'Playing' : 'Idle';
+    document.getElementById('systemSequence').textContent = displayName;
+    document.getElementById('systemStatus').textContent = status.sequencePlaying ? 'Playing' : 'Idle';
 
-    // Fetch sequence metadata if sequence changed
-    if (seqName && seqName !== lastSequenceName) {
+    // Fetch sequence metadata if sequence changed (player mode only)
+    if (IS_PLAYER_MODE && seqName && seqName !== lastSequenceName) {
         lastSequenceName = seqName;
         try {
             const metaResp = await fetch(`/api/sequence/${encodeURIComponent(seqName)}/meta`);
@@ -434,11 +499,11 @@ async function updatePlayerCard(status) {
     const frame = status.lastMasterFrame || 0;
     const totalFrames = sequenceMeta?.NumFrames || 0;
     if (status.sequencePlaying && totalFrames > 0) {
-        document.getElementById('playerFrame').textContent = `${frame.toLocaleString()} / ${totalFrames.toLocaleString()}`;
+        document.getElementById('systemFrame').textContent = `${frame.toLocaleString()} / ${totalFrames.toLocaleString()}`;
     } else if (status.sequencePlaying) {
-        document.getElementById('playerFrame').textContent = frame.toLocaleString();
+        document.getElementById('systemFrame').textContent = frame.toLocaleString();
     } else {
-        document.getElementById('playerFrame').textContent = '--';
+        document.getElementById('systemFrame').textContent = '--';
     }
 
     // Time: elapsed / total
@@ -446,31 +511,42 @@ async function updatePlayerCard(status) {
     const stepTime = sequenceMeta?.StepTime || 25;
     const totalSecs = totalFrames > 0 ? (totalFrames * stepTime / 1000) : 0;
     if (status.sequencePlaying && totalSecs > 0) {
-        document.getElementById('playerTime').textContent = `${formatTime(secs)} / ${formatTime(totalSecs)}`;
+        document.getElementById('systemTime').textContent = `${formatTime(secs)} / ${formatTime(totalSecs)}`;
     } else if (status.sequencePlaying) {
-        document.getElementById('playerTime').textContent = formatTime(secs);
+        document.getElementById('systemTime').textContent = formatTime(secs);
     } else {
-        document.getElementById('playerTime').textContent = '--';
+        document.getElementById('systemTime').textContent = '--';
     }
 
-    // Sequence metadata - show step time with calculated FPS
-    if (sequenceMeta) {
-        const fps = Math.round(1000 / sequenceMeta.StepTime);
-        document.getElementById('playerStepTime').textContent = `${sequenceMeta.StepTime}ms (${fps}fps)`;
-    } else {
-        document.getElementById('playerStepTime').textContent = '--';
-    }
-    document.getElementById('playerChannels').textContent = sequenceMeta ? sequenceMeta.ChannelCount.toLocaleString() : '--';
-
-    document.getElementById('playerPacketsSent').textContent = (status.totalPacketsSent || 0).toLocaleString();
-    document.getElementById('playerPacketsReceived').textContent = (status.totalPacketsReceived || 0).toLocaleString();
-
-    const avgDriftEl = document.getElementById('playerAvgDrift');
-    if (avgDriftEl) {
-        avgDriftEl.textContent = status.avgFrameDrift !== undefined ? status.avgFrameDrift.toFixed(1) + ' frames' : '--';
+    // Player mode only fields
+    if (IS_PLAYER_MODE) {
+        // Sequence metadata - show step time with calculated FPS
+        if (sequenceMeta) {
+            const fps = Math.round(1000 / sequenceMeta.StepTime);
+            document.getElementById('systemStepTime').textContent = `${sequenceMeta.StepTime}ms (${fps}fps)`;
+        } else {
+            document.getElementById('systemStepTime').textContent = '--';
+        }
+        document.getElementById('systemChannels').textContent = sequenceMeta ? sequenceMeta.ChannelCount.toLocaleString() : '--';
+        document.getElementById('systemPacketsSent').textContent = (status.totalPacketsSent || 0).toLocaleString();
     }
 
-    document.getElementById('playerLastSync').textContent = formatTimeSince(status.secondsSinceLastSync);
+    document.getElementById('systemPacketsReceived').textContent = (status.totalPacketsReceived || 0).toLocaleString();
+
+    // Remote mode drift fields
+    if (IS_REMOTE_MODE) {
+        const avgDriftEl = document.getElementById('systemAvgDrift');
+        if (avgDriftEl) {
+            avgDriftEl.textContent = status.avgFrameDrift !== undefined ? status.avgFrameDrift.toFixed(1) + ' frames' : '--';
+        }
+        const maxDriftEl = document.getElementById('systemMaxDrift');
+        if (maxDriftEl) {
+            const maxDrift = status.maxFrameDrift !== undefined ? Math.abs(status.maxFrameDrift) : null;
+            maxDriftEl.textContent = maxDrift !== null ? maxDrift.toFixed(1) + ' frames' : '--';
+        }
+    }
+
+    document.getElementById('systemLastSync').textContent = formatTimeSince(status.secondsSinceLastSync);
 }
 
 function formatTime(seconds) {
@@ -483,19 +559,30 @@ function updateLifecycleMetrics(status) {
     const sent = status.packetsSent || {};
     const recv = status.packetsReceived || {};
 
-    // Update player lifecycle metrics in player card
+    // Update lifecycle metrics
     const lc = status.lifecycle || {};
-    document.getElementById('lcSeqOpenPlayer').textContent = (lc.seqOpen || 0).toLocaleString();
-    document.getElementById('lcSeqStartPlayer').textContent = (lc.seqStart || 0).toLocaleString();
-    document.getElementById('lcSeqStopPlayer').textContent = (lc.seqStop || 0).toLocaleString();
+    document.getElementById('lcSeqOpen').textContent = (lc.seqOpen || 0).toLocaleString();
+    document.getElementById('lcSeqStart').textContent = (lc.seqStart || 0).toLocaleString();
+    document.getElementById('lcSeqStop').textContent = (lc.seqStop || 0).toLocaleString();
 
-    // Show related packet counts (sent + received) for lifecycle context
-    const syncTotal = (sent.sync || 0) + (recv.sync || 0);
-    const mediaTotal = (sent.mediaSync || 0) + (recv.mediaSync || 0);
-    const cmdTotal = (sent.command || 0) + (recv.command || 0);
+    // Show related packet counts (sent + received for player, received only for remote)
+    const syncTotal = IS_REMOTE_MODE ? (recv.sync || 0) : (sent.sync || 0) + (recv.sync || 0);
+    const mediaTotal = IS_REMOTE_MODE ? (recv.mediaSync || 0) : (sent.mediaSync || 0) + (recv.mediaSync || 0);
+    const cmdTotal = IS_REMOTE_MODE ? (recv.command || 0) : (sent.command || 0) + (recv.command || 0);
     document.getElementById('lcSyncPackets').textContent = syncTotal.toLocaleString();
     document.getElementById('lcMediaPackets').textContent = mediaTotal.toLocaleString();
     document.getElementById('lcCmdPackets').textContent = cmdTotal.toLocaleString();
+}
+
+// Remote mode: Update packet summary card
+function updatePacketSummary(status) {
+    const recv = status.packetsReceived || {};
+    const totalReceived = status.totalPacketsReceived || 0;
+
+    document.getElementById('summaryTotalReceived').textContent = totalReceived.toLocaleString();
+    document.getElementById('summarySyncReceived').textContent = (recv.sync || 0).toLocaleString();
+    document.getElementById('summaryMediaReceived').textContent = (recv.mediaSync || 0).toLocaleString();
+    document.getElementById('summaryCmdReceived').textContent = (recv.command || 0).toLocaleString();
 }
 
 async function loadComparison(localIssues) {

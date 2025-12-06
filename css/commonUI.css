@@ -2947,26 +2947,37 @@
 .msm-header-right { display: flex; align-items: center; gap: 1rem; }
 .msm-last-update { font-size: 0.85rem; color: #6c757d; }
 
-/* Player Card - Purple gradient header card */
-.msm-player-card {
+/* System Card - Purple gradient header card (used in both player and remote modes) */
+.msm-player-card,
+.msm-system-card {
     background: var(--watcher-gradient-purple);
     color: #fff;
     border-radius: 0.5rem;
     padding: 1.25rem 1.5rem;
     margin-bottom: 1.5rem;
 }
-.msm-player-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem; }
-.msm-player-title { font-size: 1.1rem; font-weight: 600; }
-.msm-player-mode { background: rgba(255,255,255,0.2); padding: 0.25rem 0.75rem; border-radius: 1rem; font-size: 0.8rem; }
-.msm-player-metrics { display: flex; gap: 2rem; flex-wrap: wrap; }
-.msm-player-metric { display: flex; flex-direction: column; }
-.msm-player-metric-label { font-size: 0.7rem; opacity: 0.8; text-transform: uppercase; }
-.msm-player-metric-value { font-size: 1rem; font-weight: 500; }
+.msm-player-header,
+.msm-system-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem; }
+.msm-player-title,
+.msm-system-title { font-size: 1.1rem; font-weight: 600; }
+.msm-player-mode,
+.msm-system-mode { background: rgba(255,255,255,0.2); padding: 0.25rem 0.75rem; border-radius: 1rem; font-size: 0.8rem; }
+.msm-mode-remote { background: rgba(23, 162, 184, 0.3); }
+.msm-mode-player { background: rgba(255, 193, 7, 0.3); }
+.msm-player-metrics,
+.msm-system-metrics { display: flex; gap: 2rem; flex-wrap: wrap; }
+.msm-player-metric,
+.msm-system-metric { display: flex; flex-direction: column; }
+.msm-player-metric-label,
+.msm-system-metric-label { font-size: 0.7rem; opacity: 0.8; text-transform: uppercase; }
+.msm-player-metric-value,
+.msm-system-metric-value { font-size: 1rem; font-weight: 500; }
 .msm-metric-wide { min-width: 200px; flex: 2; }
 .msm-mono { font-family: 'Consolas', 'Monaco', monospace; }
 
-/* Player Lifecycle Section - Sequence open/start/stop metrics */
-.msm-player-lifecycle {
+/* Lifecycle Section - Sequence open/start/stop metrics */
+.msm-player-lifecycle,
+.msm-lifecycle {
     margin-top: 1rem;
     padding-top: 1rem;
     border-top: 1px solid rgba(255,255,255,0.2);
@@ -3137,6 +3148,45 @@
 }
 .msm-row-dim td {
     color: #6c757d;
+}
+
+/* Packet Summary Card - Remote mode simplified packet display */
+.msm-packet-summary {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+    gap: 1.25rem;
+}
+.msm-packet-summary-item {
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+    padding: 1rem;
+    background: #f8f9fa;
+    border-radius: 0.5rem;
+    border: 1px solid #e9ecef;
+}
+.msm-packet-summary-item > i {
+    font-size: 1.5rem;
+    color: #667eea;
+    width: 40px;
+    text-align: center;
+}
+.msm-packet-summary-content {
+    display: flex;
+    flex-direction: column;
+}
+.msm-packet-summary-value {
+    font-size: 1.5rem;
+    font-weight: 700;
+    color: #212529;
+    line-height: 1.2;
+    font-family: 'Consolas', 'Monaco', monospace;
+}
+.msm-packet-summary-label {
+    font-size: 0.75rem;
+    color: #6c757d;
+    text-transform: uppercase;
+    letter-spacing: 0.3px;
 }
 
 /* Stats Grid - Summary statistics cards */
