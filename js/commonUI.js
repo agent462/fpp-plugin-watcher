@@ -140,7 +140,8 @@
             backgroundColor: c.bg,
             borderWidth: 2,
             fill: options.fill ?? true,
-            tension: 0.4,
+            tension: 0,
+            spanGaps: true,
             pointRadius: options.pointRadius ?? 0,
             pointHoverRadius: 5,
             ...options
@@ -163,7 +164,8 @@
             yTickFormatter = v => v,
             tooltipLabel,
             showLegend = true,
-            animation = true
+            animation = false,
+            decimationSamples = 500
         } = config;
 
         const unit = getTimeUnit(hours);
@@ -172,13 +174,18 @@
         return {
             responsive: true,
             maintainAspectRatio: true,
-            animation: animation ? undefined : false,
+            animation: animation,
             interaction: {
                 mode: 'nearest',
                 axis: 'x',
                 intersect: false
             },
             plugins: {
+                decimation: {
+                    enabled: true,
+                    algorithm: 'lttb',
+                    samples: decimationSamples
+                },
                 legend: {
                     display: showLegend,
                     position: 'top'

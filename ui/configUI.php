@@ -569,7 +569,7 @@ if ($isPlayerMode) {
             return parseFloat((bytes / Math.pow(k, i)).toFixed(1)) + ' ' + sizes[i];
         }
 
-        // Load data statistics
+        // Load data statistics with accordion UI
         async function loadDataStats() {
             const container = document.getElementById('dataStatsContainer');
 
@@ -582,8 +582,7 @@ if ($isPlayerMode) {
                     return;
                 }
 
-                let html = '<table class="dataStatsTable"><thead><tr><th>Category</th><th>Files</th><th>Size</th><th>Action</th></tr></thead><tbody>';
-
+                let html = '<div class="dataAccordion">';
                 let totalSize = 0;
                 let totalFiles = 0;
 
@@ -591,29 +590,94 @@ if ($isPlayerMode) {
                     totalSize += category.totalSize;
                     totalFiles += category.fileCount;
 
-                    html += `<tr>
-                        <td>
-                            <strong>${escapeHtml(category.name)}</strong>
-                            <div class="dataDesc">${escapeHtml(category.description)}</div>
-                        </td>
-                        <td>${category.fileCount}</td>
-                        <td>${formatBytes(category.totalSize)}</td>
-                        <td>
-                            <button type="button" class="buttons btn-sm btn-outline-danger"
-                                onclick="clearDataCategory('${escapeHtml(key)}', '${escapeHtml(category.name)}')"
-                                ${category.fileCount === 0 ? 'disabled' : ''}>
-                                <i class="fas fa-trash"></i> Clear
-                            </button>
-                        </td>
-                    </tr>`;
+                    const hasFiles = category.fileCount > 0;
+                    const showFiles = category.showFiles !== false;
+                    const canExpand = hasFiles && showFiles;
+                    const expandable = canExpand ? 'expandable' : '';
+
+                    // Auto-expand items with warnings so the warning is visible
+                    const autoExpanded = category.warning ? 'expanded' : '';
+
+                    html += `<div class="dataAccordionItem ${autoExpanded}" data-category="${escapeHtml(key)}">
+                        <div class="dataAccordionHeader ${expandable}" onclick="${canExpand ? 'toggleDataAccordion(this)' : ''}">
+                            <div class="dataAccordionTitle">
+                                ${canExpand ? '<i class="fas fa-chevron-right dataAccordionChevron"></i>' : '<i class="fas fa-database dataAccordionIcon"></i>'}
+                                <strong>${escapeHtml(category.name)}</strong>
+                                <span class="dataAccordionBadge">${category.fileCount} file${category.fileCount !== 1 ? 's' : ''}</span>
+                                <span class="dataAccordionSize">${formatBytes(category.totalSize)}</span>
+                            </div>
+                            <div class="dataAccordionActions">
+                                <button type="button" class="buttons btn-sm btn-outline-danger"
+                                    onclick="event.stopPropagation(); clearDataCategory('${escapeHtml(key)}', '${escapeHtml(category.name)}')"
+                                    ${!hasFiles ? 'disabled' : ''}>
+                                    <i class="fas fa-trash"></i> Clear All
+                                </button>
+                            </div>
+                        </div>`;
+
+                    // Only show body for expandable items or items with warnings
+                    if (canExpand || category.warning) {
+                        html += '<div class="dataAccordionBody">';
+                        html += `<div class="dataAccordionDesc">${escapeHtml(category.description)}</div>`;
+
+                        // Show warning if present
+                        if (category.warning) {
+                            html += `<div class="dataWarningInline"><i class="fas fa-info-circle"></i> ${escapeHtml(category.warning)}</div>`;
+                        }
+
+                        // Show file list only for categories that show files
+                        if (showFiles && hasFiles) {
+                            const sortedFiles = [...category.files].sort((a, b) => b.modified - a.modified);
+                            html += '<div class="dataFileList">';
+                            for (const file of sortedFiles) {
+                                const modDate = new Date(file.modified * 1000).toLocaleString();
+                                const isViewable = file.name.endsWith('.log') || file.name.endsWith('.json');
+                                html += `<div class="dataFileItem">
+                                    <div class="dataFileInfo">
+                                        <i class="fas fa-file dataFileIcon"></i>
+                                        <span class="dataFileName">${escapeHtml(file.name)}</span>
+                                        <span class="dataFileMeta">${formatBytes(file.size)} &bull; ${modDate}</span>
+                                    </div>
+                                    <div class="dataFileActions">
+                                        ${isViewable ? `<button type="button" class="buttons btn-xs btn-outline-secondary"
+                                            onclick="viewDataFile('${escapeHtml(key)}', '${escapeHtml(file.name)}')"
+                                            title="View file contents">
+                                            <i class="fas fa-eye"></i>
+                                        </button>` : ''}
+                                        <button type="button" class="buttons btn-xs btn-outline-danger"
+                                            onclick="clearDataFile('${escapeHtml(key)}', '${escapeHtml(file.name)}')"
+                                            title="Delete file">
+                                            <i class="fas fa-times"></i>
+                                        </button>
+                                    </div>
+                                </div>`;
+                            }
+                            html += '</div>';
+                        } else if (showFiles && !hasFiles) {
+                            html += '<div class="dataEmptyMessage"><i class="fas fa-check-circle"></i> No data files</div>';
+                        }
+
+                        html += '</div>';
+                    }
+
+                    html += '</div>';
                 }
 
-                html += `</tbody><tfoot><tr><td><strong>Total</strong></td><td>${totalFiles}</td><td>${formatBytes(totalSize)}</td><td></td></tr></tfoot></table>`;
+                html += `</div>
+                    <div class="dataTotalRow">
+                        <strong>Total:</strong> ${totalFiles} files &bull; ${formatBytes(totalSize)}
+                    </div>`;
 
                 container.innerHTML = html;
             } catch (error) {
                 container.innerHTML = '<div class="dataStatsError">Error loading data statistics: ' + escapeHtml(error.message) + '</div>';
             }
+        }
+
+        // Toggle accordion expand/collapse
+        function toggleDataAccordion(header) {
+            const item = header.closest('.dataAccordionItem');
+            item.classList.toggle('expanded');
         }
 
         // Clear data for a category
@@ -639,6 +703,82 @@ if ($isPlayerMode) {
             }
         }
 
+        // Clear a single file
+        async function clearDataFile(category, filename) {
+            if (!confirm(`Delete "${filename}"?\n\nThis action cannot be undone.`)) {
+                return;
+            }
+
+            try {
+                const response = await fetch(`/api/plugin/fpp-plugin-watcher/data/${encodeURIComponent(category)}/${encodeURIComponent(filename)}`, {
+                    method: 'DELETE'
+                });
+
+                const result = await response.json();
+
+                if (result.success) {
+                    loadDataStats();
+                } else {
+                    alert('Failed to delete file: ' + (result.error || 'Unknown error'));
+                }
+            } catch (error) {
+                alert('Error deleting file: ' + error.message);
+            }
+        }
+
+        // View file contents in terminal modal
+        async function viewDataFile(category, filename) {
+            const modal = document.getElementById('terminalModal');
+            const title = document.getElementById('terminalModalTitle');
+            const content = document.getElementById('terminalContent');
+            const refreshBtn = document.getElementById('terminalRefreshBtn');
+
+            // Store current file info for refresh
+            modal.dataset.category = category;
+            modal.dataset.filename = filename;
+
+            title.textContent = filename;
+            content.textContent = 'Loading...';
+            modal.style.display = 'flex';
+
+            await refreshTerminalContent();
+        }
+
+        // Refresh terminal content
+        async function refreshTerminalContent() {
+            const modal = document.getElementById('terminalModal');
+            const content = document.getElementById('terminalContent');
+            const category = modal.dataset.category;
+            const filename = modal.dataset.filename;
+
+            try {
+                const response = await fetch(`/api/plugin/fpp-plugin-watcher/data/${encodeURIComponent(category)}/${encodeURIComponent(filename)}/tail?lines=100`);
+                const result = await response.json();
+
+                if (result.success) {
+                    content.textContent = result.content || '(empty file)';
+                    // Scroll to bottom
+                    content.scrollTop = content.scrollHeight;
+                } else {
+                    content.textContent = 'Error: ' + (result.error || 'Failed to load file');
+                }
+            } catch (error) {
+                content.textContent = 'Error: ' + error.message;
+            }
+        }
+
+        // Close terminal modal
+        function closeTerminalModal() {
+            document.getElementById('terminalModal').style.display = 'none';
+        }
+
+        // Close modal on escape key
+        document.addEventListener('keydown', function(e) {
+            if (e.key === 'Escape') {
+                closeTerminalModal();
+            }
+        });
+
         // Load data stats when Data Management panel is expanded
         document.addEventListener('DOMContentLoaded', function() {
             const dataPanel = document.querySelector('.settingsPanel:has(#dataStatsContainer)');
@@ -656,3 +796,27 @@ if ($isPlayerMode) {
             }
         });
     </script>
+
+    <!-- Terminal Modal for viewing files -->
+    <div id="terminalModal" class="terminalModal" onclick="if(event.target === this) closeTerminalModal()">
+        <div class="terminalModalContent">
+            <div class="terminalModalHeader">
+                <div class="terminalModalTitle">
+                    <i class="fas fa-terminal"></i>
+                    <span id="terminalModalTitle">File Viewer</span>
+                </div>
+                <div class="terminalModalActions">
+                    <button type="button" class="buttons btn-sm" onclick="refreshTerminalContent()" title="Refresh">
+                        <i class="fas fa-sync-alt"></i>
+                    </button>
+                    <button type="button" class="buttons btn-sm" onclick="closeTerminalModal()" title="Close">
+                        <i class="fas fa-times"></i>
+                    </button>
+                </div>
+            </div>
+            <pre id="terminalContent" class="terminalContent">Loading...</pre>
+            <div class="terminalModalFooter">
+                <span class="terminalFooterText">Last 100 lines &bull; Press ESC to close</span>
+            </div>
+        </div>
+    </div>

@@ -2925,7 +2925,7 @@
 
 /* Layout */
 .msm-container { padding: 1.5rem; max-width: 1600px; margin: 0 auto; }
-.msm-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 1.5rem; flex-wrap: wrap; gap: 1rem; }
+.msm-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 1.5rem; flex-wrap: wrap; gap: 1rem; position: relative; }
 .msm-header h2 { margin: 0; color: #212529; }
 .msm-header-right { display: flex; align-items: center; gap: 1rem; }
 .msm-last-update { font-size: 0.85rem; color: #6c757d; }
@@ -2945,6 +2945,182 @@
 .msm-player-metric { display: flex; flex-direction: column; }
 .msm-player-metric-label { font-size: 0.7rem; opacity: 0.8; text-transform: uppercase; }
 .msm-player-metric-value { font-size: 1rem; font-weight: 500; }
+.msm-metric-wide { min-width: 200px; flex: 2; }
+.msm-mono { font-family: 'Consolas', 'Monaco', monospace; }
+
+/* Player Lifecycle Section - Sequence open/start/stop metrics */
+.msm-player-lifecycle {
+    margin-top: 1rem;
+    padding-top: 1rem;
+    border-top: 1px solid rgba(255,255,255,0.2);
+}
+.msm-lifecycle-header {
+    font-size: 0.8rem;
+    font-weight: 600;
+    margin-bottom: 0.75rem;
+    opacity: 0.9;
+}
+.msm-lifecycle-header i {
+    margin-right: 0.4rem;
+}
+.msm-lifecycle-grid {
+    display: grid;
+    grid-template-columns: repeat(6, 1fr);
+    gap: 1rem;
+}
+@media (max-width: 992px) {
+    .msm-lifecycle-grid { grid-template-columns: repeat(3, 1fr); }
+}
+@media (max-width: 576px) {
+    .msm-lifecycle-grid { grid-template-columns: repeat(2, 1fr); }
+}
+.msm-lifecycle-item {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    background: rgba(255,255,255,0.1);
+    padding: 0.5rem 0.75rem;
+    border-radius: 0.375rem;
+}
+.msm-lifecycle-label {
+    font-size: 0.65rem;
+    opacity: 0.8;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+}
+.msm-lifecycle-value {
+    font-size: 1.1rem;
+    font-weight: 600;
+}
+
+/* Systems Packet Table - Sortable table showing packet metrics per host */
+.msm-table-wrapper {
+    overflow-x: auto;
+}
+.msm-packet-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 0.85rem;
+    white-space: nowrap;
+}
+.msm-packet-table th,
+.msm-packet-table td {
+    padding: 0.5rem 0.625rem;
+    text-align: left;
+    border-bottom: 1px solid #e9ecef;
+}
+.msm-packet-table th {
+    background: #f8f9fa;
+    font-weight: 600;
+    color: #495057;
+    font-size: 0.75rem;
+    text-transform: uppercase;
+    letter-spacing: 0.3px;
+    position: sticky;
+    top: 0;
+}
+.msm-packet-table th i {
+    font-size: 0.6rem;
+    margin-left: 0.2rem;
+    opacity: 0.6;
+}
+.msm-packet-table tbody tr:hover {
+    background: #f8f9fa;
+}
+
+/* Sortable headers */
+.msm-th-sortable {
+    cursor: pointer;
+    user-select: none;
+    transition: background 0.15s;
+}
+.msm-th-sortable:hover {
+    background: #e9ecef;
+}
+.msm-th-sortable::after {
+    content: '';
+    display: inline-block;
+    margin-left: 0.35rem;
+    opacity: 0.3;
+}
+.msm-th-sorted-asc::after {
+    content: '▲';
+    opacity: 1;
+    font-size: 0.6rem;
+}
+.msm-th-sorted-desc::after {
+    content: '▼';
+    opacity: 1;
+    font-size: 0.6rem;
+}
+.msm-th-right {
+    text-align: right;
+}
+
+/* Status badges */
+.msm-status-badge {
+    display: inline-block;
+    padding: 0.15rem 0.4rem;
+    border-radius: 0.25rem;
+    font-size: 0.7rem;
+    font-weight: 600;
+}
+.msm-status-local {
+    background: rgba(102, 126, 234, 0.15);
+    color: #667eea;
+}
+.msm-status-online {
+    background: #d4edda;
+    color: #155724;
+}
+.msm-status-offline {
+    background: #f8d7da;
+    color: #721c24;
+}
+.msm-status-noplugin {
+    background: #d1ecf1;
+    color: #0c5460;
+}
+.msm-status-unknown {
+    background: #e9ecef;
+    color: #6c757d;
+}
+
+/* Cell styles */
+.msm-home-icon {
+    color: #667eea;
+    margin-right: 0.35rem;
+}
+.msm-td-mono {
+    font-family: 'Consolas', 'Monaco', monospace;
+    font-size: 0.8rem;
+}
+.msm-td-num {
+    text-align: right;
+    font-family: 'Consolas', 'Monaco', monospace;
+    font-size: 0.8rem;
+}
+.msm-td-sent {
+    color: #28a745;
+}
+.msm-td-recv {
+    color: #17a2b8;
+}
+.msm-td-total {
+    font-weight: 600;
+    color: #495057;
+}
+.msm-td-loading {
+    text-align: center;
+    padding: 1.5rem;
+    color: #6c757d;
+}
+.msm-row-dim {
+    opacity: 0.6;
+}
+.msm-row-dim td {
+    color: #6c757d;
+}
 
 /* Stats Grid - Summary statistics cards */
 .msm-stats-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 1rem; margin-bottom: 1.5rem; }
@@ -3221,4 +3397,125 @@
 .msm-remote-quality-badge.critical {
     background: rgba(220, 53, 69, 0.15);
     color: #dc3545;
+}
+
+/* ==========================================================================
+   Help Tooltip
+   ========================================================================== */
+
+.msm-help-btn {
+    margin-left: 0.5rem;
+}
+
+.msm-help-tooltip {
+    display: none;
+    position: absolute;
+    top: 100%;
+    right: 0;
+    margin-top: 0.5rem;
+    width: 380px;
+    max-width: calc(100vw - 2rem);
+    background: #fff;
+    border: 1px solid #dee2e6;
+    border-radius: 0.5rem;
+    box-shadow: 0 4px 20px rgba(0, 0, 0, 0.15);
+    z-index: 1000;
+    max-height: 70vh;
+    overflow-y: auto;
+}
+
+.msm-help-tooltip.show {
+    display: block;
+}
+
+.msm-help-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 0.75rem 1rem;
+    background: linear-gradient(135deg, #17a2b8 0%, #138496 100%);
+    color: #fff;
+    border-radius: 0.5rem 0.5rem 0 0;
+    font-weight: 600;
+}
+
+.msm-help-header i {
+    margin-right: 0.5rem;
+}
+
+.msm-help-close {
+    background: none;
+    border: none;
+    color: #fff;
+    font-size: 1.5rem;
+    line-height: 1;
+    cursor: pointer;
+    opacity: 0.8;
+    padding: 0;
+}
+
+.msm-help-close:hover {
+    opacity: 1;
+}
+
+.msm-help-body {
+    padding: 1rem;
+}
+
+.msm-help-section {
+    margin-bottom: 1rem;
+}
+
+.msm-help-section:last-child {
+    margin-bottom: 0;
+}
+
+.msm-help-section h4 {
+    font-size: 0.9rem;
+    font-weight: 600;
+    color: #495057;
+    margin: 0 0 0.5rem 0;
+    padding-bottom: 0.25rem;
+    border-bottom: 1px solid #e9ecef;
+}
+
+.msm-help-section dl {
+    margin: 0;
+}
+
+.msm-help-section dt {
+    font-weight: 600;
+    color: #212529;
+    font-size: 0.8rem;
+    margin-top: 0.5rem;
+}
+
+.msm-help-section dt:first-child {
+    margin-top: 0;
+}
+
+.msm-help-section dd {
+    margin: 0.15rem 0 0 0;
+    font-size: 0.75rem;
+    color: #6c757d;
+    line-height: 1.4;
+}
+
+/* Packet Metrics Info Banner */
+.msm-packet-info {
+    display: flex;
+    align-items: flex-start;
+    gap: 0.5rem;
+    padding: 0.6rem 1rem;
+    background: rgba(23, 162, 184, 0.08);
+    border-left: 3px solid #17a2b8;
+    font-size: 0.8rem;
+    color: #495057;
+    line-height: 1.4;
+}
+
+.msm-packet-info i {
+    color: #17a2b8;
+    margin-top: 0.15rem;
+    flex-shrink: 0;
 }
