@@ -35,7 +35,7 @@ sudo systemctl restart fppd
 - **connectivityCheck.php**: Background daemon for network monitoring (runs via postStart.sh)
 - **pluginInfo.json**: Plugin metadata and version info
 
-### UI Pages
+### UI Pages (/ui/)
 - **configUI.php**: Plugin configuration
 - **localMetricsUI.php**: Local system metrics (CPU, memory, disk, thermal, wireless)
 - **connectivityUI.php**: Ping connectivity monitoring
@@ -43,6 +43,8 @@ sudo systemctl restart fppd
 - **remoteMetricsUI.php**: Multi-sync remote host system metrics
 - **remotePingUI.php**: Multi-sync remote host ping statistics
 - **remoteControlUI.php**: Remote FPP system control panel
+- **eventsUI.php**: MQTT events dashboard
+- **multiSyncMetricsUI.php**: Multi-sync status and comparison dashboard
 
 ### Library Files (/lib/)
 
@@ -101,12 +103,12 @@ Organized into subdirectories by function:
 
 All UI pages should use the shared utilities in `lib/ui/common.php` and `js/commonUI.js`.
 
-**PHP Setup (top of file):**
+**PHP Setup (top of file in ui/ directory):**
 ```php
 <?php
-include_once __DIR__ . '/lib/core/config.php';
-include_once __DIR__ . '/lib/core/watcherCommon.php';
-include_once __DIR__ . '/lib/ui/common.php';
+include_once __DIR__ . '/../lib/core/config.php';
+include_once __DIR__ . '/../lib/core/watcherCommon.php';
+include_once __DIR__ . '/../lib/ui/common.php';
 
 $config = readPluginConfig();
 $localSystem = apiCall('GET', 'http://127.0.0.1/api/fppd/status', [], true, 5) ?: [];
