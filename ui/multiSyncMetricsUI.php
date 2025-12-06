@@ -61,8 +61,8 @@ renderCommonJS();
                 <div class="msm-help-section">
                     <h4>Sync Metrics</h4>
                     <dl>
-                        <dt>Drift</dt>
-                        <dd>Frame difference between player and remote. Positive = remote is ahead, negative = behind. &gt;5 frames may be noticeable.</dd>
+                        <dt>Time Drift</dt>
+                        <dd>System clock difference between player and remote. Positive = remote clock is ahead, negative = behind. Large drift (&gt;500ms) may cause sync issues. Uses NTP-style measurement accounting for network round-trip time.</dd>
                         <dt>Step Time</dt>
                         <dd>Milliseconds per frame from sequence file. Common values: 25ms (40fps), 50ms (20fps).</dd>
                         <dt>Last Sync</dt>
@@ -298,6 +298,7 @@ renderCommonJS();
                         <th data-sort="address" class="msm-th-sortable">IP</th>
                         <th data-sort="type" class="msm-th-sortable">Type</th>
                         <th data-sort="mode" class="msm-th-sortable">Mode</th>
+                        <th data-sort="drift" class="msm-th-sortable msm-th-right" title="Time drift from player (negative = behind)">Time Drift</th>
                         <th data-sort="syncSent" class="msm-th-sortable msm-th-right" title="Sync Sent">Sync<i class="fas fa-arrow-up"></i></th>
                         <th data-sort="syncRecv" class="msm-th-sortable msm-th-right" title="Sync Received">Sync<i class="fas fa-arrow-down"></i></th>
                         <th data-sort="mediaSent" class="msm-th-sortable msm-th-right" title="Media Sent">Media<i class="fas fa-arrow-up"></i></th>
@@ -306,7 +307,7 @@ renderCommonJS();
                     </tr>
                 </thead>
                 <tbody id="systemsPacketBody">
-                    <tr><td colspan="10" class="msm-td-loading"><i class="fas fa-spinner fa-spin"></i> Loading...</td></tr>
+                    <tr><td colspan="11" class="msm-td-loading"><i class="fas fa-spinner fa-spin"></i> Loading...</td></tr>
                 </tbody>
             </table>
         </div>
@@ -329,6 +330,7 @@ let systemsData = [];
 let currentSort = { column: 'hostname', direction: 'asc' };
 let sequenceMeta = null;
 let lastSequenceName = null;
+let clockDriftData = {}; // Map of address -> drift_ms
 
 // Quality colors
 const QUALITY_COLORS = {
@@ -385,9 +387,12 @@ async function loadAllData() {
             renderSystemsPacketTable([], status);
         }
 
-        // Load network quality data (player mode only)
+        // Load network quality and clock drift data (player mode only)
         if (IS_PLAYER_MODE) {
-            await loadNetworkQuality();
+            await Promise.all([
+                loadNetworkQuality(),
+                loadClockDrift()
+            ]);
         }
 
         updateLastRefresh();
@@ -688,7 +693,7 @@ function renderSystemsPacketTable(remotes, local) {
     const localRecv = local?.packetsReceived || {};
     const localHostname = '<?php echo htmlspecialchars($localSystem['host_name'] ?? gethostname()); ?>';
 
-    // Add local system
+    // Add local system (player is the time reference)
     systemsData.push({
         isLocal: true,
         status: 'local',
@@ -743,6 +748,8 @@ function renderSystemsPacketTable(remotes, local) {
             address: sys.address,
             type: sys.type || '--',
             mode: sys.fppModeString || '--',
+            drift: null,
+            driftFrames: null,
             syncSent: 0, syncRecv: 0, mediaSent: 0, mediaRecv: 0, blankSent: 0, blankRecv: 0,
             hasMetrics: false
         });
@@ -775,10 +782,21 @@ function sortAndRenderTable() {
             valB = order[valB] ?? 5;
         }
 
+        // Drift sorting uses clock drift data
+        if (col === 'drift') {
+            const driftA = clockDriftData[a.address]?.drift_ms ?? null;
+            const driftB = clockDriftData[b.address]?.drift_ms ?? null;
+            // Put nulls at end
+            if (driftA === null && driftB === null) return 0;
+            if (driftA === null) return 1;
+            if (driftB === null) return -1;
+            return dir * (Math.abs(driftA) - Math.abs(driftB));
+        }
+
         if (typeof valA === 'string') {
             return dir * valA.localeCompare(valB);
         }
-        return dir * (valA - valB);
+        return dir * ((valA ?? 0) - (valB ?? 0));
     });
 
     // Render rows
@@ -797,12 +815,37 @@ function sortAndRenderTable() {
 
         const dimClass = !row.hasMetrics && !row.isLocal ? 'msm-row-dim' : '';
 
+        // Format clock drift display with color coding
+        // Clock drift is measured from the clock-drift API (actual system time difference)
+        let driftDisplay = '--';
+        let driftClass = '';
+        const clockData = clockDriftData[row.address];
+
+        if (row.isLocal) {
+            driftDisplay = '<span class="msm-drift-ref">ref</span>';
+        } else if (clockData && clockData.drift_ms !== null) {
+            const driftMs = clockData.drift_ms;
+            const absMs = Math.abs(driftMs);
+            const sign = driftMs >= 0 ? '+' : '';
+            // Color code: green for <50ms, yellow for 50-500ms, red for >500ms
+            // These thresholds are for system clock drift (more tolerant than frame drift)
+            if (absMs < 50) driftClass = 'msm-drift-good';
+            else if (absMs < 500) driftClass = 'msm-drift-fair';
+            else driftClass = 'msm-drift-poor';
+            const rttTitle = clockData.rtt_ms ? `RTT: ${clockData.rtt_ms}ms` : '';
+            driftDisplay = `<span class="${driftClass}" title="${rttTitle}">${sign}${driftMs}ms</span>`;
+        } else if (row.hasMetrics) {
+            // Has plugin but no clock data yet
+            driftDisplay = '<span class="msm-drift-pending">...</span>';
+        }
+
         return `<tr class="${dimClass}">
             <td><span class="msm-status-badge ${statusClass}">${statusLabel}</span></td>
             <td>${row.isLocal ? '<i class="fas fa-home msm-home-icon"></i>' : ''}${escapeHtml(row.hostname)}</td>
             <td class="msm-td-mono">${escapeHtml(row.address)}</td>
             <td>${escapeHtml(row.type)}</td>
             <td>${escapeHtml(row.mode)}</td>
+            <td class="msm-td-num">${driftDisplay}</td>
             <td class="msm-td-num msm-td-sent">${row.hasMetrics ? row.syncSent.toLocaleString() : '--'}</td>
             <td class="msm-td-num msm-td-recv">${row.hasMetrics ? row.syncRecv.toLocaleString() : '--'}</td>
             <td class="msm-td-num msm-td-sent">${row.hasMetrics ? row.mediaSent.toLocaleString() : '--'}</td>
@@ -877,6 +920,33 @@ function formatTimeSince(seconds) {
     if (seconds < 3600) return Math.floor(seconds / 60) + 'm';
     if (seconds < 86400) return Math.floor(seconds / 3600) + 'h';
     return Math.floor(seconds / 86400) + 'd';
+}
+
+async function loadClockDrift() {
+    try {
+        const resp = await fetch('/api/plugin/fpp-plugin-watcher/multisync/clock-drift');
+        if (!resp.ok) return;
+
+        const data = await resp.json();
+        if (!data.success) return;
+
+        // Build map of address -> drift data
+        clockDriftData = {};
+        (data.hosts || []).forEach(host => {
+            clockDriftData[host.address] = {
+                drift_ms: host.drift_ms,
+                rtt_ms: host.rtt_ms,
+                hasPlugin: host.hasPlugin
+            };
+        });
+
+        // Re-render table with new clock drift data
+        if (systemsData.length > 0) {
+            sortAndRenderTable();
+        }
+    } catch (e) {
+        console.error('Error loading clock drift:', e);
+    }
 }
 
 async function loadNetworkQuality() {

@@ -3519,3 +3519,30 @@
     margin-top: 0.15rem;
     flex-shrink: 0;
 }
+
+/* Time Drift Styles */
+.msm-drift-ref {
+    color: #6c757d;
+    font-style: italic;
+    font-size: 0.85em;
+}
+
+.msm-drift-good {
+    color: #28a745;
+    font-weight: 500;
+}
+
+.msm-drift-fair {
+    color: #ffc107;
+    font-weight: 500;
+}
+
+.msm-drift-poor {
+    color: #dc3545;
+    font-weight: 600;
+}
+
+.msm-drift-pending {
+    color: #6c757d;
+    font-size: 0.85em;
+}
