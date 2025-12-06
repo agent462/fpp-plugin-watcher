@@ -3,11 +3,13 @@ include_once __DIR__ . '/lib/watcherCommon.php';
 include_once WATCHERPLUGINDIR . '/lib/metrics.php';
 include_once WATCHERPLUGINDIR . '/lib/pingMetricsRollup.php';
 include_once WATCHERPLUGINDIR . '/lib/multiSyncPingMetrics.php';
+include_once WATCHERPLUGINDIR . '/lib/multiSyncMetrics.php';
 include_once WATCHERPLUGINDIR . '/lib/falconController.php';
 include_once WATCHERPLUGINDIR . '/lib/config.php';
 include_once WATCHERPLUGINDIR . '/lib/updateCheck.php';
 include_once WATCHERPLUGINDIR . '/lib/remoteControl.php';
 include_once WATCHERPLUGINDIR . '/lib/mqttEvents.php';
+include_once WATCHERPLUGINDIR . '/lib/multiSyncComparison.php';
 /**
  * Returns the API endpoints for the fpp-plugin-watcher plugin
  */
@@ -283,6 +285,13 @@ function getEndpointsfpppluginwatcher() {
         'callback' => 'fpppluginWatcherOutputDiscrepancies');
     array_push($result, $ep);
 
+    // Quick ping check for multiple hosts (used for bridge nodes)
+    $ep = array(
+        'method' => 'GET',
+        'endpoint' => 'ping/check',
+        'callback' => 'fpppluginWatcherPingCheck');
+    array_push($result, $ep);
+
     // MQTT event monitoring endpoints
     $ep = array(
         'method' => 'GET',
@@ -300,6 +309,19 @@ function getEndpointsfpppluginwatcher() {
         'method' => 'GET',
         'endpoint' => 'mqtt/hosts',
         'callback' => 'fpppluginWatcherMqttHosts');
+    array_push($result, $ep);
+
+    // MultiSync comparison endpoints (player vs remote sync state)
+    $ep = array(
+        'method' => 'GET',
+        'endpoint' => 'multisync/comparison',
+        'callback' => 'fpppluginWatcherMultiSyncComparison');
+    array_push($result, $ep);
+
+    $ep = array(
+        'method' => 'GET',
+        'endpoint' => 'multisync/comparison/host',
+        'callback' => 'fpppluginWatcherMultiSyncComparisonHost');
     array_push($result, $ep);
 
     return $result;
@@ -1140,4 +1162,75 @@ function fpppluginWatcherMqttHosts() {
         'count' => count($hosts),
         'hosts' => $hosts
     ]);
+}
+
+// GET /api/plugin/fpp-plugin-watcher/ping/check?ips[]=x.x.x.x&ips[]=y.y.y.y
+// Quick ping check for multiple hosts (single packet, 1 second timeout)
+function fpppluginWatcherPingCheck() {
+    $ips = isset($_GET['ips']) ? $_GET['ips'] : [];
+
+    if (!is_array($ips) || empty($ips)) {
+        /** @disregard P1010 */
+        return json(['success' => false, 'error' => 'Missing ips[] parameter']);
+    }
+
+    $results = [];
+    foreach ($ips as $ip) {
+        $ip = trim($ip);
+        if (!filter_var($ip, FILTER_VALIDATE_IP)) {
+            $results[$ip] = ['reachable' => false, 'error' => 'Invalid IP'];
+            continue;
+        }
+
+        // Single ping with 1 second timeout
+        $output = [];
+        $returnCode = 0;
+        exec("ping -c 1 -W 1 " . escapeshellarg($ip) . " 2>&1", $output, $returnCode);
+
+        $results[$ip] = [
+            'reachable' => ($returnCode === 0),
+            'latency' => null
+        ];
+
+        // Extract latency if successful
+        if ($returnCode === 0) {
+            foreach ($output as $line) {
+                if (preg_match('/time=([0-9.]+)\s*ms/', $line, $matches)) {
+                    $results[$ip]['latency'] = floatval($matches[1]);
+                    break;
+                }
+            }
+        }
+    }
+
+    /** @disregard P1010 */
+    return json(['success' => true, 'results' => $results]);
+}
+
+// GET /api/plugin/fpp-plugin-watcher/multisync/comparison
+// Compare player sync state with all remote systems
+function fpppluginWatcherMultiSyncComparison() {
+    $result = getSyncComparison();
+    /** @disregard P1010 */
+    return json($result);
+}
+
+// GET /api/plugin/fpp-plugin-watcher/multisync/comparison/host?address=x.x.x.x
+// Compare player sync state with a specific remote
+function fpppluginWatcherMultiSyncComparisonHost() {
+    $address = isset($_GET['address']) ? trim($_GET['address']) : '';
+
+    if (empty($address)) {
+        /** @disregard P1010 */
+        return json(['success' => false, 'error' => 'Missing address parameter']);
+    }
+
+    if (!filter_var($address, FILTER_VALIDATE_IP)) {
+        /** @disregard P1010 */
+        return json(['success' => false, 'error' => 'Invalid IP address']);
+    }
+
+    $result = getSyncComparisonForHost($address);
+    /** @disregard P1010 */
+    return json($result);
 }

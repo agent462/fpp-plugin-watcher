@@ -98,6 +98,21 @@ if ($showMultiSyncPingMenu) {
 	]);
 }
 
+// Add Multi-Sync Metrics menu entry (always visible when MultiSync metrics OR ping is enabled)
+// This uses the C++ plugin for sync packet tracking
+if ($showMultiSyncMenu || $showMultiSyncPingMenu) {
+	$helpIndex = count($menuEntries) - 1;
+	array_splice($menuEntries, $helpIndex, 0, [
+		Array(
+			'text' => '<i class="fa-solid fa-network-wired"></i> Watcher - Sync Metrics',
+			'type' => 'status',
+			'page' => 'multiSyncMetricsUI.php',
+			'wrap' => 1
+		)
+	]);
+}
+
+
 // Add Remote Control UI menu entry only if enabled
 if ($showControlUIMenu) {
 	// Find the Help entry index (it may have shifted due to previous entries)
