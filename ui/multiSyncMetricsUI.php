@@ -188,16 +188,28 @@ renderCommonJS();
             </div>
             <div class="msm-lifecycle-grid">
                 <div class="msm-lifecycle-item">
-                    <span class="msm-lifecycle-label"><?php echo $isRemoteMode ? 'Seq Open' : 'Open'; ?></span>
+                    <span class="msm-lifecycle-label"><?php echo $isRemoteMode ? 'Seq Open' : 'Seq Open'; ?></span>
                     <span class="msm-lifecycle-value" id="lcSeqOpen">0</span>
                 </div>
                 <div class="msm-lifecycle-item">
-                    <span class="msm-lifecycle-label"><?php echo $isRemoteMode ? 'Seq Start' : 'Start'; ?></span>
+                    <span class="msm-lifecycle-label"><?php echo $isRemoteMode ? 'Seq Start' : 'Seq Start'; ?></span>
                     <span class="msm-lifecycle-value" id="lcSeqStart">0</span>
                 </div>
                 <div class="msm-lifecycle-item">
-                    <span class="msm-lifecycle-label"><?php echo $isRemoteMode ? 'Seq Stop' : 'Stop'; ?></span>
+                    <span class="msm-lifecycle-label"><?php echo $isRemoteMode ? 'Seq Stop' : 'Seq Stop'; ?></span>
                     <span class="msm-lifecycle-value" id="lcSeqStop">0</span>
+                </div>
+                <div class="msm-lifecycle-item">
+                    <span class="msm-lifecycle-label">Media Open</span>
+                    <span class="msm-lifecycle-value" id="lcMediaOpen">0</span>
+                </div>
+                <div class="msm-lifecycle-item">
+                    <span class="msm-lifecycle-label">Media Start</span>
+                    <span class="msm-lifecycle-value" id="lcMediaStart">0</span>
+                </div>
+                <div class="msm-lifecycle-item">
+                    <span class="msm-lifecycle-label">Media Stop</span>
+                    <span class="msm-lifecycle-value" id="lcMediaStop">0</span>
                 </div>
                 <div class="msm-lifecycle-item">
                     <span class="msm-lifecycle-label">Sync Pkts</span>
@@ -208,8 +220,16 @@ renderCommonJS();
                     <span class="msm-lifecycle-value" id="lcMediaPackets">0</span>
                 </div>
                 <div class="msm-lifecycle-item">
+                    <span class="msm-lifecycle-label">Blank Pkts</span>
+                    <span class="msm-lifecycle-value" id="lcBlankPackets">0</span>
+                </div>
+                <div class="msm-lifecycle-item">
                     <span class="msm-lifecycle-label">Cmd Pkts</span>
                     <span class="msm-lifecycle-value" id="lcCmdPackets">0</span>
+                </div>
+                <div class="msm-lifecycle-item">
+                    <span class="msm-lifecycle-label">Plugin Pkts</span>
+                    <span class="msm-lifecycle-value" id="lcPluginPackets">0</span>
                 </div>
             </div>
         </div>
@@ -652,14 +672,21 @@ function updateLifecycleMetrics(status) {
     document.getElementById('lcSeqOpen').textContent = (lc.seqOpen || 0).toLocaleString();
     document.getElementById('lcSeqStart').textContent = (lc.seqStart || 0).toLocaleString();
     document.getElementById('lcSeqStop').textContent = (lc.seqStop || 0).toLocaleString();
+    document.getElementById('lcMediaOpen').textContent = (lc.mediaOpen || 0).toLocaleString();
+    document.getElementById('lcMediaStart').textContent = (lc.mediaStart || 0).toLocaleString();
+    document.getElementById('lcMediaStop').textContent = (lc.mediaStop || 0).toLocaleString();
 
     // Show related packet counts (sent + received for player, received only for remote)
     const syncTotal = IS_REMOTE_MODE ? (recv.sync || 0) : (sent.sync || 0) + (recv.sync || 0);
     const mediaTotal = IS_REMOTE_MODE ? (recv.mediaSync || 0) : (sent.mediaSync || 0) + (recv.mediaSync || 0);
+    const blankTotal = IS_REMOTE_MODE ? (recv.blank || 0) : (sent.blank || 0) + (recv.blank || 0);
     const cmdTotal = IS_REMOTE_MODE ? (recv.command || 0) : (sent.command || 0) + (recv.command || 0);
+    const pluginTotal = IS_REMOTE_MODE ? (recv.plugin || 0) : (sent.plugin || 0) + (recv.plugin || 0);
     document.getElementById('lcSyncPackets').textContent = syncTotal.toLocaleString();
     document.getElementById('lcMediaPackets').textContent = mediaTotal.toLocaleString();
+    document.getElementById('lcBlankPackets').textContent = blankTotal.toLocaleString();
     document.getElementById('lcCmdPackets').textContent = cmdTotal.toLocaleString();
+    document.getElementById('lcPluginPackets').textContent = pluginTotal.toLocaleString();
 }
 
 // Remote mode: Update packet summary card
