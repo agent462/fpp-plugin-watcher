@@ -634,7 +634,7 @@ async function updateSystemCard(status) {
         }
     }
 
-    document.getElementById('systemLastSync').textContent = formatTimeSince(status.secondsSinceLastSync);
+    document.getElementById('systemLastSync').textContent = formatTimeSinceMs(status.millisecondsSinceLastSync);
 }
 
 function formatTime(seconds) {
@@ -984,7 +984,7 @@ function renderRemoteCards(remotes) {
             const avgDriftNum = m.avgFrameDrift !== undefined ? Math.abs(m.avgFrameDrift) : null;
             const avgDrift = avgDriftNum !== null ? avgDriftNum.toFixed(1) : '--';
             const maxDrift = m.maxFrameDrift !== undefined ? Math.abs(m.maxFrameDrift) : null;
-            const lastSync = m.secondsSinceLastSync !== undefined ? m.secondsSinceLastSync + 's' : '--';
+            const lastSync = m.millisecondsSinceLastSync !== undefined ? formatTimeSinceMs(m.millisecondsSinceLastSync) : '--';
 
             // Use avg drift for alerting (max can spike on FPP restart)
             let driftClass = '';
@@ -1281,6 +1281,17 @@ async function resetMetrics() {
 
 function formatTimeSince(seconds) {
     if (seconds === undefined || seconds < 0) return '--';
+    if (seconds < 60) return seconds + 's';
+    if (seconds < 3600) return Math.floor(seconds / 60) + 'm';
+    if (seconds < 86400) return Math.floor(seconds / 3600) + 'h';
+    return Math.floor(seconds / 86400) + 'd';
+}
+
+function formatTimeSinceMs(ms) {
+    if (ms === undefined || ms < 0) return '--';
+    if (ms < 1000) return ms + 'ms';
+    if (ms < 10000) return (ms / 1000).toFixed(1) + 's';
+    const seconds = Math.floor(ms / 1000);
     if (seconds < 60) return seconds + 's';
     if (seconds < 3600) return Math.floor(seconds / 60) + 'm';
     if (seconds < 86400) return Math.floor(seconds / 3600) + 'h';

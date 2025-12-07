@@ -504,10 +504,11 @@ private:
             result["maxFrameDrift"] = m_maxFrameDrift;
         }
 
-        // Time since last sync
+        // Time since last sync (provide both seconds and milliseconds)
         auto now = std::chrono::steady_clock::now();
-        auto elapsed = std::chrono::duration_cast<std::chrono::seconds>(now - m_lastSyncTime).count();
-        result["secondsSinceLastSync"] = (int)elapsed;
+        auto elapsedMs = std::chrono::duration_cast<std::chrono::milliseconds>(now - m_lastSyncTime).count();
+        result["secondsSinceLastSync"] = (int)(elapsedMs / 1000);
+        result["millisecondsSinceLastSync"] = (int)elapsedMs;
 
         return result;
     }
