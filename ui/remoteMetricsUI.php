@@ -137,13 +137,12 @@ function processMetricData(data, valueKey) {
 async function fetchSystemMetrics(system) {
     const { address, hostname, model, type, version } = system;
     const hours = getSelectedHours();
-    const baseUrl = `http://${address}/api/plugin/fpp-plugin-watcher`;
     const result = { hostname, address, model: model || type || 'Unknown', version: version || '', watcherVersion: null, online: false, noWatcher: false, error: null, cpu: null, memory: null, disk: null, load: null, temperature: null, wireless: null, ping: null };
 
     try {
         const [allData, versionData] = await Promise.all([
-            fetchJson(`${baseUrl}/metrics/all?hours=${hours}`, 8000),
-            fetchJson(`${baseUrl}/version`, 3000).catch(() => null)
+            fetchJson(`/api/plugin/fpp-plugin-watcher/remote/metrics/all?host=${encodeURIComponent(address)}&hours=${hours}`, 12000),
+            fetchJson(`/api/plugin/fpp-plugin-watcher/remote/version?host=${encodeURIComponent(address)}`, 5000).catch(() => null)
         ]);
 
         if (!allData.success) { result.error = 'API returned unsuccessful response'; return result; }
@@ -198,8 +197,8 @@ async function fetchSystemMetrics(system) {
     } catch (e) {
         // Watcher API failed - check if host is still online via basic FPP API
         try {
-            const fppStatus = await fetchJson(`http://${address}/api/fppd/status`, 5000);
-            if (fppStatus && typeof fppStatus === 'object') {
+            const fppStatusResponse = await fetchJson(`/api/plugin/fpp-plugin-watcher/remote/fppd/status?host=${encodeURIComponent(address)}`, 8000);
+            if (fppStatusResponse?.success && fppStatusResponse.data) {
                 result.online = true;
                 result.noWatcher = true;
             }

@@ -26,6 +26,7 @@ curl http://127.0.0.1/api/plugin/fpp-plugin-watcher/metrics/all
 # Restart FPP
 sudo systemctl restart fppd
 ```
+## Instructions
 
 ## Architecture
 

@@ -129,6 +129,11 @@ function getEndpointsfpppluginwatcher() {
         ['method' => 'POST', 'endpoint' => 'remote/fpp/upgrade', 'callback' => 'fpppluginWatcherRemoteFPPUpgrade'],
         ['method' => 'GET', 'endpoint' => 'remote/connectivity/state', 'callback' => 'fpppluginWatcherRemoteConnectivityState'],
         ['method' => 'POST', 'endpoint' => 'remote/connectivity/state/clear', 'callback' => 'fpppluginWatcherRemoteConnectivityStateClear'],
+        ['method' => 'GET', 'endpoint' => 'remote/version', 'callback' => 'fpppluginWatcherRemoteVersion'],
+        ['method' => 'GET', 'endpoint' => 'remote/sysStatus', 'callback' => 'fpppluginWatcherRemoteSysStatus'],
+        ['method' => 'GET', 'endpoint' => 'remote/sysInfo', 'callback' => 'fpppluginWatcherRemoteSysInfo'],
+        ['method' => 'GET', 'endpoint' => 'remote/metrics/all', 'callback' => 'fpppluginWatcherRemoteMetricsAll'],
+        ['method' => 'GET', 'endpoint' => 'remote/fppd/status', 'callback' => 'fpppluginWatcherRemoteFppdStatus'],
 
         // Plugin updates
         ['method' => 'GET', 'endpoint' => 'update/check', 'callback' => 'fpppluginWatcherUpdateCheck'],
@@ -856,6 +861,78 @@ function fpppluginWatcherRemoteConnectivityStateClear() {
     if ($result === false) return apiError('Failed to clear connectivity state on remote host');
     /** @disregard P1010 */
     return json($result);
+}
+
+// GET /api/plugin/fpp-plugin-watcher/remote/version?host=x
+function fpppluginWatcherRemoteVersion() {
+    $host = getRequiredQueryParam('host');
+    if (!$host) return apiError('Missing host parameter');
+
+    $result = apiCall('GET', "http://{$host}/api/plugin/fpp-plugin-watcher/version", [], true, 5);
+    if ($result === false) {
+        /** @disregard P1010 */
+        return json(['success' => false, 'error' => 'Failed to fetch version from remote host']);
+    }
+    $result['success'] = true;
+    /** @disregard P1010 */
+    return json($result);
+}
+
+// GET /api/plugin/fpp-plugin-watcher/remote/sysStatus?host=x
+function fpppluginWatcherRemoteSysStatus() {
+    $host = getRequiredQueryParam('host');
+    if (!$host) return apiError('Missing host parameter');
+
+    $result = apiCall('GET', "http://{$host}/api/system/status", [], true, 5);
+    if ($result === false) {
+        /** @disregard P1010 */
+        return json(['success' => false, 'error' => 'Failed to fetch system status from remote host']);
+    }
+    /** @disregard P1010 */
+    return json(['success' => true, 'data' => $result]);
+}
+
+// GET /api/plugin/fpp-plugin-watcher/remote/sysInfo?host=x
+function fpppluginWatcherRemoteSysInfo() {
+    $host = getRequiredQueryParam('host');
+    if (!$host) return apiError('Missing host parameter');
+
+    $result = apiCall('GET', "http://{$host}/api/system/info", [], true, 5);
+    if ($result === false) {
+        /** @disregard P1010 */
+        return json(['success' => false, 'error' => 'Failed to fetch system info from remote host']);
+    }
+    /** @disregard P1010 */
+    return json(['success' => true, 'data' => $result]);
+}
+
+// GET /api/plugin/fpp-plugin-watcher/remote/metrics/all?host=x&hours=Y
+function fpppluginWatcherRemoteMetricsAll() {
+    $host = getRequiredQueryParam('host');
+    if (!$host) return apiError('Missing host parameter');
+
+    $hours = getHoursParam();
+    $result = apiCall('GET', "http://{$host}/api/plugin/fpp-plugin-watcher/metrics/all?hours={$hours}", [], true, 10);
+    if ($result === false) {
+        /** @disregard P1010 */
+        return json(['success' => false, 'error' => 'Failed to fetch metrics from remote host']);
+    }
+    /** @disregard P1010 */
+    return json($result);
+}
+
+// GET /api/plugin/fpp-plugin-watcher/remote/fppd/status?host=x
+function fpppluginWatcherRemoteFppdStatus() {
+    $host = getRequiredQueryParam('host');
+    if (!$host) return apiError('Missing host parameter');
+
+    $result = apiCall('GET', "http://{$host}/api/fppd/status", [], true, 5);
+    if ($result === false) {
+        /** @disregard P1010 */
+        return json(['success' => false, 'error' => 'Failed to fetch fppd status from remote host']);
+    }
+    /** @disregard P1010 */
+    return json(['success' => true, 'data' => $result]);
 }
 
 // GET /api/plugin/fpp-plugin-watcher/outputs/discrepancies

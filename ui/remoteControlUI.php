@@ -747,9 +747,9 @@ async function fetchSystemStatus(address) {
             connectivity: '/api/plugin/fpp-plugin-watcher/connectivity/state'
         } : {
             status: `/api/plugin/fpp-plugin-watcher/remote/status?host=${encodeURIComponent(address)}`,
-            version: `http://${address}/api/plugin/fpp-plugin-watcher/version`,
+            version: `/api/plugin/fpp-plugin-watcher/remote/version?host=${encodeURIComponent(address)}`,
             updates: `/api/plugin/fpp-plugin-watcher/remote/plugins/updates?host=${encodeURIComponent(address)}`,
-            sysStatus: `http://${address}/api/system/status`,
+            sysStatus: `/api/plugin/fpp-plugin-watcher/remote/sysStatus?host=${encodeURIComponent(address)}`,
             connectivity: `/api/plugin/fpp-plugin-watcher/remote/connectivity/state?host=${encodeURIComponent(address)}`
         };
 
@@ -815,7 +815,10 @@ async function fetchSystemStatus(address) {
         let sysInfo = getCachedData('sysStatus', address) || { fppLocalVersion: null, fppRemoteVersion: null, diskUtilization: null, cpuUtilization: null, memoryUtilization: null, ipAddress: null };
         if (fetchFlags.sysStatus && sysStatusResponse?.ok) {
             try {
-                sysInfo = parseSystemStatus(await sysStatusResponse.json());
+                const sysStatusData = await sysStatusResponse.json();
+                // Remote proxy wraps response in {success, data}, local returns data directly
+                const rawSysStatus = isLocal ? sysStatusData : (sysStatusData.data || sysStatusData);
+                sysInfo = parseSystemStatus(rawSysStatus);
                 setCachedData('sysStatus', address, sysInfo);
             } catch (e) {}
         }
@@ -1140,10 +1143,12 @@ async function toggleTestMode(address, enable) {
         let channelRange = "1-8388608";
         if (enable) {
             try {
-                const infoUrl = isLocal ? '/api/system/info' : `http://${address}/api/system/info`;
+                const infoUrl = isLocal ? '/api/system/info' : `/api/plugin/fpp-plugin-watcher/remote/sysInfo?host=${encodeURIComponent(address)}`;
                 const infoResponse = await fetch(infoUrl);
                 if (infoResponse.ok) {
-                    const info = await infoResponse.json();
+                    const infoData = await infoResponse.json();
+                    // Remote proxy wraps response in {success, data}, local returns data directly
+                    const info = isLocal ? infoData : (infoData.data || infoData);
                     if (info.channelRanges) {
                         const parts = info.channelRanges.split('-');
                         if (parts.length === 2) {
@@ -1788,10 +1793,15 @@ async function startSingleFPPUpgrade(address) {
             updateFPPStatus(address, 'success', 'sync fa-spin', 'Rebooting...');
 
             try {
-                const rebootUrl = address === 'localhost' || address === '127.0.0.1'
-                    ? '/api/system/reboot'
-                    : `http://${address}/api/system/reboot`;
-                await fetch(rebootUrl, { method: 'GET', mode: 'no-cors' });
+                if (address === 'localhost' || address === '127.0.0.1') {
+                    await fetch('/api/system/reboot', { method: 'GET' });
+                } else {
+                    await fetch('/api/plugin/fpp-plugin-watcher/remote/reboot', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ host: address })
+                    });
+                }
                 logEl.textContent += '\nReboot command sent. System will restart shortly.';
             } catch (rebootErr) {
                 // Reboot may cause connection loss - this is expected
