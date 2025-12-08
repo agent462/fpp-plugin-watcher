@@ -61,15 +61,42 @@ renderCommonJS();
                         <dd>Estimated based on sync packet receive rate during playback. FPP sends sync packets every 10 frames (~2-4/sec depending on sequence frame rate).</dd>
                     </dl>
                 </div>
+                <div class="msm-help-section">
+                    <h4>Remote Seq Sync Packet Timing</h4>
+                    <dl>
+                        <dt>Packets Recv</dt>
+                        <dd>Total MultiSync packets received by each remote, including <strong>all</strong> packet types: sequence sync, media sync, blank, command, and plugin packets.</dd>
+                        <dt>Seq Sync Rate</dt>
+                        <dd>Sequence sync packets per second, calculated from the interval (1000ms ÷ interval). This is <strong>only sequence syncs</strong>, not media or other packets.</dd>
+                        <dt>Seq Sync Interval</dt>
+                        <dd>Average time between sequence sync packets. FPP sends sync every ~10 frames, so at 40fps expect ~250ms (~4/sec). At 20fps expect ~500ms (~2/sec).</dd>
+                        <dt>Seq Sync Jitter</dt>
+                        <dd>Variation in sequence sync packet arrival times (RFC 3550). Measures MultiSync UDP timing - different from network ping jitter. Good: &lt;20ms, Fair: 20-50ms</dd>
+                    </dl>
+                    <div class="msm-help-example">
+                        <strong>Why Packets Recv differs from Seq Sync Rate:</strong><br>
+                        • Seq Sync Rate 4/s = only sequence sync packets<br>
+                        • Media sync adds ~2 more packets/sec<br>
+                        • So total ~6 packets/sec in Packets Recv
+                    </div>
+                </div>
                 <?php else: ?>
                 <div class="msm-help-section">
-                    <h4>Sync Packet Timing</h4>
+                    <h4>Seq Sync Packet Timing</h4>
                     <dl>
-                        <dt>Sync Interval</dt>
-                        <dd>Average time between sync packets from the player. FPP typically sends sync packets every ~100ms (10/sec), not every frame. This is normal and by design to reduce network traffic.</dd>
-                        <dt>Sync Jitter</dt>
-                        <dd>Variation in sync packet arrival times (RFC 3550). Different from network ping jitter - this measures MultiSync-specific timing consistency. High sync jitter could indicate network congestion affecting UDP multicast traffic specifically. Good: &lt;20ms, Fair: 20-50ms</dd>
+                        <dt>Packet Rate</dt>
+                        <dd>Total MultiSync packets received per second, including <strong>all</strong> packet types: sequence sync, media sync, blank, command, and plugin packets. Example: 6 packets/sec might be 4 sync + 2 media packets.</dd>
+                        <dt>Seq Sync Interval</dt>
+                        <dd>Average time between <strong>sequence sync packets only</strong> (not media or other packets). FPP sends sync every ~10 frames, so at 40fps expect ~250ms interval (~4/sec). At 20fps expect ~500ms (~2/sec). This is by design to reduce network traffic - remotes interpolate between sync points.</dd>
+                        <dt>Seq Sync Jitter</dt>
+                        <dd>Variation in sequence sync packet arrival times (RFC 3550). Measures MultiSync UDP timing consistency - different from network ping jitter which uses ICMP. High jitter may indicate network congestion affecting broadcast/multicast traffic. Good: &lt;20ms, Fair: 20-50ms</dd>
                     </dl>
+                    <div class="msm-help-example">
+                        <strong>Example:</strong> With Packet Rate 6/sec and Seq Sync Interval 250ms:<br>
+                        • Sequence sync: ~4 packets/sec (1000ms ÷ 250ms)<br>
+                        • Media sync: ~2 packets/sec (remainder)<br>
+                        • Total: 6 packets/sec ✓
+                    </div>
                 </div>
                 <?php endif; ?>
                 <div class="msm-help-section">
@@ -186,11 +213,11 @@ renderCommonJS();
                 <span class="msm-system-metric-value" id="systemPacketRate">--</span>
             </div>
             <div class="msm-system-metric">
-                <span class="msm-system-metric-label">Sync Interval <i class="fas fa-info-circle" style="color: #6c757d; cursor: help; font-size: 0.7em; opacity: 0.7;" title="Average time between sync packets from player. Shows the player's actual sync rate."></i></span>
+                <span class="msm-system-metric-label">Seq Sync Interval <i class="fas fa-info-circle" style="color: #6c757d; cursor: help; font-size: 0.7em; opacity: 0.7;" title="Average time between sequence sync packets from player. FPP sends sync every ~10 frames (~250ms at 40fps)."></i></span>
                 <span class="msm-system-metric-value" id="systemSyncInterval">--</span>
             </div>
             <div class="msm-system-metric">
-                <span class="msm-system-metric-label">Sync Jitter <i class="fas fa-info-circle" style="color: #6c757d; cursor: help; font-size: 0.7em; opacity: 0.7;" title="Variation in sync packet arrival times (RFC 3550). Different from network ping jitter - measures MultiSync-specific timing consistency."></i></span>
+                <span class="msm-system-metric-label">Seq Sync Jitter <i class="fas fa-info-circle" style="color: #6c757d; cursor: help; font-size: 0.7em; opacity: 0.7;" title="Variation in sequence sync packet arrival times (RFC 3550). Different from network ping jitter - measures MultiSync UDP timing consistency."></i></span>
                 <span class="msm-system-metric-value" id="systemSyncJitter">--</span>
             </div>
             <?php endif; ?>
@@ -1052,15 +1079,31 @@ function renderRemoteCards(remotes) {
         let metricsHtml = '';
 
         if (remote.pluginInstalled && remote.online) {
-            // Use FPP status for actual sequence/status, fall back to sync packet data
+            // Use FPP status for actual sequence/status/frame, fall back to sync packet data
             const actualSeq = fpp.sequence || m.currentMasterSequence || '--';
             const actualStatus = fpp.status || (m.sequencePlaying ? 'playing' : 'idle');
             const statusDisplay = actualStatus === 'playing' ? 'Playing' : 'Idle';
+            const currentFrame = (actualStatus === 'playing' && fpp.currentFrame) ? fpp.currentFrame.toLocaleString() : '--';
             const pkts = m.totalPacketsReceived !== undefined ? m.totalPacketsReceived.toLocaleString() : '--';
             const avgDriftNum = m.avgFrameDrift !== undefined ? Math.abs(m.avgFrameDrift) : null;
             const avgDrift = avgDriftNum !== null ? avgDriftNum.toFixed(1) : '--';
             const maxDrift = m.maxFrameDrift !== undefined ? Math.abs(m.maxFrameDrift) : null;
             const lastSync = m.millisecondsSinceLastSync !== undefined ? formatTimeSinceMs(m.millisecondsSinceLastSync) : '--';
+
+            // Sync interval and jitter metrics
+            const syncInterval = m.avgSyncIntervalMs !== undefined && m.syncIntervalSamples > 0
+                ? m.avgSyncIntervalMs.toFixed(0) + 'ms' : '--';
+            const syncJitter = m.syncIntervalJitterMs !== undefined && m.syncIntervalSamples > 0
+                ? m.syncIntervalJitterMs.toFixed(1) + 'ms' : '--';
+            // Calculate sync packet rate from interval (sequence sync only, not media)
+            const syncRate = m.avgSyncIntervalMs !== undefined && m.avgSyncIntervalMs > 0 && m.syncIntervalSamples > 0
+                ? (1000 / m.avgSyncIntervalMs).toFixed(1) + '/s' : '--';
+            let syncJitterClass = '';
+            if (m.syncIntervalJitterMs !== undefined && m.syncIntervalSamples > 0) {
+                if (m.syncIntervalJitterMs < 20) syncJitterClass = 'good';
+                else if (m.syncIntervalJitterMs < 50) syncJitterClass = 'warning';
+                else syncJitterClass = 'critical';
+            }
 
             // Use avg drift for alerting (max can spike on FPP restart)
             let driftClass = '';
@@ -1082,7 +1125,11 @@ function renderRemoteCards(remotes) {
                 <div class="msm-remote-metrics">
                     <div><span class="msm-remote-metric-label">Received Sequence</span><br><span class="msm-remote-metric-value">${escapeHtml(actualSeq) || '(none)'}</span></div>
                     <div><span class="msm-remote-metric-label">Status</span><br><span class="msm-remote-metric-value ${statusClass}">${statusDisplay}</span></div>
-                    <div><span class="msm-remote-metric-label">Sync Packets Recv</span><br><span class="msm-remote-metric-value">${pkts}</span></div>
+                    <div><span class="msm-remote-metric-label">Packets Recv</span><br><span class="msm-remote-metric-value">${pkts}</span></div>
+                    <div><span class="msm-remote-metric-label">Frame</span><br><span class="msm-remote-metric-value msm-mono">${currentFrame}</span></div>
+                    <div><span class="msm-remote-metric-label">Seq Sync Rate</span><br><span class="msm-remote-metric-value">${syncRate}</span></div>
+                    <div><span class="msm-remote-metric-label">Seq Sync Interval</span><br><span class="msm-remote-metric-value">${syncInterval}</span></div>
+                    <div><span class="msm-remote-metric-label">Seq Sync Jitter</span><br><span class="msm-remote-metric-value ${syncJitterClass}">${syncJitter}</span></div>
                     <div><span class="msm-remote-metric-label">Last Sync</span><br><span class="msm-remote-metric-value">${lastSync}</span></div>
                     <div><span class="msm-remote-metric-label">Avg Frame Drift</span><br><span class="msm-remote-metric-value ${driftClass}">${avgDrift}f</span></div>
                     <div><span class="msm-remote-metric-label">Max Frame Drift</span><br><span class="msm-remote-metric-value ${driftClass}">${maxDrift !== null ? maxDrift + 'f' : '--'}</span></div>
@@ -1108,7 +1155,7 @@ function renderRemoteCards(remotes) {
                 <div class="msm-remote-header">
                     <div>
                         <div class="msm-remote-hostname">${escapeHtml(remote.hostname)}</div>
-                        <div class="msm-remote-address">${escapeHtml(remote.address)}</div>
+                        <div class="msm-remote-address"><a href="http://${escapeHtml(remote.address)}/" target="_blank" class="msm-host-link">${escapeHtml(remote.address)}</a></div>
                     </div>
                     ${badge}
                 </div>

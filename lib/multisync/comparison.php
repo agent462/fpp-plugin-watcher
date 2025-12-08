@@ -177,6 +177,7 @@ function collectRemoteSyncMetrics($remoteSystems, $timeout = 3) {
                 $result['fppStatus'] = [
                     'status' => $fppData['status_name'] ?? 'unknown',
                     'sequence' => $fppData['current_sequence'] ?? '',
+                    'currentFrame' => intval($fppData['current_frame'] ?? 0),
                     'secondsPlayed' => floatval($fppData['seconds_played'] ?? 0),
                     'secondsRemaining' => floatval($fppData['seconds_remaining'] ?? 0)
                 ];
@@ -346,6 +347,7 @@ function getSyncComparison() {
         'fppStatus' => [
             'status' => $localFppStatus['status_name'] ?? 'unknown',
             'sequence' => $localFppStatus['current_sequence'] ?? '',
+            'currentFrame' => intval($localFppStatus['current_frame'] ?? 0),
             'secondsPlayed' => floatval($localFppStatus['seconds_played'] ?? 0)
         ]
     ];
@@ -456,6 +458,7 @@ function getSyncComparisonForHost($address) {
         'fppStatus' => $remoteFppStatus ? [
             'status' => $remoteFppStatus['status_name'] ?? 'unknown',
             'sequence' => $remoteFppStatus['current_sequence'] ?? '',
+            'currentFrame' => intval($remoteFppStatus['current_frame'] ?? 0),
             'secondsPlayed' => floatval($remoteFppStatus['seconds_played'] ?? 0)
         ] : null
     ];

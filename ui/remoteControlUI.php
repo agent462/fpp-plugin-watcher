@@ -1014,6 +1014,14 @@ function updateCardUI(address, data) {
     const isMajorUpgrade = crossVersionUpgrade && crossVersionUpgrade.available && crossVersionUpgrade.isMajorUpgrade;
     const hasCrossVersionUpgrade = crossVersionUpgrade && crossVersionUpgrade.available && !isMajorUpgrade;
 
+    // Show/hide major upgrade row (informational only - requires OS Upgrade)
+    if (isMajorUpgrade) {
+        fppMajorRow.classList.add('visible');
+        fppMajorVersion.textContent = `v${crossVersionUpgrade.currentVersion} → v${crossVersionUpgrade.latestVersion}`;
+    } else {
+        fppMajorRow.classList.remove('visible');
+    }
+
     // Show/hide cross-version upgrade row
     if (hasCrossVersionUpgrade) {
         fppCrossVersionRow.classList.add('visible');

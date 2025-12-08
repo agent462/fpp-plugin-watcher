@@ -3579,6 +3579,16 @@
     line-height: 1.4;
 }
 
+.msm-help-example {
+    margin-top: 0.75rem;
+    padding: 0.5rem 0.75rem;
+    background: rgba(23, 162, 184, 0.1);
+    border-radius: 4px;
+    font-size: 0.75rem;
+    line-height: 1.5;
+    color: #495057;
+}
+
 /* Packet Metrics Info Banner */
 .msm-packet-info {
     display: flex;
