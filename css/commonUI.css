@@ -3119,6 +3119,14 @@
     color: #667eea;
     margin-right: 0.35rem;
 }
+.msm-host-link {
+    color: #667eea;
+    text-decoration: none;
+}
+.msm-host-link:hover {
+    color: #4c63d2;
+    text-decoration: underline;
+}
 .msm-td-mono {
     font-family: 'Consolas', 'Monaco', monospace;
     font-size: 0.8rem;

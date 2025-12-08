@@ -450,7 +450,6 @@ renderCommonJS();
                     <tr>
                         <th data-sort="status" class="msm-th-sortable">Status</th>
                         <th data-sort="hostname" class="msm-th-sortable msm-th-sorted-asc">Host</th>
-                        <th data-sort="address" class="msm-th-sortable">IP</th>
                         <th data-sort="type" class="msm-th-sortable">Type</th>
                         <th data-sort="mode" class="msm-th-sortable">Mode</th>
                         <th data-sort="drift" class="msm-th-sortable msm-th-right">Time Drift <i class="fas fa-info-circle" style="color: #6c757d; cursor: help; font-size: 0.75em; opacity: 0.7;" title="System clock difference from player. Small variations (±100ms) are normal due to measurement limitations. Uses NTP-style calculation that accounts for network round-trip time."></i></th>
@@ -458,11 +457,15 @@ renderCommonJS();
                         <th data-sort="syncRecv" class="msm-th-sortable msm-th-right" title="Sync Received">Sync<i class="fas fa-arrow-down"></i></th>
                         <th data-sort="mediaSent" class="msm-th-sortable msm-th-right" title="Media Sent">Media<i class="fas fa-arrow-up"></i></th>
                         <th data-sort="mediaRecv" class="msm-th-sortable msm-th-right" title="Media Received">Media<i class="fas fa-arrow-down"></i></th>
+                        <th data-sort="blankSent" class="msm-th-sortable msm-th-right" title="Blank Sent">Blank<i class="fas fa-arrow-up"></i></th>
+                        <th data-sort="blankRecv" class="msm-th-sortable msm-th-right" title="Blank Received">Blank<i class="fas fa-arrow-down"></i></th>
+                        <th data-sort="pluginSent" class="msm-th-sortable msm-th-right" title="Plugin Sent">Plugin<i class="fas fa-arrow-up"></i></th>
+                        <th data-sort="pluginRecv" class="msm-th-sortable msm-th-right" title="Plugin Received">Plugin<i class="fas fa-arrow-down"></i></th>
                         <th data-sort="total" class="msm-th-sortable msm-th-right">Total</th>
                     </tr>
                 </thead>
                 <tbody id="systemsPacketBody">
-                    <tr><td colspan="11" class="msm-td-loading"><i class="fas fa-spinner fa-spin"></i> Loading...</td></tr>
+                    <tr><td colspan="14" class="msm-td-loading"><i class="fas fa-spinner fa-spin"></i> Loading...</td></tr>
                 </tbody>
             </table>
         </div>
@@ -1097,6 +1100,8 @@ function renderSystemsPacketTable(remotes, local) {
         mediaRecv: localRecv.mediaSync || 0,
         blankSent: localSent.blank || 0,
         blankRecv: localRecv.blank || 0,
+        pluginSent: localSent.plugin || 0,
+        pluginRecv: localRecv.plugin || 0,
         hasMetrics: true
     });
 
@@ -1121,6 +1126,8 @@ function renderSystemsPacketTable(remotes, local) {
                 mediaRecv: recv.mediaSync || 0,
                 blankSent: sent.blank || 0,
                 blankRecv: recv.blank || 0,
+                pluginSent: sent.plugin || 0,
+                pluginRecv: recv.plugin || 0,
                 hasMetrics: remote.online && remote.pluginInstalled
             });
         });
@@ -1140,7 +1147,7 @@ function renderSystemsPacketTable(remotes, local) {
             mode: sys.fppModeString || '--',
             drift: null,
             driftFrames: null,
-            syncSent: 0, syncRecv: 0, mediaSent: 0, mediaRecv: 0, blankSent: 0, blankRecv: 0,
+            syncSent: 0, syncRecv: 0, mediaSent: 0, mediaRecv: 0, blankSent: 0, blankRecv: 0, pluginSent: 0, pluginRecv: 0,
             hasMetrics: false
         });
     });
@@ -1201,7 +1208,7 @@ function sortAndRenderTable() {
              row.status === 'offline' ? 'Offline' :
              row.status === 'no-plugin' ? 'No Plugin' : '--');
 
-        const total = row.syncSent + row.syncRecv + row.mediaSent + row.mediaRecv + row.blankSent + row.blankRecv;
+        const total = row.syncSent + row.syncRecv + row.mediaSent + row.mediaRecv + row.blankSent + row.blankRecv + row.pluginSent + row.pluginRecv;
 
         const dimClass = !row.hasMetrics && !row.isLocal ? 'msm-row-dim' : '';
 
@@ -1231,10 +1238,17 @@ function sortAndRenderTable() {
             driftDisplay = '<span class="msm-drift-pending">...</span>';
         }
 
+        // Build hostname cell - clickable link for remote systems, plain text for local
+        let hostnameCell;
+        if (row.isLocal) {
+            hostnameCell = `<i class="fas fa-home msm-home-icon"></i>${escapeHtml(row.hostname)}`;
+        } else {
+            hostnameCell = `<a href="http://${escapeHtml(row.address)}/" target="_blank" class="msm-host-link" title="${escapeHtml(row.address)}">${escapeHtml(row.hostname)}</a>`;
+        }
+
         return `<tr class="${dimClass}">
             <td><span class="msm-status-badge ${statusClass}">${statusLabel}</span></td>
-            <td>${row.isLocal ? '<i class="fas fa-home msm-home-icon"></i>' : ''}${escapeHtml(row.hostname)}</td>
-            <td class="msm-td-mono">${escapeHtml(row.address)}</td>
+            <td>${hostnameCell}</td>
             <td>${escapeHtml(row.type)}</td>
             <td>${escapeHtml(row.mode)}</td>
             <td class="msm-td-num">${driftDisplay}</td>
@@ -1242,6 +1256,10 @@ function sortAndRenderTable() {
             <td class="msm-td-num msm-td-recv">${row.hasMetrics ? row.syncRecv.toLocaleString() : '--'}</td>
             <td class="msm-td-num msm-td-sent">${row.hasMetrics ? row.mediaSent.toLocaleString() : '--'}</td>
             <td class="msm-td-num msm-td-recv">${row.hasMetrics ? row.mediaRecv.toLocaleString() : '--'}</td>
+            <td class="msm-td-num msm-td-sent">${row.hasMetrics ? row.blankSent.toLocaleString() : '--'}</td>
+            <td class="msm-td-num msm-td-recv">${row.hasMetrics ? row.blankRecv.toLocaleString() : '--'}</td>
+            <td class="msm-td-num msm-td-sent">${row.hasMetrics ? row.pluginSent.toLocaleString() : '--'}</td>
+            <td class="msm-td-num msm-td-recv">${row.hasMetrics ? row.pluginRecv.toLocaleString() : '--'}</td>
             <td class="msm-td-num msm-td-total">${row.hasMetrics ? total.toLocaleString() : '--'}</td>
         </tr>`;
     }).join('');
