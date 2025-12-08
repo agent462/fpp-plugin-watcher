@@ -2972,6 +2972,9 @@
 .msm-system-metric-label { font-size: 0.7rem; opacity: 0.8; text-transform: uppercase; }
 .msm-player-metric-value,
 .msm-system-metric-value { font-size: 1rem; font-weight: 500; }
+.msm-system-metric-value.status-good { color: #28a745; }
+.msm-system-metric-value.status-warning { color: #ffc107; }
+.msm-system-metric-value.status-critical { color: #dc3545; }
 .msm-metric-wide { min-width: 200px; flex: 2; }
 .msm-mono { font-family: 'Consolas', 'Monaco', monospace; }
 

@@ -55,10 +55,20 @@ renderCommonJS();
                     <dl>
                         <dt>Latency</dt>
                         <dd>Round-trip time to reach each remote system. Lower is better. Good: &lt;50ms, Fair: 50-100ms, Poor: &gt;100ms</dd>
-                        <dt>Jitter</dt>
-                        <dd>Variation in latency over time (RFC 3550). High jitter can cause sync glitches. Good: &lt;10ms, Fair: 10-25ms</dd>
+                        <dt>Network Jitter</dt>
+                        <dd>Variation in ICMP ping latency over time (RFC 3550). Measures general network path stability. Good: &lt;10ms, Fair: 10-25ms</dd>
                         <dt>Sync Packet Loss</dt>
                         <dd>Estimated based on sync packet receive rate during playback. FPP sends sync packets every 10 frames (~2-4/sec depending on sequence frame rate).</dd>
+                    </dl>
+                </div>
+                <?php else: ?>
+                <div class="msm-help-section">
+                    <h4>Sync Packet Timing</h4>
+                    <dl>
+                        <dt>Sync Interval</dt>
+                        <dd>Average time between sync packets from the player. FPP typically sends sync packets every ~100ms (10/sec), not every frame. This is normal and by design to reduce network traffic.</dd>
+                        <dt>Sync Jitter</dt>
+                        <dd>Variation in sync packet arrival times (RFC 3550). Different from network ping jitter - this measures MultiSync-specific timing consistency. High sync jitter could indicate network congestion affecting UDP multicast traffic specifically. Good: &lt;20ms, Fair: 20-50ms</dd>
                     </dl>
                 </div>
                 <?php endif; ?>
@@ -174,6 +184,14 @@ renderCommonJS();
             <div class="msm-system-metric">
                 <span class="msm-system-metric-label">Packet Rate</span>
                 <span class="msm-system-metric-value" id="systemPacketRate">--</span>
+            </div>
+            <div class="msm-system-metric">
+                <span class="msm-system-metric-label">Sync Interval <i class="fas fa-info-circle" style="color: #6c757d; cursor: help; font-size: 0.7em; opacity: 0.7;" title="Average time between sync packets from player. Shows the player's actual sync rate."></i></span>
+                <span class="msm-system-metric-value" id="systemSyncInterval">--</span>
+            </div>
+            <div class="msm-system-metric">
+                <span class="msm-system-metric-label">Sync Jitter <i class="fas fa-info-circle" style="color: #6c757d; cursor: help; font-size: 0.7em; opacity: 0.7;" title="Variation in sync packet arrival times (RFC 3550). Different from network ping jitter - measures MultiSync-specific timing consistency."></i></span>
+                <span class="msm-system-metric-value" id="systemSyncJitter">--</span>
             </div>
             <?php endif; ?>
             <div class="msm-system-metric">
@@ -654,6 +672,34 @@ async function updateSystemCard(status) {
         if (maxDriftEl) {
             const maxDrift = status.maxFrameDrift !== undefined ? Math.abs(status.maxFrameDrift) : null;
             maxDriftEl.textContent = maxDrift !== null ? maxDrift.toFixed(1) + ' frames' : '--';
+        }
+
+        // Sync packet interval and jitter (timing consistency metrics)
+        const syncIntervalEl = document.getElementById('systemSyncInterval');
+        if (syncIntervalEl) {
+            if (status.avgSyncIntervalMs !== undefined && status.syncIntervalSamples > 0) {
+                syncIntervalEl.textContent = status.avgSyncIntervalMs.toFixed(0) + 'ms';
+            } else {
+                syncIntervalEl.textContent = '--';
+            }
+        }
+        const syncJitterEl = document.getElementById('systemSyncJitter');
+        if (syncJitterEl) {
+            if (status.syncIntervalJitterMs !== undefined && status.syncIntervalSamples > 0) {
+                const jitter = status.syncIntervalJitterMs;
+                syncJitterEl.textContent = jitter.toFixed(1) + 'ms';
+                // Color code: good <20ms, fair 20-50ms, poor >50ms
+                syncJitterEl.classList.remove('status-good', 'status-warning', 'status-critical');
+                if (jitter < 20) {
+                    syncJitterEl.classList.add('status-good');
+                } else if (jitter < 50) {
+                    syncJitterEl.classList.add('status-warning');
+                } else {
+                    syncJitterEl.classList.add('status-critical');
+                }
+            } else {
+                syncJitterEl.textContent = '--';
+            }
         }
     }
 

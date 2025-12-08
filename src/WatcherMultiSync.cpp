@@ -315,6 +315,25 @@ public:
             m_maxFrameDrift = std::abs(frameDrift);
         }
 
+        // Calculate sync packet interval and jitter (RFC 3550 style)
+        // This measures the master's actual sync packet rate and timing consistency
+        if (m_hasPreviousSyncTime) {
+            double intervalMs = std::chrono::duration_cast<std::chrono::microseconds>(
+                now - m_lastSyncPacketTime).count() / 1000.0;
+
+            // Update running average of sync interval
+            m_syncIntervalSamples++;
+            m_avgSyncIntervalMs += (intervalMs - m_avgSyncIntervalMs) / m_syncIntervalSamples;
+
+            // RFC 3550 jitter calculation: exponential moving average of deviation from mean
+            // J(i) = J(i-1) + (|D(i)| - J(i-1)) / 16
+            // where D(i) is deviation from expected interval
+            double deviation = std::abs(intervalMs - m_avgSyncIntervalMs);
+            m_syncIntervalJitterMs += (deviation - m_syncIntervalJitterMs) / 16.0;
+        }
+        m_lastSyncPacketTime = now;
+        m_hasPreviousSyncTime = true;
+
         m_totalSyncPacketsReceived++;
         m_lastSyncTime = now;
     }
@@ -504,6 +523,13 @@ private:
             result["maxFrameDrift"] = m_maxFrameDrift;
         }
 
+        // Sync packet interval stats (measures master's sync rate and timing consistency)
+        if (m_syncIntervalSamples > 0) {
+            result["avgSyncIntervalMs"] = m_avgSyncIntervalMs;
+            result["syncIntervalJitterMs"] = m_syncIntervalJitterMs;
+            result["syncIntervalSamples"] = m_syncIntervalSamples;
+        }
+
         // Time since last sync (provide both seconds and milliseconds)
         auto now = std::chrono::steady_clock::now();
         auto elapsedMs = std::chrono::duration_cast<std::chrono::milliseconds>(now - m_lastSyncTime).count();
@@ -632,6 +658,12 @@ private:
         m_frameDriftSamples = 0;
         m_maxFrameDrift = 0;
 
+        // Reset sync interval tracking
+        m_avgSyncIntervalMs = 0.0;
+        m_syncIntervalJitterMs = 0.0;
+        m_syncIntervalSamples = 0;
+        m_hasPreviousSyncTime = false;
+
         m_hostMetrics.clear();
 
         LogInfo(VB_PLUGIN, "WatcherMultiSync: Metrics reset\n");
@@ -748,6 +780,13 @@ private:
     double m_frameDriftSum = 0;
     int m_frameDriftSamples = 0;
     int m_maxFrameDrift = 0;
+
+    // Sync packet interval tracking (measures master's actual sync rate and timing consistency)
+    std::chrono::steady_clock::time_point m_lastSyncPacketTime;
+    double m_avgSyncIntervalMs = 0.0;      // Running average of time between sync packets
+    double m_syncIntervalJitterMs = 0.0;   // RFC 3550 jitter: variation in sync packet arrival times
+    int m_syncIntervalSamples = 0;
+    bool m_hasPreviousSyncTime = false;
 
     // Per-host metrics (keyed by IP)
     std::unordered_map<std::string, HostMetrics> m_hostMetrics;
