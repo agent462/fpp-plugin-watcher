@@ -10,11 +10,9 @@
 #include <algorithm>
 #include <chrono>
 #include <cmath>
-#include <deque>
 #include <fstream>
 #include <mutex>
 #include <string>
-#include <unordered_map>
 #include <sys/stat.h>
 #include <sys/types.h>
 #include <unistd.h>
@@ -31,93 +29,23 @@
 #include "settings.h"
 
 // Configuration constants
-static const size_t MAX_SYNC_EVENTS = 1000;      // Max events to keep per host
-static const size_t MAX_PING_EVENTS = 100;       // Max ping events per host
 static const int STALE_HOST_SECONDS = 30;        // Host considered stale after this
 static const int MAX_FRAME_DRIFT = 5;            // Frames drift before flagging
-static const double MAX_JITTER_MS = 50.0;        // Jitter threshold in ms
-static const double MAX_PACKET_LOSS_PCT = 5.0;   // Packet loss threshold percent
-
-// Sync event structure
-struct SyncEvent {
-    std::chrono::steady_clock::time_point timestamp;
-    std::string filename;
-    int frameNumber;
-    float secondsElapsed;
-    int localFrame;           // Local frame at time of receive
-    int frameDrift;           // Difference from expected
-};
-
-// Ping event structure
-struct PingEvent {
-    std::chrono::steady_clock::time_point timestamp;
-    double latencyMs;         // Round-trip time if available
-};
 
 // Issue types
 enum class IssueType {
     NONE,
     SYNC_DRIFT,
-    STALE_HOST,
-    HIGH_JITTER,
-    PACKET_LOSS,
-    SEQUENCE_MISMATCH
+    STALE_HOST
 };
 
 static const char* IssueTypeToString(IssueType type) {
     switch (type) {
         case IssueType::SYNC_DRIFT: return "sync_drift";
         case IssueType::STALE_HOST: return "stale_host";
-        case IssueType::HIGH_JITTER: return "high_jitter";
-        case IssueType::PACKET_LOSS: return "packet_loss";
-        case IssueType::SEQUENCE_MISMATCH: return "sequence_mismatch";
         default: return "none";
     }
 }
-
-// Issue structure
-struct Issue {
-    IssueType type;
-    std::string description;
-    std::chrono::steady_clock::time_point detectedAt;
-    int severity;  // 1=info, 2=warning, 3=critical
-};
-
-// Per-host metrics
-struct HostMetrics {
-    std::string hostname;
-    std::string ip;
-
-    // Event buffers (circular)
-    std::deque<SyncEvent> syncEvents;
-    std::deque<PingEvent> pingEvents;
-
-    // Running statistics
-    int totalSyncPackets = 0;
-    int totalPingPackets = 0;
-    int missedPackets = 0;
-    int errorPackets = 0;
-
-    // Calculated metrics
-    double avgFrameDrift = 0.0;
-    double maxFrameDrift = 0.0;
-    double avgJitterMs = 0.0;
-    double packetLossPercent = 0.0;
-
-    // Timing
-    std::chrono::steady_clock::time_point lastSeen;
-    std::chrono::steady_clock::time_point lastSyncPacket;
-
-    // Current state
-    std::string currentSequence;
-    int lastExpectedFrame = -1;
-
-    // Detected issues
-    std::vector<Issue> activeIssues;
-
-    HostMetrics() : lastSeen(std::chrono::steady_clock::now()),
-                    lastSyncPacket(std::chrono::steady_clock::now()) {}
-};
 
 // Main plugin class
 class WatcherMultiSyncPlugin : public FPPPlugin,
@@ -321,15 +249,23 @@ public:
             double intervalMs = std::chrono::duration_cast<std::chrono::microseconds>(
                 now - m_lastSyncPacketTime).count() / 1000.0;
 
-            // Update running average of sync interval
-            m_syncIntervalSamples++;
-            m_avgSyncIntervalMs += (intervalMs - m_avgSyncIntervalMs) / m_syncIntervalSamples;
+            // Gap detection: if interval > 1000ms, this is a pause/gap, not real jitter
+            // Normal sync interval is ~250ms at 40fps (~500ms at 20fps), so 1000ms is a clear outlier
+            // Skip this interval and reset timing state to avoid inflating jitter metrics
+            const double GAP_THRESHOLD_MS = 1000.0;
 
-            // RFC 3550 jitter calculation: exponential moving average of deviation from mean
-            // J(i) = J(i-1) + (|D(i)| - J(i-1)) / 16
-            // where D(i) is deviation from expected interval
-            double deviation = std::abs(intervalMs - m_avgSyncIntervalMs);
-            m_syncIntervalJitterMs += (deviation - m_syncIntervalJitterMs) / 16.0;
+            if (intervalMs < GAP_THRESHOLD_MS) {
+                // Normal packet - update jitter metrics
+                m_syncIntervalSamples++;
+                m_avgSyncIntervalMs += (intervalMs - m_avgSyncIntervalMs) / m_syncIntervalSamples;
+
+                // RFC 3550 jitter calculation: exponential moving average of deviation from mean
+                // J(i) = J(i-1) + (|D(i)| - J(i-1)) / 16
+                // where D(i) is deviation from expected interval
+                double deviation = std::abs(intervalMs - m_avgSyncIntervalMs);
+                m_syncIntervalJitterMs += (deviation - m_syncIntervalJitterMs) / 16.0;
+            }
+            // else: Gap detected - don't update metrics, next packet will use fresh timing
         }
         m_lastSyncPacketTime = now;
         m_hasPreviousSyncTime = true;
@@ -409,9 +345,6 @@ public:
             result = GetActiveIssues();
         } else if (path == "/fpp-plugin-watcher/multisync/status") {
             result = GetStatus();
-        } else if (path.find("/fpp-plugin-watcher/multisync/host/") == 0) {
-            std::string host = path.substr(strlen("/fpp-plugin-watcher/multisync/host/"));
-            result = GetHostMetrics(host);
         } else {
             result["error"] = "Unknown endpoint";
             std::string json = SaveJsonToString(result);
@@ -452,7 +385,6 @@ public:
         ws->register_resource("/fpp-plugin-watcher/multisync/metrics", this);
         ws->register_resource("/fpp-plugin-watcher/multisync/issues", this);
         ws->register_resource("/fpp-plugin-watcher/multisync/status", this);
-        ws->register_resource("/fpp-plugin-watcher/multisync/host", this, true);
         ws->register_resource("/fpp-plugin-watcher/multisync/reset", this);
     }
 
@@ -461,15 +393,14 @@ public:
         ws->unregister_resource("/fpp-plugin-watcher/multisync/metrics");
         ws->unregister_resource("/fpp-plugin-watcher/multisync/issues");
         ws->unregister_resource("/fpp-plugin-watcher/multisync/status");
-        ws->unregister_resource("/fpp-plugin-watcher/multisync/host");
         ws->unregister_resource("/fpp-plugin-watcher/multisync/reset");
     }
 
 private:
     // ========== Internal Methods ==========
 
-    Json::Value GetStatus() {
-        std::lock_guard<std::mutex> lock(m_mutex);
+    // Private helper - caller must hold m_mutex
+    Json::Value GetStatusUnlocked() {
         Json::Value result;
 
         result["enabled"] = m_enabled;
@@ -480,6 +411,15 @@ private:
         result["mediaPlaying"] = m_mediaPlaying;
         result["lastMasterFrame"] = m_lastMasterFrame;
         result["lastMasterSeconds"] = m_lastMasterSeconds;
+
+        // Local current frame - what this FPP instance is actually playing right now
+        // This is the authoritative frame for this system, regardless of sync packets
+        int localCurrentFrame = -1;
+        if (sequence && sequence->IsSequenceRunning()) {
+            localCurrentFrame = sequence->m_seqMSRemaining > 0 ?
+                (int)((sequence->m_seqMSDuration - sequence->m_seqMSRemaining) / sequence->GetSeqStepTime()) : 0;
+        }
+        result["localCurrentFrame"] = localCurrentFrame;
 
         // Lifecycle event counts
         Json::Value lifecycle;
@@ -539,6 +479,12 @@ private:
         return result;
     }
 
+    // Public API - acquires lock
+    Json::Value GetStatus() {
+        std::lock_guard<std::mutex> lock(m_mutex);
+        return GetStatusUnlocked();
+    }
+
     Json::Value GetAllMetrics() {
         std::lock_guard<std::mutex> lock(m_mutex);
         Json::Value result;
@@ -547,36 +493,9 @@ private:
         Json::Value fppStats = MultiSync::INSTANCE.GetSyncStats();
         result["fppStats"] = fppStats;
 
-        // Add our enhanced metrics
-        result["status"] = GetStatus();
+        // Add our enhanced metrics (no double-lock since we already hold m_mutex)
+        result["status"] = GetStatusUnlocked();
 
-        // Add per-host data from our tracking
-        Json::Value hosts(Json::arrayValue);
-        for (const auto& pair : m_hostMetrics) {
-            hosts.append(HostMetricsToJson(pair.second));
-        }
-        result["hosts"] = hosts;
-
-        return result;
-    }
-
-    Json::Value GetHostMetrics(const std::string& hostOrIp) {
-        std::lock_guard<std::mutex> lock(m_mutex);
-
-        auto it = m_hostMetrics.find(hostOrIp);
-        if (it != m_hostMetrics.end()) {
-            return HostMetricsToJson(it->second);
-        }
-
-        // Try finding by hostname
-        for (const auto& pair : m_hostMetrics) {
-            if (pair.second.hostname == hostOrIp) {
-                return HostMetricsToJson(pair.second);
-            }
-        }
-
-        Json::Value result;
-        result["error"] = "Host not found";
         return result;
     }
 
@@ -609,18 +528,6 @@ private:
             issue["avgDrift"] = avgDrift;
             issue["maxDrift"] = m_maxFrameDrift;
             issues.append(issue);
-        }
-
-        // Per-host issues
-        for (const auto& pair : m_hostMetrics) {
-            for (const auto& issue : pair.second.activeIssues) {
-                Json::Value issueJson;
-                issueJson["type"] = IssueTypeToString(issue.type);
-                issueJson["description"] = issue.description;
-                issueJson["severity"] = issue.severity;
-                issueJson["host"] = pair.second.hostname.empty() ? pair.first : pair.second.hostname;
-                issues.append(issueJson);
-            }
         }
 
         result["issues"] = issues;
@@ -664,40 +571,7 @@ private:
         m_syncIntervalSamples = 0;
         m_hasPreviousSyncTime = false;
 
-        m_hostMetrics.clear();
-
         LogInfo(VB_PLUGIN, "WatcherMultiSync: Metrics reset\n");
-    }
-
-    Json::Value HostMetricsToJson(const HostMetrics& metrics) {
-        Json::Value result;
-        result["ip"] = metrics.ip;
-        result["hostname"] = metrics.hostname;
-        result["totalSyncPackets"] = metrics.totalSyncPackets;
-        result["totalPingPackets"] = metrics.totalPingPackets;
-        result["avgFrameDrift"] = metrics.avgFrameDrift;
-        result["maxFrameDrift"] = metrics.maxFrameDrift;
-        result["avgJitterMs"] = metrics.avgJitterMs;
-        result["packetLossPercent"] = metrics.packetLossPercent;
-        result["currentSequence"] = metrics.currentSequence;
-
-        // Last seen time
-        auto now = std::chrono::steady_clock::now();
-        auto elapsed = std::chrono::duration_cast<std::chrono::seconds>(now - metrics.lastSeen).count();
-        result["secondsSinceLastSeen"] = (int)elapsed;
-
-        // Issues
-        Json::Value issues(Json::arrayValue);
-        for (const auto& issue : metrics.activeIssues) {
-            Json::Value issueJson;
-            issueJson["type"] = IssueTypeToString(issue.type);
-            issueJson["description"] = issue.description;
-            issueJson["severity"] = issue.severity;
-            issues.append(issueJson);
-        }
-        result["issues"] = issues;
-
-        return result;
     }
 
     void CreateDirectoryIfMissing(const std::string& path) {
@@ -787,9 +661,6 @@ private:
     double m_syncIntervalJitterMs = 0.0;   // RFC 3550 jitter: variation in sync packet arrival times
     int m_syncIntervalSamples = 0;
     bool m_hasPreviousSyncTime = false;
-
-    // Per-host metrics (keyed by IP)
-    std::unordered_map<std::string, HostMetrics> m_hostMetrics;
 };
 
 // Plugin entry point

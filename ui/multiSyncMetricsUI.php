@@ -542,23 +542,15 @@ let lastPacketTime = null;
 let packetRate = 0;
 let localFppStatus = null;
 
-// Quality colors
-const QUALITY_COLORS = {
-    good: '#28a745',
-    fair: '#ffc107',
-    poor: '#fd7e14',
-    critical: '#dc3545',
-    unknown: '#6c757d'
-};
-
 async function loadAllData() {
     try {
         document.querySelector('.msm-refresh-btn i').classList.add('fa-spin');
 
-        // Load local status from C++ plugin and FPP systems in parallel
-        const [statusResp, systemsResp] = await Promise.all([
+        // Load local status from C++ plugin, FPP systems, and FPP status in parallel
+        const [statusResp, systemsResp, fppStatusResp] = await Promise.all([
             fetch('/api/plugin-apis/fpp-plugin-watcher/multisync/status'),
-            fetch('/api/fppd/multiSyncSystems')
+            fetch('/api/fppd/multiSyncSystems'),
+            fetch('/api/fppd/status')
         ]);
 
         if (!statusResp.ok) {
@@ -573,6 +565,11 @@ async function loadAllData() {
         if (systemsResp.ok) {
             const sysData = await systemsResp.json();
             fppSystems = sysData.systems || [];
+        }
+
+        // Parse local FPP status (for remote mode frame display)
+        if (fppStatusResp.ok) {
+            localFppStatus = await fppStatusResp.json();
         }
 
         hidePluginError();
@@ -651,7 +648,11 @@ async function updateSystemCard(status) {
         : (status.secondsSinceLastSync !== undefined && status.secondsSinceLastSync >= 0 && status.secondsSinceLastSync < 5);
 
     // Frame counter: current / total
-    const frame = status.lastMasterFrame || 0;
+    // Use localCurrentFrame from C++ plugin - this is the actual frame being played
+    // Falls back to lastMasterFrame (from sync packets) if localCurrentFrame not available
+    const frame = status.localCurrentFrame !== undefined && status.localCurrentFrame >= 0
+        ? status.localCurrentFrame
+        : (status.lastMasterFrame || 0);
     const totalFrames = sequenceMeta?.NumFrames || 0;
     if (isActivelySyncing && totalFrames > 0) {
         document.getElementById('systemFrame').textContent = `${frame.toLocaleString()} / ${totalFrames.toLocaleString()}`;
@@ -662,7 +663,11 @@ async function updateSystemCard(status) {
     }
 
     // Time: elapsed / total
-    const secs = status.lastMasterSeconds || 0;
+    // For remote mode, use local FPP status seconds (actual playing time)
+    // For player mode, use lastMasterSeconds from sync status
+    const secs = IS_REMOTE_MODE && localFppStatus?.seconds_played !== undefined
+        ? localFppStatus.seconds_played
+        : (status.lastMasterSeconds || 0);
     const stepTime = sequenceMeta?.StepTime || 25;
     const totalSecs = totalFrames > 0 ? (totalFrames * stepTime / 1000) : 0;
     if (isActivelySyncing && totalSecs > 0) {
@@ -1079,11 +1084,16 @@ function renderRemoteCards(remotes) {
         let metricsHtml = '';
 
         if (remote.pluginInstalled && remote.online) {
-            // Use FPP status for actual sequence/status/frame, fall back to sync packet data
+            // Use FPP status for actual sequence/status, watcher plugin for frame
             const actualSeq = fpp.sequence || m.currentMasterSequence || '--';
             const actualStatus = fpp.status || (m.sequencePlaying ? 'playing' : 'idle');
             const statusDisplay = actualStatus === 'playing' ? 'Playing' : 'Idle';
-            const currentFrame = (actualStatus === 'playing' && fpp.currentFrame) ? fpp.currentFrame.toLocaleString() : '--';
+            // Use localCurrentFrame from watcher plugin - this is the remote's actual playing frame
+            // Falls back to lastMasterFrame (from sync packets) for systems without updated plugin
+            const frameValue = m.localCurrentFrame !== undefined && m.localCurrentFrame >= 0
+                ? m.localCurrentFrame
+                : m.lastMasterFrame;
+            const currentFrame = (actualStatus === 'playing' && frameValue !== undefined) ? frameValue.toLocaleString() : '--';
             const pkts = m.totalPacketsReceived !== undefined ? m.totalPacketsReceived.toLocaleString() : '--';
             const avgDriftNum = m.avgFrameDrift !== undefined ? Math.abs(m.avgFrameDrift) : null;
             const avgDrift = avgDriftNum !== null ? avgDriftNum.toFixed(1) : '--';

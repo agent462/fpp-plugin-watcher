@@ -9,10 +9,6 @@
 
 include_once __DIR__ . "/rollupBase.php";
 
-// Use shared tier configuration from rollupBase.php (WATCHER_ROLLUP_TIERS)
-// Alias for backward compatibility with existing code
-define("WATCHERMULTISYNCROLLUPTIERS", WATCHER_ROLLUP_TIERS);
-
 // Define rollup file paths (using centralized data directory)
 define("WATCHERMULTISYNCROLLUPDIR", WATCHERMULTISYNCPINGDIR);
 define("WATCHERMULTISYNCROLLUPSTATEFILE", WATCHERMULTISYNCPINGDIR . "/rollup-state.json");
@@ -144,7 +140,7 @@ function rotateMultiSyncMetricsFile() {
  * Get or initialize multi-sync rollup state
  */
 function getMultiSyncRollupState() {
-    return getRollupStateGeneric(WATCHERMULTISYNCROLLUPSTATEFILE, WATCHERMULTISYNCROLLUPTIERS);
+    return getRollupStateGeneric(WATCHERMULTISYNCROLLUPSTATEFILE, WATCHER_ROLLUP_TIERS);
 }
 
 /**
@@ -264,7 +260,7 @@ function processMultiSyncRollupTier($tier, $tierConfig) {
     processRollupTierGeneric(
         $tier,
         $tierConfig,
-        WATCHERMULTISYNCROLLUPTIERS,
+        WATCHER_ROLLUP_TIERS,
         WATCHERMULTISYNCROLLUPSTATEFILE,
         WATCHERMULTISYNCPINGMETRICSFILE,
         'getMultiSyncRollupFilePath',
@@ -273,24 +269,10 @@ function processMultiSyncRollupTier($tier, $tierConfig) {
 }
 
 /**
- * Append rollup entries to a rollup file (wrapper for backward compatibility)
- */
-function appendMultiSyncRollupEntries($rollupFile, $entries) {
-    return appendRollupEntriesGeneric($rollupFile, $entries);
-}
-
-/**
- * Rotate rollup file (wrapper for backward compatibility)
- */
-function rotateMultiSyncRollupFile($rollupFile, $retentionSeconds) {
-    return rotateRollupFileGeneric($rollupFile, $retentionSeconds);
-}
-
-/**
  * Process all multi-sync rollup tiers
  */
 function processAllMultiSyncRollups() {
-    foreach (WATCHERMULTISYNCROLLUPTIERS as $tier => $config) {
+    foreach (WATCHER_ROLLUP_TIERS as $tier => $config) {
         try {
             processMultiSyncRollupTier($tier, $config);
         } catch (Exception $e) {
@@ -313,7 +295,7 @@ function readMultiSyncRollupData($tier, $startTime = null, $endTime = null, $hos
         };
     }
 
-    $result = readRollupDataGeneric($rollupFile, $tier, WATCHERMULTISYNCROLLUPTIERS, $startTime, $endTime, $filterFn);
+    $result = readRollupDataGeneric($rollupFile, $tier, WATCHER_ROLLUP_TIERS, $startTime, $endTime, $filterFn);
 
     // Sort by timestamp and hostname
     if ($result['success'] && !empty($result['data'])) {
@@ -342,7 +324,7 @@ function getMultiSyncPingMetrics($hoursBack = 24, $hostname = null) {
     $startTime = $endTime - ($hoursBack * 3600);
 
     $tier = getBestMultiSyncRollupTier($hoursBack);
-    $tierConfig = WATCHERMULTISYNCROLLUPTIERS[$tier];
+    $tierConfig = WATCHER_ROLLUP_TIERS[$tier];
 
     $result = readMultiSyncRollupData($tier, $startTime, $endTime, $hostname);
 
@@ -407,49 +389,7 @@ function getRawMultiSyncPingMetrics($hoursBack = 24, $hostname = null) {
  * @return array Tier info including interval, retention, and file status
  */
 function getMultiSyncRollupTiersInfo() {
-    return getTiersInfoGeneric(WATCHERMULTISYNCROLLUPTIERS, 'getMultiSyncRollupFilePath');
-}
-
-/**
- * Get list of unique hostnames from multi-sync metrics
- */
-function getMultiSyncHostsList() {
-    $metricsFile = WATCHERMULTISYNCPINGMETRICSFILE;
-
-    if (!file_exists($metricsFile)) {
-        return [];
-    }
-
-    $hosts = [];
-    $fp = fopen($metricsFile, 'r');
-
-    if (!$fp) {
-        return [];
-    }
-
-    if (flock($fp, LOCK_SH)) {
-        while (($line = fgets($fp)) !== false) {
-            if (preg_match('/\[.*?\]\s+(.+)$/', $line, $matches)) {
-                $jsonData = trim($matches[1]);
-                $entry = json_decode($jsonData, true);
-
-                if ($entry && isset($entry['hostname'])) {
-                    $hostname = $entry['hostname'];
-                    if (!isset($hosts[$hostname])) {
-                        $hosts[$hostname] = [
-                            'hostname' => $hostname,
-                            'address' => $entry['address'] ?? ''
-                        ];
-                    }
-                }
-            }
-        }
-        flock($fp, LOCK_UN);
-    }
-
-    fclose($fp);
-
-    return array_values($hosts);
+    return getTiersInfoGeneric(WATCHER_ROLLUP_TIERS, 'getMultiSyncRollupFilePath');
 }
 
 ?>

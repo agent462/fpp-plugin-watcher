@@ -101,7 +101,6 @@ function getEndpointsfpppluginwatcher() {
         ['method' => 'GET', 'endpoint' => 'metrics/multisync/ping/raw', 'callback' => 'fpppluginWatcherMultiSyncPingRaw'],
         ['method' => 'GET', 'endpoint' => 'metrics/multisync/ping/rollup', 'callback' => 'fpppluginWatcherMultiSyncPingRollup'],
         ['method' => 'GET', 'endpoint' => 'metrics/multisync/ping/rollup/tiers', 'callback' => 'fpppluginWatcherMultiSyncPingRollupTiers'],
-        ['method' => 'GET', 'endpoint' => 'metrics/multisync/hosts', 'callback' => 'fpppluginWatcherMultiSyncHosts'],
 
         // Network quality metrics
         ['method' => 'GET', 'endpoint' => 'metrics/network-quality/current', 'callback' => 'fpppluginWatcherNetworkQualityCurrent'],
@@ -280,20 +279,6 @@ function fpppluginWatcherMultiSyncPingRollupTiers() {
         'success' => true,
         'tiers' => $tiers
     ];
-    /** @disregard P1010 */
-    return json($result);
-}
-
-// GET /api/plugin/fpp-plugin-watcher/metrics/multisync/hosts
-// Returns list of unique hostnames from multi-sync metrics
-function fpppluginWatcherMultiSyncHosts() {
-    $hosts = getMultiSyncHostsList();
-    $result = [
-        'success' => true,
-        'count' => count($hosts),
-        'hosts' => $hosts
-    ];
-
     /** @disregard P1010 */
     return json($result);
 }
