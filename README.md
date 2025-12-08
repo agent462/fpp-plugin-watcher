@@ -62,8 +62,8 @@ Navigate to **Content Setup > Watcher - Config** to enable features. Each featur
 ### Falcon Controllers
 ![Falcon Controllers](https://github.com/agent462/fpp-watcher-images/blob/main/falcon-controllers.png)
 
-### Falcon Controllers
-![MQTT](https://github.com/agent462/fpp-watcher-images/blob/main/mqtt.png)
+### MQTT
+![MQTT](https://github.com/agent462/fpp-watcher-images/blob/main/mqtt-events.png)
 
 ## Troubleshooting
 
