@@ -1,6 +1,6 @@
 # Watcher Plugin for FPP
 
-A monitoring and control plugin for Falcon Player (FPP) that provides network connectivity monitoring with automatic recovery, system metrics dashboards, multi-sync host monitoring, Falcon controller management, and remote FPP control.
+A monitoring and control plugin for Falcon Player (FPP) that provides network connectivity monitoring, system metrics dashboards, multi-sync host monitoring, Falcon controller management, and remote FPP control.
 
 **Requires**: FPP 9.0+
 
@@ -15,19 +15,21 @@ A monitoring and control plugin for Falcon Player (FPP) that provides network co
 ## Features
 
 ### Local Monitoring
-- **Connectivity Check**: Automatic network adapter reset after consecutive ping failures
-- **System Metrics**: CPU, memory, disk, load, thermal, and wireless metrics via collectd
-- **Falcon Controllers**: Monitor and control Falcon hardware controllers on your network
+- **Connectivity Check**: Monitors network and automatically resets adapter after consecutive ping failures
+- **System Metrics**: CPU, memory, disk, thermal, and wireless monitoring
+- **Falcon Controllers**: Monitor and control Falcon hardware on your network
 
 ### Multi-Sync Monitoring
-- **Remote Metrics**: View historical system metrics from all FPP hosts in your multi-sync setup (Watcher required on remotes)
-- **Remote Ping**: Track historical connectivity across all remote hosts
-- **Playback Sync**: Monitor playback status across all systems
+- **Remote Metrics**: View system metrics from all FPP hosts in your multi-sync setup
+- **Remote Ping**: Track connectivity across all remote hosts
+- **Sync Status**: Monitor playback sync status across all systems
 
 ### Remote Control
-- **Remote Control Panel**: Restart FPPD, reboot systems, and manage plugins across all FPP hosts
-- **Plugin Updates**: Check and install plugin updates on remote systems
-- **FPP Upgrades**: Trigger FPP upgrades on remote hosts with live output streaming
+- **Control Panel**: Restart FPPD, reboot systems, and manage plugins across all FPP hosts
+- **FPP Upgrades**: Trigger FPP upgrades on remote hosts
+
+### Events
+- **MQTT Events**: View MQTT events published by FPP
 
 ## Installation
 
@@ -36,27 +38,13 @@ A monitoring and control plugin for Falcon Player (FPP) that provides network co
 
 ## Configuration
 
-Navigate to **Content Setup > Watcher - Config** to enable features:
+Navigate to **Content Setup > Watcher - Config** to enable features. Each feature adds a corresponding dashboard under the **Status** menu when enabled.
 
-| Feature | Description |
-|---------|-------------|
-| Connectivity Check | Monitor network and auto-reset adapter on failures |
-| System Metrics (collectd) | Enable local CPU/memory/disk/thermal monitoring |
-| Multi-Sync Metrics | Pull system metrics from remote FPP hosts |
-| Multi-Sync Ping | Monitor connectivity to remote hosts |
-| Falcon Monitor | Monitor Falcon hardware controllers |
-| Remote Control | Enable remote system control panel |
+## Screenshots
 
-## Dashboards
-
-All dashboards appear under **Status** menus when their corresponding feature is enabled:
-
-- **Local Metrics**: Real-time system performance charts
-- **Connectivity**: Ping latency and success rate over time
-- **Falcon Monitor**: Controller status, temperature, test mode controls
-- **Remote Metrics**: System metrics from all multi-sync hosts
-- **Remote Ping**: Connectivity graphs for all remote hosts
-- **Remote Control**: Control panel for managing all FPP systems
+### Multi-Sync
+![Multisync](https://github.com/agent462/fpp-watcher-images/blob/main/multisync-1.png)
+![Multisync](https://github.com/agent462/fpp-watcher-images/blob/main/multisync-2.png)
 
 ### Remote Control
 ![Remote Control](https://github.com/agent462/fpp-watcher-images/blob/main/remote-control.png)
@@ -71,40 +59,15 @@ All dashboards appear under **Status** menus when their corresponding feature is
 ![Ping Host View](https://github.com/agent462/fpp-watcher-images/blob/main/ping-host-view.png)
 ![Connectivity Metrics](https://github.com/agent462/fpp-watcher-images/blob/main/connectivity-metrics.png)
 
-## Falcon Controllers
+### Falcon Controllers
 ![Falcon Controllers](https://github.com/agent462/fpp-watcher-images/blob/main/falcon-controllers.png)
 
-## API
-
-All metrics endpoints support `?hours=N` parameter (default: 24).
-
-```
-GET  /api/plugin/fpp-plugin-watcher/version
-GET  /api/plugin/fpp-plugin-watcher/metrics/all
-GET  /api/plugin/fpp-plugin-watcher/metrics/cpu/average
-GET  /api/plugin/fpp-plugin-watcher/metrics/memory/free
-GET  /api/plugin/fpp-plugin-watcher/metrics/disk/free
-GET  /api/plugin/fpp-plugin-watcher/metrics/ping/rollup
-GET  /api/plugin/fpp-plugin-watcher/falcon/status
-GET  /api/plugin/fpp-plugin-watcher/remote/status?host=IP
-GET  /api/plugin/fpp-plugin-watcher/update/check
-```
-
-## Files
-
-| Path | Description |
-|------|-------------|
-| `/opt/fpp/media/config/plugin.fpp-plugin-watcher` | Configuration |
-| `/home/fpp/media/logs/fpp-plugin-watcher.log` | Main log |
-| `/home/fpp/media/logs/fpp-plugin-watcher-ping-metrics.log` | Ping metrics |
+### Falcon Controllers
+![MQTT](https://github.com/agent462/fpp-watcher-images/blob/main/mqtt.png)
 
 ## Troubleshooting
 
-**Plugin not starting**: Check logs at `/home/fpp/media/logs/fpp-plugin-watcher.log`
-
-**No metrics data**: Ensure collectd is enabled in config and running (`systemctl status collectd`)
-
-**Connectivity monitor not working**: Verify `connectivityCheckEnabled=true` in config and check `ps aux | grep connectivityCheck`
+Check logs at `/home/fpp/media/logs/fpp-plugin-watcher.log` for any issues.
 
 ## Support
 
