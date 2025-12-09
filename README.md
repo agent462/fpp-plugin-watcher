@@ -12,24 +12,38 @@ A monitoring and control plugin for Falcon Player (FPP) that provides network co
 
 **Performance Note**: BBB and PB are single-core devices with limited memory. While this plugin is optimized for low CPU and memory usage, be mindful of overall system performance when running multiple intensive plugins or FPP features. The System Monitor Dashboard makes it easy to track resource usage in real-time.
 
+## Operating Modes
+
+Watcher adapts its features based on your FPP's operating mode:
+
+| Feature | Player Mode | Remote Mode |
+|---------|:-----------:|:-----------:|
+| Connectivity Check | ✓ | ✓ |
+| System Metrics (collectd) | ✓ | ✓ |
+| Falcon Controller Monitor | ✓ | ✓ |
+| Sync Metrics Dashboard | ✓ | ✓ |
+| Remote Metrics | ✓ | - |
+| Remote Ping | ✓ | - |
+| Remote Control | ✓ | - |
+| MQTT Events | ✓ | - |
+
+**Player Mode**: The primary FPP instance that controls playback and coordinates multi-sync. Has access to all features including the ability to monitor and control remote systems.
+
+**Remote Mode**: FPP instances that receive sync commands from a player. Install Watcher on remotes to enable System Metrics collection, which the player can then aggregate. The Sync Metrics dashboard shows sync timing information when receiving multi-sync packets.
+
 ## Features
 
-### Local Monitoring
+### All Modes
 - **Connectivity Check**: Monitors network and automatically resets adapter after consecutive ping failures
-- **System Metrics**: CPU, memory, disk, thermal, and wireless monitoring
+- **System Metrics**: CPU, memory, disk, thermal, and wireless monitoring via collectd
 - **Falcon Controllers**: Monitor and control Falcon hardware on your network
+- **Sync Metrics**: View sync timing, jitter, and packet statistics (player shows all remotes, remotes show their own sync status)
 
-### Multi-Sync Monitoring
-- **Remote Metrics**: View system metrics from all FPP hosts in your multi-sync setup
-- **Remote Ping**: Track connectivity across all remote hosts
-- **Sync Status**: Monitor playback sync status across all systems
-
-### Remote Control
-- **Control Panel**: Restart FPPD, reboot systems, and manage plugins across all FPP hosts
-- **FPP Upgrades**: Trigger FPP upgrades on remote hosts
-
-### Events
-- **MQTT Events**: View MQTT events published by FPP
+### Player Mode Only
+- **Remote Metrics**: Aggregate system metrics from all remote FPP systems (requires Watcher + collectd on remotes)
+- **Remote Ping**: Track latency and availability to all remote multi-sync hosts
+- **Remote Control**: Restart FPPD, reboot systems, trigger FPP upgrades across all remotes
+- **MQTT Events**: Capture and view sequence, playlist, and status events
 
 ## Installation
 

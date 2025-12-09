@@ -288,7 +288,7 @@ if ($isPlayerMode) {
                 </div>
                 <div class="panelBody">
                     <div class="panelDesc">
-                        Collectd gathers CPU, memory, disk, network, and temperature metrics. Uses ~60MB storage for historical data.
+                        Collectd gathers CPU, memory, disk, network, and temperature metrics. Uses ~25MB storage for historical data.
                         Runs at lower priority to avoid impacting FPP performance. View in "Watcher - Local Metrics" dashboard.
                     </div>
                 </div>
