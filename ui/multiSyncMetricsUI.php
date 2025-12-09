@@ -694,22 +694,22 @@ async function updateSystemCard(status) {
 
     document.getElementById('systemPacketsReceived').textContent = (status.totalPacketsReceived || 0).toLocaleString();
 
-    // Remote mode drift fields
+    // Remote mode drift fields (only show when actively syncing)
     if (IS_REMOTE_MODE) {
         const avgDriftEl = document.getElementById('systemAvgDrift');
         if (avgDriftEl) {
-            avgDriftEl.textContent = status.avgFrameDrift !== undefined ? status.avgFrameDrift.toFixed(1) + ' frames' : '--';
+            avgDriftEl.textContent = isActivelySyncing && status.avgFrameDrift !== undefined ? status.avgFrameDrift.toFixed(1) + ' frames' : '--';
         }
         const maxDriftEl = document.getElementById('systemMaxDrift');
         if (maxDriftEl) {
-            const maxDrift = status.maxFrameDrift !== undefined ? Math.abs(status.maxFrameDrift) : null;
+            const maxDrift = isActivelySyncing && status.maxFrameDrift !== undefined ? Math.abs(status.maxFrameDrift) : null;
             maxDriftEl.textContent = maxDrift !== null ? maxDrift.toFixed(1) + ' frames' : '--';
         }
 
-        // Sync packet interval and jitter (timing consistency metrics)
+        // Sync packet interval and jitter (only show when actively syncing)
         const syncIntervalEl = document.getElementById('systemSyncInterval');
         if (syncIntervalEl) {
-            if (status.avgSyncIntervalMs !== undefined && status.syncIntervalSamples > 0) {
+            if (isActivelySyncing && status.avgSyncIntervalMs !== undefined && status.syncIntervalSamples > 0) {
                 syncIntervalEl.textContent = status.avgSyncIntervalMs.toFixed(0) + 'ms';
             } else {
                 syncIntervalEl.textContent = '--';
@@ -717,7 +717,7 @@ async function updateSystemCard(status) {
         }
         const syncJitterEl = document.getElementById('systemSyncJitter');
         if (syncJitterEl) {
-            if (status.syncIntervalJitterMs !== undefined && status.syncIntervalSamples > 0) {
+            if (isActivelySyncing && status.syncIntervalJitterMs !== undefined && status.syncIntervalSamples > 0) {
                 const jitter = status.syncIntervalJitterMs;
                 syncJitterEl.textContent = jitter.toFixed(1) + 'ms';
                 // Color code: good <20ms, fair 20-50ms, poor >50ms
@@ -731,6 +731,7 @@ async function updateSystemCard(status) {
                 }
             } else {
                 syncJitterEl.textContent = '--';
+                syncJitterEl.classList.remove('status-good', 'status-warning', 'status-critical');
             }
         }
     }
@@ -1095,21 +1096,27 @@ function renderRemoteCards(remotes) {
                 : m.lastMasterFrame;
             const currentFrame = (actualStatus === 'playing' && frameValue !== undefined) ? frameValue.toLocaleString() : '--';
             const pkts = m.totalPacketsReceived !== undefined ? m.totalPacketsReceived.toLocaleString() : '--';
-            const avgDriftNum = m.avgFrameDrift !== undefined ? Math.abs(m.avgFrameDrift) : null;
-            const avgDrift = avgDriftNum !== null ? avgDriftNum.toFixed(1) : '--';
-            const maxDrift = m.maxFrameDrift !== undefined ? Math.abs(m.maxFrameDrift) : null;
             const lastSync = m.millisecondsSinceLastSync !== undefined ? formatTimeSinceMs(m.millisecondsSinceLastSync) : '--';
 
-            // Sync interval and jitter metrics
-            const syncInterval = m.avgSyncIntervalMs !== undefined && m.syncIntervalSamples > 0
+            // Check for missing sequence scenario
+            const syncSaysPlaying = m.sequencePlaying;
+            const actuallyPlaying = actualStatus === 'playing';
+
+            // Drift metrics (only show when playing)
+            const avgDriftNum = actuallyPlaying && m.avgFrameDrift !== undefined ? Math.abs(m.avgFrameDrift) : null;
+            const avgDrift = avgDriftNum !== null ? avgDriftNum.toFixed(1) : '--';
+            const maxDrift = actuallyPlaying && m.maxFrameDrift !== undefined ? Math.abs(m.maxFrameDrift) : null;
+
+            // Sync interval and jitter metrics (only show when playing)
+            const syncInterval = actuallyPlaying && m.avgSyncIntervalMs !== undefined && m.syncIntervalSamples > 0
                 ? m.avgSyncIntervalMs.toFixed(0) + 'ms' : '--';
-            const syncJitter = m.syncIntervalJitterMs !== undefined && m.syncIntervalSamples > 0
+            const syncJitter = actuallyPlaying && m.syncIntervalJitterMs !== undefined && m.syncIntervalSamples > 0
                 ? m.syncIntervalJitterMs.toFixed(1) + 'ms' : '--';
             // Calculate sync packet rate from interval (sequence sync only, not media)
-            const syncRate = m.avgSyncIntervalMs !== undefined && m.avgSyncIntervalMs > 0 && m.syncIntervalSamples > 0
+            const syncRate = actuallyPlaying && m.avgSyncIntervalMs !== undefined && m.avgSyncIntervalMs > 0 && m.syncIntervalSamples > 0
                 ? (1000 / m.avgSyncIntervalMs).toFixed(1) + '/s' : '--';
             let syncJitterClass = '';
-            if (m.syncIntervalJitterMs !== undefined && m.syncIntervalSamples > 0) {
+            if (actuallyPlaying && m.syncIntervalJitterMs !== undefined && m.syncIntervalSamples > 0) {
                 if (m.syncIntervalJitterMs < 20) syncJitterClass = 'good';
                 else if (m.syncIntervalJitterMs < 50) syncJitterClass = 'warning';
                 else syncJitterClass = 'critical';
@@ -1122,10 +1129,6 @@ function renderRemoteCards(remotes) {
                 else if (avgDriftNum > 5) driftClass = 'warning';
                 else driftClass = 'good';
             }
-
-            // Check for missing sequence scenario
-            const syncSaysPlaying = m.sequencePlaying;
-            const actuallyPlaying = actualStatus === 'playing';
             let statusClass = actuallyPlaying ? 'good' : '';
             if (syncSaysPlaying && !actuallyPlaying) {
                 statusClass = 'critical'; // Sync says playing but FPP isn't
