@@ -21,11 +21,11 @@ function getRemoteStatus($host) {
         ];
     }
 
-    // Fetch system status (includes restartFlag and rebootFlag)
-    $statusUrl = "http://{$host}/api/system/status";
-    $status = apiCall('GET', $statusUrl, [], true, 5);
+    // Fetch fppd status (includes platform, branch, mode_name, status_name, restartFlag, rebootFlag)
+    $statusUrl = "http://{$host}/api/fppd/status";
+    $fppStatus = apiCall('GET', $statusUrl, [], true, 5);
 
-    if ($status === false) {
+    if ($fppStatus === false) {
         return [
             'success' => false,
             'error' => 'Failed to connect to remote host',
@@ -33,12 +33,18 @@ function getRemoteStatus($host) {
         ];
     }
 
-    // Fetch test mode status
-    $testModeUrl = "http://{$host}/api/testmode";
-    $testMode = apiCall('GET', $testModeUrl, [], true, 5);
-    if ($testMode === false) {
-        $testMode = ['enabled' => 0];
-    }
+    // Extract status fields
+    $status = [
+        'platform' => $fppStatus['platform'] ?? '--',
+        'branch' => $fppStatus['branch'] ?? '--',
+        'mode_name' => $fppStatus['mode_name'] ?? '--',
+        'status_name' => $fppStatus['status_name'] ?? 'idle',
+        'rebootFlag' => $fppStatus['rebootFlag'] ?? 0,
+        'restartFlag' => $fppStatus['restartFlag'] ?? 0
+    ];
+
+    // Derive test mode from status_name
+    $testMode = ['enabled' => ($fppStatus['status_name'] ?? '') === 'testing' ? 1 : 0];
 
     return [
         'success' => true,

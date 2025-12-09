@@ -749,6 +749,18 @@
     cursor: help;
 }
 
+/** Green - System is actively playing a sequence */
+.status-indicator--playing {
+    background: rgba(40, 167, 69, 0.15);
+    color: #28a745;
+}
+
+/** Gray - System is idle (not playing) */
+.status-indicator--idle {
+    background: rgba(108, 117, 125, 0.1);
+    color: #6c757d;
+}
+
 /* ==========================================================================
    Empty State Messages
 
@@ -1583,152 +1595,6 @@
 
 .watcher-discovery-item:last-child {
     margin-bottom: 0;
-}
-
-/* ==========================================================================
-   Sync Status Grid
-
-   Usage: Compact grid showing sequence playback sync status across hosts
-   Visibility: Hidden by default, shown when sequence is playing
-   ========================================================================== */
-
-.sync-status-container {
-    display: none;
-    margin-bottom: 1.5rem;
-}
-
-.sync-status-container.visible {
-    display: block;
-}
-
-.sync-status-header {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    margin-bottom: 0.75rem;
-}
-
-.sync-status-header h3 {
-    margin: 0;
-    font-size: 1rem;
-    font-weight: 600;
-    color: #212529;
-    display: flex;
-    align-items: center;
-    gap: 0.5rem;
-}
-
-.sync-status-header h3 i {
-    color: #667eea;
-}
-
-.sync-status-header .sync-sequence-name {
-    font-size: 0.85rem;
-    color: #6c757d;
-    font-weight: normal;
-}
-
-.sync-status-grid {
-    display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
-    gap: 0.75rem;
-}
-
-.sync-host-box {
-    background: #fff;
-    border: 2px solid #28a745;
-    border-radius: 8px;
-    padding: 0.6rem 0.75rem;
-    transition: all 0.3s ease;
-    position: relative;
-}
-
-.sync-host-box__mode {
-    position: absolute;
-    top: 0.35rem;
-    right: 0.4rem;
-    width: 18px;
-    height: 18px;
-    border-radius: 50%;
-    font-size: 0.65rem;
-    font-weight: 700;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    color: #fff;
-}
-
-.sync-host-box__mode--player {
-    background: #667eea;
-}
-
-.sync-host-box__mode--remote {
-    background: #6c757d;
-}
-
-.sync-host-box.out-of-sync {
-    border-color: #dc3545;
-    background: #fff5f5;
-}
-
-.sync-host-box.offline {
-    border-color: #6c757d;
-    background: #f8f9fa;
-    opacity: 0.7;
-}
-
-.sync-host-box.idle {
-    border-color: #ffc107;
-    background: #fffdf5;
-}
-
-.sync-host-box__name {
-    font-size: 0.8rem;
-    font-weight: 600;
-    color: #212529;
-    margin-bottom: 0.25rem;
-    white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
-}
-
-.sync-host-box__sequence {
-    font-size: 0.7rem;
-    color: #6c757d;
-    margin-bottom: 0.25rem;
-    white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
-}
-
-.sync-host-box__time {
-    font-size: 0.85rem;
-    font-weight: 600;
-    color: #28a745;
-    font-family: 'Consolas', 'Monaco', monospace;
-}
-
-.sync-host-box.out-of-sync .sync-host-box__time {
-    color: #dc3545;
-}
-
-.sync-host-box.offline .sync-host-box__time,
-.sync-host-box.idle .sync-host-box__time {
-    color: #6c757d;
-    font-size: 0.75rem;
-    font-weight: normal;
-}
-
-.sync-host-box__diff {
-    font-size: 0.65rem;
-    color: #dc3545;
-    margin-top: 0.15rem;
-}
-
-@media (max-width: 768px) {
-    .sync-status-grid {
-        grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
-    }
 }
 
 /* ==========================================================================
