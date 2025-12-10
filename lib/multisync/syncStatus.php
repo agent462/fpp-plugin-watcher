@@ -204,3 +204,47 @@ function getMultiSyncDashboardData() {
 
     return $data;
 }
+
+/**
+ * Get full sync status combining watcher plugin metrics and FPP status
+ *
+ * This endpoint is designed for efficient polling from remote systems,
+ * combining two API calls into one to reduce network overhead.
+ *
+ * @return array Combined watcher status and FPP status
+ */
+function getFullSyncStatus() {
+    // Fetch both in parallel would be ideal, but PHP doesn't do that easily
+    // So we fetch sequentially but it's still one HTTP call from the remote's perspective
+    $watcherStatus = getMultiSyncStatus();
+    $fppStatus = apiCall('GET', 'http://127.0.0.1/api/fppd/status', [], true, 2);
+
+    $result = [
+        'success' => true,
+        'timestamp' => time(),
+        'watcher' => $watcherStatus,
+        'fpp' => null
+    ];
+
+    // Check if watcher plugin is loaded
+    if (isset($watcherStatus['error'])) {
+        $result['watcherLoaded'] = false;
+    } else {
+        $result['watcherLoaded'] = true;
+    }
+
+    // Add FPP status if available
+    if ($fppStatus !== false && $fppStatus !== null) {
+        $result['fpp'] = [
+            'status' => $fppStatus['status_name'] ?? 'unknown',
+            'sequence' => $fppStatus['current_sequence'] ?? '',
+            'currentFrame' => intval($fppStatus['current_frame'] ?? 0),
+            'secondsPlayed' => floatval($fppStatus['seconds_played'] ?? 0),
+            'secondsRemaining' => floatval($fppStatus['seconds_remaining'] ?? 0),
+            'mode' => $fppStatus['mode_name'] ?? 'unknown',
+            'hostname' => $fppStatus['host_name'] ?? ''
+        ];
+    }
+
+    return $result;
+}

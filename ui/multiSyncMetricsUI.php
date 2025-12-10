@@ -530,7 +530,13 @@ const IS_PLAYER_MODE = <?php echo $isPlayerMode ? 'true' : 'false'; ?>;
 const IS_REMOTE_MODE = <?php echo $isRemoteMode ? 'true' : 'false'; ?>;
 // Filtered remote systems from PHP (single source of truth - matches comparison API)
 const remoteSystems = <?php echo json_encode($remoteSystems); ?>;
-let refreshInterval = null;
+
+// Polling intervals
+const FAST_POLL_INTERVAL = 2000;  // Real-time data: 2 seconds
+const SLOW_POLL_INTERVAL = 30000; // Static data: 30 seconds
+
+let fastRefreshInterval = null;
+let slowRefreshInterval = null;
 let latencyJitterChart = null;
 let packetLossChart = null;
 let localStatus = null;
@@ -547,14 +553,24 @@ let lastPacketTime = null;
 let packetRate = 0;
 let localFppStatus = null;
 
-async function loadAllData() {
+// Track if slow data has been loaded at least once
+let slowDataLoaded = false;
+
+/**
+ * Load fast-changing data (every 2 seconds)
+ * - Local C++ plugin status
+ * - Local FPP status
+ * - Local issues
+ * - Remote comparison (real-time sync metrics)
+ * - Network quality current status
+ */
+async function loadFastData() {
     try {
         document.querySelector('.msm-refresh-btn i').classList.add('fa-spin');
 
-        // Load local status from C++ plugin, FPP systems, and FPP status in parallel
-        const [statusResp, systemsResp, fppStatusResp] = await Promise.all([
+        // Load local status from C++ plugin and FPP status in parallel
+        const [statusResp, fppStatusResp] = await Promise.all([
             fetch('/api/plugin-apis/fpp-plugin-watcher/multisync/status'),
-            fetch('/api/fppd/multiSyncSystems'),
             fetch('/api/fppd/status')
         ]);
 
@@ -565,12 +581,6 @@ async function loadAllData() {
 
         const status = await statusResp.json();
         localStatus = status;
-
-        // Parse FPP systems
-        if (systemsResp.ok) {
-            const sysData = await systemsResp.json();
-            fppSystems = sysData.systems || [];
-        }
 
         // Parse local FPP status (for remote mode frame display)
         if (fppStatusResp.ok) {
@@ -592,6 +602,8 @@ async function loadAllData() {
         // If player mode, also load comparison data (which will render systems table)
         if (IS_PLAYER_MODE) {
             await loadComparison(localIssues);
+            // Load current network quality (not history)
+            await loadNetworkQualityCurrent();
         } else {
             // Remote mode - show local issues, packet summary, and remote-specific cards
             updateIssues(localIssues);
@@ -602,21 +614,60 @@ async function loadAllData() {
             await updateLocalComparison(status);
         }
 
-        // Load network quality and clock drift data (player mode only)
-        if (IS_PLAYER_MODE) {
-            await Promise.all([
-                loadNetworkQuality(),
-                loadClockDrift()
-            ]);
-        }
-
         updateLastRefresh();
     } catch (e) {
-        console.error('Error loading data:', e);
+        console.error('Error loading fast data:', e);
         showPluginError('Error connecting to multi-sync plugin: ' + e.message);
     } finally {
         document.querySelector('.msm-refresh-btn i').classList.remove('fa-spin');
     }
+}
+
+/**
+ * Load slow-changing data (every 30 seconds)
+ * - FPP systems list (rarely changes)
+ * - Clock drift data (changes slowly)
+ * - Network quality history/charts
+ */
+async function loadSlowData() {
+    try {
+        if (IS_PLAYER_MODE) {
+            // Load FPP systems, clock drift, and chart data in parallel
+            const [systemsResp, clockDriftPromise, chartsPromise] = await Promise.all([
+                fetch('/api/fppd/multiSyncSystems'),
+                loadClockDrift(),
+                loadQualityCharts()
+            ]);
+
+            // Parse FPP systems
+            if (systemsResp.ok) {
+                const sysData = await systemsResp.json();
+                fppSystems = sysData.systems || [];
+            }
+        } else {
+            // Remote mode - just load FPP systems for sync source detection
+            const systemsResp = await fetch('/api/fppd/multiSyncSystems');
+            if (systemsResp.ok) {
+                const sysData = await systemsResp.json();
+                fppSystems = sysData.systems || [];
+            }
+        }
+
+        slowDataLoaded = true;
+    } catch (e) {
+        console.error('Error loading slow data:', e);
+    }
+}
+
+/**
+ * Load all data (initial load and manual refresh)
+ */
+async function loadAllData() {
+    // Load slow data first if not yet loaded, then fast data
+    if (!slowDataLoaded) {
+        await loadSlowData();
+    }
+    await loadFastData();
 }
 
 async function updateSystemCard(status) {
@@ -1481,7 +1532,10 @@ async function loadClockDrift() {
     }
 }
 
-async function loadNetworkQuality() {
+/**
+ * Load current network quality status (fast poll)
+ */
+async function loadNetworkQualityCurrent() {
     try {
         const resp = await fetch('/api/plugin/fpp-plugin-watcher/metrics/network-quality/current');
         if (!resp.ok) return;
@@ -1490,12 +1544,17 @@ async function loadNetworkQuality() {
         if (!data.success) return;
 
         updateQualityCard(data);
-
-        // Update charts on every refresh
-        await loadQualityCharts();
     } catch (e) {
         console.error('Error loading network quality:', e);
     }
+}
+
+/**
+ * Load network quality (current + charts) - used for backward compatibility
+ */
+async function loadNetworkQuality() {
+    await loadNetworkQualityCurrent();
+    await loadQualityCharts();
 }
 
 function updateQualityCard(data) {
@@ -1737,11 +1796,16 @@ document.addEventListener('click', (e) => {
 });
 
 document.addEventListener('DOMContentLoaded', () => {
+    // Initial load - loads both slow and fast data
     loadAllData();
-    refreshInterval = setInterval(loadAllData, 2000);
+
+    // Start dual polling intervals
+    fastRefreshInterval = setInterval(loadFastData, FAST_POLL_INTERVAL);
+    slowRefreshInterval = setInterval(loadSlowData, SLOW_POLL_INTERVAL);
 });
 
 window.addEventListener('beforeunload', () => {
-    if (refreshInterval) clearInterval(refreshInterval);
+    if (fastRefreshInterval) clearInterval(fastRefreshInterval);
+    if (slowRefreshInterval) clearInterval(slowRefreshInterval);
 });
 </script>

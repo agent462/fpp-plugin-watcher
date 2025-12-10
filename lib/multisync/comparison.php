@@ -46,7 +46,7 @@ function fetchRemoteFppStatus($address, $timeout = 2) {
 
 /**
  * Collect sync metrics from all remote systems in parallel
- * Fetches both watcher plugin metrics AND FPP status to cross-reference
+ * Uses the combined full-status endpoint to reduce HTTP calls (1 per remote instead of 2)
  *
  * @param array $remoteSystems Array of remote system info from getMultiSyncRemoteSystems()
  * @param int $timeout Request timeout per host
@@ -60,41 +60,24 @@ function collectRemoteSyncMetrics($remoteSystems, $timeout = 3) {
     $mh = curl_multi_init();
     $handles = [];
 
-    // Create curl handles for each remote - fetch BOTH watcher plugin AND FPP status
+    // Create curl handles for each remote - use combined endpoint for efficiency
     foreach ($remoteSystems as $system) {
         $address = $system['address'];
         $hostname = $system['hostname'];
 
-        // Fetch watcher plugin metrics
-        $chWatcher = curl_init("http://{$address}/api/plugin-apis/fpp-plugin-watcher/multisync/status");
-        curl_setopt_array($chWatcher, [
+        // Try the combined endpoint first (available on systems with watcher plugin)
+        $ch = curl_init("http://{$address}/api/plugin/fpp-plugin-watcher/multisync/full-status");
+        curl_setopt_array($ch, [
             CURLOPT_RETURNTRANSFER => true,
             CURLOPT_TIMEOUT => $timeout,
             CURLOPT_CONNECTTIMEOUT => $timeout,
             CURLOPT_HTTPHEADER => ['Accept: application/json']
         ]);
-        curl_multi_add_handle($mh, $chWatcher);
-        $handles["{$address}_watcher"] = [
-            'handle' => $chWatcher,
+        curl_multi_add_handle($mh, $ch);
+        $handles[$address] = [
+            'handle' => $ch,
             'address' => $address,
-            'hostname' => $hostname,
-            'type' => 'watcher'
-        ];
-
-        // Also fetch FPP status to see what's actually playing
-        $chFpp = curl_init("http://{$address}/api/fppd/status");
-        curl_setopt_array($chFpp, [
-            CURLOPT_RETURNTRANSFER => true,
-            CURLOPT_TIMEOUT => $timeout,
-            CURLOPT_CONNECTTIMEOUT => $timeout,
-            CURLOPT_HTTPHEADER => ['Accept: application/json']
-        ]);
-        curl_multi_add_handle($mh, $chFpp);
-        $handles["{$address}_fpp"] = [
-            'handle' => $chFpp,
-            'address' => $address,
-            'hostname' => $hostname,
-            'type' => 'fpp'
+            'hostname' => $hostname
         ];
     }
 
@@ -106,11 +89,11 @@ function collectRemoteSyncMetrics($remoteSystems, $timeout = 3) {
         }
     } while ($active && $status === CURLM_OK);
 
-    // Collect results - group by address
-    $watcherResults = [];
-    $fppResults = [];
+    // Collect results
+    $combinedResults = [];
+    $needsFallback = [];
 
-    foreach ($handles as $key => $info) {
+    foreach ($handles as $address => $info) {
         $ch = $info['handle'];
         $response = curl_multi_getcontent($ch);
         $httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
@@ -118,32 +101,68 @@ function collectRemoteSyncMetrics($remoteSystems, $timeout = 3) {
         curl_multi_remove_handle($mh, $ch);
         curl_close($ch);
 
-        $address = $info['address'];
+        $combinedResults[$address] = [
+            'httpCode' => $httpCode,
+            'response' => $response,
+            'responseTime' => round($responseTime * 1000, 1),
+            'hostname' => $info['hostname']
+        ];
 
-        if ($info['type'] === 'watcher') {
-            $watcherResults[$address] = [
-                'httpCode' => $httpCode,
-                'response' => $response,
-                'responseTime' => round($responseTime * 1000, 1),
-                'hostname' => $info['hostname']
-            ];
-        } else {
-            $fppResults[$address] = [
-                'httpCode' => $httpCode,
-                'response' => $response
-            ];
+        // If combined endpoint failed (404 = no watcher plugin), mark for fallback
+        if ($httpCode === 404 || $httpCode === 0) {
+            $needsFallback[$address] = $info['hostname'];
         }
     }
 
     curl_multi_close($mh);
 
-    // Combine results
+    // Fallback: fetch FPP status directly for systems without watcher plugin
+    if (!empty($needsFallback)) {
+        $mh2 = curl_multi_init();
+        $fallbackHandles = [];
+
+        foreach ($needsFallback as $address => $hostname) {
+            $ch = curl_init("http://{$address}/api/fppd/status");
+            curl_setopt_array($ch, [
+                CURLOPT_RETURNTRANSFER => true,
+                CURLOPT_TIMEOUT => $timeout,
+                CURLOPT_CONNECTTIMEOUT => $timeout,
+                CURLOPT_HTTPHEADER => ['Accept: application/json']
+            ]);
+            curl_multi_add_handle($mh2, $ch);
+            $fallbackHandles[$address] = $ch;
+        }
+
+        do {
+            $status = curl_multi_exec($mh2, $active);
+            if ($active) {
+                curl_multi_select($mh2);
+            }
+        } while ($active && $status === CURLM_OK);
+
+        foreach ($fallbackHandles as $address => $ch) {
+            $response = curl_multi_getcontent($ch);
+            $httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+            curl_multi_remove_handle($mh2, $ch);
+            curl_close($ch);
+
+            // Store fallback FPP response
+            $combinedResults[$address]['fallbackFpp'] = [
+                'httpCode' => $httpCode,
+                'response' => $response
+            ];
+        }
+
+        curl_multi_close($mh2);
+    }
+
+    // Process all results
     $results = [];
-    foreach ($watcherResults as $address => $watcher) {
+    foreach ($combinedResults as $address => $data) {
         $result = [
             'address' => $address,
-            'hostname' => $watcher['hostname'],
-            'responseTime' => $watcher['responseTime'],
+            'hostname' => $data['hostname'],
+            'responseTime' => $data['responseTime'],
             'pluginInstalled' => false,
             'online' => false,
             'metrics' => null,
@@ -151,36 +170,62 @@ function collectRemoteSyncMetrics($remoteSystems, $timeout = 3) {
             'error' => null
         ];
 
-        // Process watcher response
-        if ($watcher['httpCode'] === 200 && $watcher['response']) {
-            $data = json_decode($watcher['response'], true);
-            if ($data && !isset($data['error'])) {
+        // Process combined endpoint response
+        if ($data['httpCode'] === 200 && $data['response']) {
+            $combined = json_decode($data['response'], true);
+            if ($combined && isset($combined['success']) && $combined['success']) {
                 $result['online'] = true;
-                $result['pluginInstalled'] = true;
-                $result['metrics'] = $data;
-            } else {
-                $result['error'] = $data['error'] ?? 'Invalid response';
-            }
-        } elseif ($watcher['httpCode'] === 404) {
-            $result['online'] = true;
-            $result['error'] = 'Watcher plugin not installed';
-        } else {
-            $result['error'] = $watcher['httpCode'] > 0 ? "HTTP {$watcher['httpCode']}" : 'Connection failed';
-        }
+                $result['pluginInstalled'] = $combined['watcherLoaded'] ?? false;
 
-        // Process FPP status response
-        $fpp = $fppResults[$address] ?? null;
-        if ($fpp && $fpp['httpCode'] === 200 && $fpp['response']) {
-            $fppData = json_decode($fpp['response'], true);
-            if ($fppData) {
-                $result['online'] = true; // FPP responded, so it's online
-                $result['fppStatus'] = [
-                    'status' => $fppData['status_name'] ?? 'unknown',
-                    'sequence' => $fppData['current_sequence'] ?? '',
-                    'secondsPlayed' => floatval($fppData['seconds_played'] ?? 0),
-                    'secondsRemaining' => floatval($fppData['seconds_remaining'] ?? 0)
-                ];
+                // Extract watcher metrics
+                if (isset($combined['watcher']) && !isset($combined['watcher']['error'])) {
+                    $result['metrics'] = $combined['watcher'];
+                }
+
+                // Extract FPP status
+                if (isset($combined['fpp'])) {
+                    $result['fppStatus'] = $combined['fpp'];
+                }
+            } else {
+                $result['error'] = $combined['error'] ?? 'Invalid response';
             }
+        } elseif ($data['httpCode'] === 404) {
+            // No watcher plugin - check fallback
+            $result['error'] = 'Watcher plugin not installed';
+
+            // Process fallback FPP status
+            $fallback = $data['fallbackFpp'] ?? null;
+            if ($fallback && $fallback['httpCode'] === 200 && $fallback['response']) {
+                $fppData = json_decode($fallback['response'], true);
+                if ($fppData) {
+                    $result['online'] = true;
+                    $result['fppStatus'] = [
+                        'status' => $fppData['status_name'] ?? 'unknown',
+                        'sequence' => $fppData['current_sequence'] ?? '',
+                        'secondsPlayed' => floatval($fppData['seconds_played'] ?? 0),
+                        'secondsRemaining' => floatval($fppData['seconds_remaining'] ?? 0)
+                    ];
+                }
+            }
+        } elseif ($data['httpCode'] === 0) {
+            // Connection failed - check fallback for online status
+            $fallback = $data['fallbackFpp'] ?? null;
+            if ($fallback && $fallback['httpCode'] === 200) {
+                $fppData = json_decode($fallback['response'], true);
+                if ($fppData) {
+                    $result['online'] = true;
+                    $result['fppStatus'] = [
+                        'status' => $fppData['status_name'] ?? 'unknown',
+                        'sequence' => $fppData['current_sequence'] ?? '',
+                        'secondsPlayed' => floatval($fppData['seconds_played'] ?? 0),
+                        'secondsRemaining' => floatval($fppData['seconds_remaining'] ?? 0)
+                    ];
+                }
+            } else {
+                $result['error'] = 'Connection failed';
+            }
+        } else {
+            $result['error'] = "HTTP {$data['httpCode']}";
         }
 
         $results[$address] = $result;

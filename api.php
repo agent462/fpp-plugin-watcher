@@ -150,6 +150,7 @@ function getEndpointsfpppluginwatcher() {
         ['method' => 'GET', 'endpoint' => 'multisync/comparison', 'callback' => 'fpppluginWatcherMultiSyncComparison'],
         ['method' => 'GET', 'endpoint' => 'multisync/comparison/host', 'callback' => 'fpppluginWatcherMultiSyncComparisonHost'],
         ['method' => 'GET', 'endpoint' => 'multisync/clock-drift', 'callback' => 'fpppluginWatcherMultiSyncClockDrift'],
+        ['method' => 'GET', 'endpoint' => 'multisync/full-status', 'callback' => 'fpppluginWatcherMultiSyncFullStatus'],
 
         // System time
         ['method' => 'GET', 'endpoint' => 'time', 'callback' => 'fpppluginWatcherTime'],
@@ -1035,6 +1036,14 @@ function fpppluginWatcherTime() {
 function fpppluginWatcherMultiSyncClockDrift() {
     /** @disregard P1010 */
     return json(measureClockDrift());
+}
+
+// GET /api/plugin/fpp-plugin-watcher/multisync/full-status
+// Returns combined watcher plugin metrics AND FPP status in single call
+// Reduces remote polling overhead by combining two API calls into one
+function fpppluginWatcherMultiSyncFullStatus() {
+    /** @disregard P1010 */
+    return json(getFullSyncStatus());
 }
 
 // GET /api/plugin/fpp-plugin-watcher/metrics/network-quality/current
