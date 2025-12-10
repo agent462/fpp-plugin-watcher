@@ -48,7 +48,7 @@ Watcher adapts its features based on your FPP's operating mode:
 ## Installation
 
 1. Go to **Content Setup > Plugin Manager** in FPP
-2. Find "Watcher" and click **Install**
+2. Watcher can only be installed by providing the json url currently until we publish a final version: (https://github.com/agent462/fpp-plugin-watcher/blob/main/pluginInfo.json)
 
 ## Configuration
 
