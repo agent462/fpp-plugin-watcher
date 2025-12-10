@@ -556,6 +556,49 @@ let localFppStatus = null;
 // Track if slow data has been loaded at least once
 let slowDataLoaded = false;
 
+// Consecutive failure tracking
+// Only mark a host as offline after CONSECUTIVE_FAILURE_THRESHOLD consecutive failures
+const CONSECUTIVE_FAILURE_THRESHOLD = 3;
+let consecutiveFailures = {};  // Map of address -> failure count
+let lastKnownGoodState = {};   // Map of address -> last good remote data
+
+/**
+ * Apply consecutive failure threshold to remote status
+ * Similar to FPP's multisync.php which requires 4 consecutive failures before marking unreachable.
+ * We use 3 failures to prevent UI flickering from transient network issues.
+ *
+ * @param {Array} remotes - Array of remote data from comparison API
+ * @returns {Array} - Modified remotes with failure threshold applied
+ */
+function applyConsecutiveFailureThreshold(remotes) {
+    return remotes.map(remote => {
+        const addr = remote.address;
+
+        if (remote.online) {
+            // Host is online - reset failure counter and cache good state
+            consecutiveFailures[addr] = 0;
+            lastKnownGoodState[addr] = JSON.parse(JSON.stringify(remote));
+            return remote;
+        }
+
+        // Host appears offline - increment failure counter
+        consecutiveFailures[addr] = (consecutiveFailures[addr] || 0) + 1;
+
+        // If we haven't reached threshold and have cached state, use cached state
+        if (consecutiveFailures[addr] < CONSECUTIVE_FAILURE_THRESHOLD && lastKnownGoodState[addr]) {
+            const cached = lastKnownGoodState[addr];
+            // Keep the cached online state but mark metrics as potentially stale
+            return {
+                ...cached,
+                _staleSinceFailure: consecutiveFailures[addr]
+            };
+        }
+
+        // Threshold reached or no cached state - show as offline
+        return remote;
+    });
+}
+
 /**
  * Load fast-changing data (every 2 seconds)
  * - Local C++ plugin status
@@ -1032,21 +1075,37 @@ async function loadComparison(localIssues) {
         const data = await resp.json();
         if (!data.success) return;
 
-        // Combine local issues with comparison issues
-        const allIssues = [...localIssues, ...data.issues];
+        // Apply consecutive failure threshold to remotes
+        // This prevents UI flickering from transient network issues
+        const remotes = applyConsecutiveFailureThreshold(data.remotes);
 
-        // Update stats
-        const summary = data.summary;
-        updateStats(summary.totalRemotes, summary.onlineCount, summary.pluginInstalledCount, allIssues.length);
+        // Filter issues to exclude offline issues for hosts not yet at threshold
+        const filteredIssues = data.issues.filter(issue => {
+            if (issue.type === 'offline') {
+                // Find the corresponding remote to check its failure count
+                const remote = remotes.find(r => r.hostname === issue.host || r.address === issue.host);
+                // Keep the issue only if the host is actually shown as offline
+                return remote && !remote.online;
+            }
+            return true;
+        });
+
+        // Combine local issues with filtered comparison issues
+        const allIssues = [...localIssues, ...filteredIssues];
+
+        // Recalculate stats based on filtered remotes
+        const onlineCount = remotes.filter(r => r.online).length;
+        const pluginInstalledCount = remotes.filter(r => r.pluginInstalled).length;
+        updateStats(remotes.length, onlineCount, pluginInstalledCount, allIssues.length);
 
         // Update issues
         updateIssues(allIssues);
 
         // Render remote cards
-        renderRemoteCards(data.remotes);
+        renderRemoteCards(remotes);
 
         // Render systems packet metrics table (local + remotes)
-        renderSystemsPacketTable(data.remotes, localStatus);
+        renderSystemsPacketTable(remotes, localStatus);
     } catch (e) {
         console.error('Error loading comparison:', e);
     }

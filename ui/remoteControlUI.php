@@ -356,85 +356,48 @@ let currentBulkType = null;
 let latestFPPRelease = null; // Cached latest FPP release from GitHub
 
 // =============================================================================
-// Data Source Configuration
+// Data Source Configuration (Optimized with Bulk Endpoints)
 // =============================================================================
-// Each unique API endpoint can have its own refresh interval (in ms).
-// Set interval to 0 to fetch on every refresh cycle (default 30s).
-// Data is cached per-host between fetches.
+// Intervals in milliseconds. Bulk endpoints reduce API calls by ~90%.
 
 const DATA_SOURCES = {
-    // -------------------------------------------------------------------------
-    // status: /api/fppd/status (local) or /api/plugin/fpp-plugin-watcher/remote/status (remote)
-    // Provides: platform, branch, mode_name, rebootFlag, restartFlag, testMode status
-    // -------------------------------------------------------------------------
-    status: { interval: 0 },
-
-    // -------------------------------------------------------------------------
-    // version: /api/plugin/fpp-plugin-watcher/version (direct to each host)
-    // Provides: watcher plugin version string
-    // -------------------------------------------------------------------------
-    version: { interval: 60000 },
-
-    // -------------------------------------------------------------------------
-    // updates: /api/plugin/fpp-plugin-watcher/plugins/updates (via proxy for remote)
-    // Provides: array of plugins with available updates (name, repoName, installedVersion, latestVersion)
-    // -------------------------------------------------------------------------
-    updates: { interval: 60000 },
-
-    // -------------------------------------------------------------------------
-    // sysStatus: /api/system/status (direct to each host)
-    // Provides: fppLocalVersion, fppRemoteVersion, diskUtilization, cpuUtilization, memoryUtilization, ipAddress
-    // -------------------------------------------------------------------------
-    sysStatus: { interval: 0 },
-
-    // -------------------------------------------------------------------------
-    // connectivity: /api/plugin/fpp-plugin-watcher/connectivity/state (via proxy for remote)
-    // Provides: hasResetAdapter, resetTime, adapter (connectivity failure info)
-    // -------------------------------------------------------------------------
-    connectivity: { interval: 0 },
-
-    // -------------------------------------------------------------------------
-    // discrepancies: /api/plugin/fpp-plugin-watcher/outputs/discrepancies (global, not per-host)
-    // Provides: output configuration issues between player and remotes
-    // -------------------------------------------------------------------------
-    discrepancies: { interval: 60000 }
+    // Bulk status: fppd/status + system/status + connectivity (all remotes)
+    bulkStatus: { interval: 10000, lastFetch: 0 },
+    // Bulk updates: watcher version + plugin updates (all remotes)
+    bulkUpdates: { interval: 60000, lastFetch: 0 },
+    // Local-only data sources
+    localStatus: { interval: 10000, lastFetch: 0 },
+    localSysStatus: { interval: 30000, lastFetch: 0 },
+    localConnectivity: { interval: 30000, lastFetch: 0 },
+    localVersion: { interval: 60000, lastFetch: 0 },
+    localUpdates: { interval: 60000, lastFetch: 0 },
+    // Global sources
+    discrepancies: { interval: 60000, lastFetch: 0 },
+    fppRelease: { interval: 60000, lastFetch: 0 }
 };
 
-// Runtime state for each data source
-const dataSourceState = {};
-for (const source of Object.keys(DATA_SOURCES)) {
-    dataSourceState[source] = { lastFetch: 0, cache: new Map() };
-}
+// Cached data from bulk endpoints (keyed by address)
+const bulkStatusCache = new Map();
+const bulkUpdatesCache = new Map();
 
-// Flags set at start of each refresh cycle (true = should fetch this cycle)
-let fetchFlags = {};
+// Local host cache
+const localCache = {
+    status: null,
+    testMode: null,
+    sysStatus: null,
+    connectivity: null,
+    version: null,
+    updates: []
+};
 
-function updateFetchFlags() {
+function shouldFetch(source) {
     const now = Date.now();
-    for (const [source, config] of Object.entries(DATA_SOURCES)) {
-        const state = dataSourceState[source];
-        // Fetch if interval is 0 (always) or enough time has passed
-        fetchFlags[source] = config.interval === 0 || (now - state.lastFetch >= config.interval);
-    }
+    const config = DATA_SOURCES[source];
+    return now - config.lastFetch >= config.interval;
 }
 
-function updateLastFetchTimes() {
-    const now = Date.now();
-    for (const source of Object.keys(DATA_SOURCES)) {
-        if (fetchFlags[source]) {
-            dataSourceState[source].lastFetch = now;
-        }
-    }
-}
-
-function getCachedData(source, address) {
-    return dataSourceState[source]?.cache.get(address) || null;
-}
-
-function setCachedData(source, address, data) {
-    if (dataSourceState[source]) {
-        dataSourceState[source].cache.set(address, data);
-    }
+function markFetched(source) {
+    DATA_SOURCES[source].lastFetch = Date.now();
 }
 
 // =============================================================================
@@ -633,43 +596,54 @@ async function processBulkOperation(hostsArray, operationFn, idPrefix, progressE
 }
 
 // =============================================================================
-// Status Fetching
+// Bulk Status Fetching (Optimized)
 // =============================================================================
 
-async function fetchSystemStatus(address) {
-    const isLocal = address === 'localhost';
+// Fetch bulk status for all remote hosts (status + sysStatus + connectivity)
+async function fetchBulkStatus() {
+    if (!shouldFetch('bulkStatus')) return;
     try {
-        // Build URLs based on local vs remote
-        const urls = isLocal ? {
-            status: '/api/fppd/status',
-            version: '/api/plugin/fpp-plugin-watcher/version',
-            updates: '/api/plugin/fpp-plugin-watcher/plugins/updates',
-            sysStatus: '/api/system/status',
-            connectivity: '/api/plugin/fpp-plugin-watcher/connectivity/state'
-        } : {
-            status: `/api/plugin/fpp-plugin-watcher/remote/status?host=${encodeURIComponent(address)}`,
-            version: `/api/plugin/fpp-plugin-watcher/remote/version?host=${encodeURIComponent(address)}`,
-            updates: `/api/plugin/fpp-plugin-watcher/remote/plugins/updates?host=${encodeURIComponent(address)}`,
-            sysStatus: `/api/plugin/fpp-plugin-watcher/remote/sysStatus?host=${encodeURIComponent(address)}`,
-            connectivity: `/api/plugin/fpp-plugin-watcher/remote/connectivity/state?host=${encodeURIComponent(address)}`
-        };
+        const response = await fetch('/api/plugin/fpp-plugin-watcher/remote/bulk/status');
+        if (!response.ok) return;
+        const data = await response.json();
+        if (data.success && data.hosts) {
+            for (const [address, hostData] of Object.entries(data.hosts)) {
+                bulkStatusCache.set(address, hostData);
+            }
+        }
+        markFetched('bulkStatus');
+    } catch (e) {
+        console.log('Failed to fetch bulk status:', e);
+    }
+}
 
-        // Fetch each data source based on its configured interval
-        const [statusResponse, versionResponse, updatesResponse, sysStatusResponse, connectivityResponse] = await Promise.all([
-            fetchFlags.status ? fetch(urls.status) : Promise.resolve(null),
-            fetchFlags.version ? fetch(urls.version).catch(() => null) : Promise.resolve(null),
-            fetchFlags.updates ? fetch(urls.updates).catch(() => null) : Promise.resolve(null),
-            fetchFlags.sysStatus ? fetch(urls.sysStatus).catch(() => null) : Promise.resolve(null),
-            fetchFlags.connectivity ? fetch(urls.connectivity).catch(() => null) : Promise.resolve(null)
-        ]);
+// Fetch bulk updates for all remote hosts (version + plugin updates)
+async function fetchBulkUpdates() {
+    if (!shouldFetch('bulkUpdates')) return;
+    try {
+        const response = await fetch('/api/plugin/fpp-plugin-watcher/remote/bulk/updates');
+        if (!response.ok) return;
+        const data = await response.json();
+        if (data.success && data.hosts) {
+            for (const [address, hostData] of Object.entries(data.hosts)) {
+                bulkUpdatesCache.set(address, hostData);
+            }
+        }
+        markFetched('bulkUpdates');
+    } catch (e) {
+        console.log('Failed to fetch bulk updates:', e);
+    }
+}
 
-        // Parse status (different format for local vs remote)
-        let status, testMode;
-        if (fetchFlags.status && statusResponse) {
-            if (isLocal) {
-                if (!statusResponse.ok) return { success: false, address, error: 'Failed to fetch status' };
+// Fetch localhost status data
+async function fetchLocalStatus() {
+    try {
+        // Fetch status (always at 10s interval)
+        if (shouldFetch('localStatus')) {
+            const statusResponse = await fetch('/api/fppd/status');
+            if (statusResponse.ok) {
                 const fppStatus = await statusResponse.json();
-                status = {
+                localCache.status = {
                     platform: fppStatus.platform || '--',
                     branch: fppStatus.branch || '--',
                     mode_name: fppStatus.mode_name || '--',
@@ -677,65 +651,163 @@ async function fetchSystemStatus(address) {
                     rebootFlag: fppStatus.rebootFlag || 0,
                     restartFlag: fppStatus.restartFlag || 0
                 };
-                testMode = { enabled: fppStatus.status_name === 'testing' ? 1 : 0 };
-                setCachedData('status', address, { status, testMode });
-            } else {
-                const data = await statusResponse.json();
-                if (!data.success) return { success: false, address, error: data.error || 'Failed to fetch status' };
-                status = data.status;
-                testMode = data.testMode;
-                setCachedData('status', address, { status, testMode });
+                localCache.testMode = { enabled: fppStatus.status_name === 'testing' ? 1 : 0 };
             }
-        } else {
-            // Use cached status data
-            const cached = getCachedData('status', address);
-            if (!cached) return { success: false, address, error: 'No cached status available' };
-            status = cached.status;
-            testMode = cached.testMode;
+            markFetched('localStatus');
         }
 
-        // Parse version (uses cache when not fetching)
-        let watcherVersion = getCachedData('version', address);
-        if (fetchFlags.version && versionResponse?.ok) {
-            try {
-                watcherVersion = (await versionResponse.json()).version || null;
-                if (watcherVersion) setCachedData('version', address, watcherVersion);
-            } catch (e) {}
+        // Fetch sysStatus (30s interval)
+        if (shouldFetch('localSysStatus')) {
+            const sysResponse = await fetch('/api/system/status');
+            if (sysResponse.ok) {
+                const sysData = await sysResponse.json();
+                localCache.sysStatus = parseSystemStatus(sysData);
+            }
+            markFetched('localSysStatus');
         }
 
-        // Parse plugin updates (uses cache when not fetching)
-        let pluginUpdates = getCachedData('updates', address) || [];
-        if (fetchFlags.updates && updatesResponse?.ok) {
-            try {
+        // Fetch connectivity (30s interval)
+        if (shouldFetch('localConnectivity')) {
+            const connResponse = await fetch('/api/plugin/fpp-plugin-watcher/connectivity/state');
+            if (connResponse.ok) {
+                const connData = await connResponse.json();
+                localCache.connectivity = (connData.success && connData.hasResetAdapter) ? connData : null;
+            }
+            markFetched('localConnectivity');
+        }
+
+        // Fetch version (60s interval)
+        if (shouldFetch('localVersion')) {
+            const versionResponse = await fetch('/api/plugin/fpp-plugin-watcher/version');
+            if (versionResponse.ok) {
+                const versionData = await versionResponse.json();
+                localCache.version = versionData.version || null;
+            }
+            markFetched('localVersion');
+        }
+
+        // Fetch updates (60s interval)
+        if (shouldFetch('localUpdates')) {
+            const updatesResponse = await fetch('/api/plugin/fpp-plugin-watcher/plugins/updates');
+            if (updatesResponse.ok) {
                 const updatesData = await updatesResponse.json();
-                pluginUpdates = (updatesData.success && updatesData.updatesAvailable) ? updatesData.updatesAvailable : [];
-                setCachedData('updates', address, pluginUpdates);
-            } catch (e) {}
+                localCache.updates = (updatesData.success && updatesData.updatesAvailable) ? updatesData.updatesAvailable : [];
+            }
+            markFetched('localUpdates');
         }
+    } catch (e) {
+        console.log('Failed to fetch local status:', e);
+    }
+}
 
-        // Parse system status (uses cache when not fetching)
-        let sysInfo = getCachedData('sysStatus', address) || { fppLocalVersion: null, fppRemoteVersion: null, diskUtilization: null, cpuUtilization: null, memoryUtilization: null, ipAddress: null };
-        if (fetchFlags.sysStatus && sysStatusResponse?.ok) {
-            try {
-                const sysStatusData = await sysStatusResponse.json();
-                // Remote proxy wraps response in {success, data}, local returns data directly
-                const rawSysStatus = isLocal ? sysStatusData : (sysStatusData.data || sysStatusData);
-                sysInfo = parseSystemStatus(rawSysStatus);
-                setCachedData('sysStatus', address, sysInfo);
-            } catch (e) {}
-        }
+// Build card data from cached bulk data for a remote host
+function getRemoteCardData(address) {
+    const statusData = bulkStatusCache.get(address);
+    const updatesData = bulkUpdatesCache.get(address);
 
-        // Parse connectivity state (uses cache when not fetching)
-        let connectivityState = getCachedData('connectivity', address);
-        if (fetchFlags.connectivity && connectivityResponse?.ok) {
-            try {
-                const connData = await connectivityResponse.json();
+    // Check if host is offline
+    if (!statusData || !statusData.success) {
+        return { success: false, address, error: statusData?.error || 'No data available' };
+    }
+
+    // Parse sysStatus from bulk response
+    const sysInfo = statusData.sysStatus ? parseSystemStatus(statusData.sysStatus) : {
+        fppLocalVersion: null, fppRemoteVersion: null, diskUtilization: null,
+        cpuUtilization: null, memoryUtilization: null, ipAddress: null
+    };
+
+    // Parse connectivity from bulk response
+    const connectivityState = (statusData.connectivity && statusData.connectivity.hasResetAdapter)
+        ? statusData.connectivity : null;
+
+    return {
+        success: true,
+        address,
+        status: statusData.status,
+        testMode: statusData.testMode,
+        watcherVersion: updatesData?.version || null,
+        pluginUpdates: updatesData?.updates || [],
+        connectivityState,
+        ...sysInfo
+    };
+}
+
+// Build card data for localhost from cache
+function getLocalCardData() {
+    if (!localCache.status) {
+        return { success: false, address: 'localhost', error: 'No data available' };
+    }
+
+    return {
+        success: true,
+        address: 'localhost',
+        status: localCache.status,
+        testMode: localCache.testMode,
+        watcherVersion: localCache.version,
+        pluginUpdates: localCache.updates,
+        connectivityState: localCache.connectivity,
+        ...(localCache.sysStatus || {})
+    };
+}
+
+// Legacy function for single-host refresh after actions (uses individual endpoints)
+async function fetchSystemStatus(address) {
+    const isLocal = address === 'localhost';
+    try {
+        if (isLocal) {
+            // Force refresh all local data
+            DATA_SOURCES.localStatus.lastFetch = 0;
+            DATA_SOURCES.localSysStatus.lastFetch = 0;
+            DATA_SOURCES.localConnectivity.lastFetch = 0;
+            await fetchLocalStatus();
+            return getLocalCardData();
+        } else {
+            // For remote, fetch directly (used after actions like restart)
+            const [statusResponse, sysResponse, connResponse] = await Promise.all([
+                fetch(`/api/plugin/fpp-plugin-watcher/remote/status?host=${encodeURIComponent(address)}`),
+                fetch(`/api/plugin/fpp-plugin-watcher/remote/sysStatus?host=${encodeURIComponent(address)}`).catch(() => null),
+                fetch(`/api/plugin/fpp-plugin-watcher/remote/connectivity/state?host=${encodeURIComponent(address)}`).catch(() => null)
+            ]);
+
+            if (!statusResponse.ok) return { success: false, address, error: 'Failed to fetch status' };
+            const statusData = await statusResponse.json();
+            if (!statusData.success) return { success: false, address, error: statusData.error || 'Failed' };
+
+            let sysInfo = { fppLocalVersion: null, fppRemoteVersion: null, diskUtilization: null, cpuUtilization: null, memoryUtilization: null, ipAddress: null };
+            if (sysResponse?.ok) {
+                const sysData = await sysResponse.json();
+                sysInfo = parseSystemStatus(sysData.data || sysData);
+            }
+
+            let connectivityState = null;
+            if (connResponse?.ok) {
+                const connData = await connResponse.json();
                 connectivityState = (connData.success && connData.hasResetAdapter) ? connData : null;
-                setCachedData('connectivity', address, connectivityState);
-            } catch (e) {}
-        }
+            }
 
-        return { success: true, address, status, testMode, watcherVersion, pluginUpdates, connectivityState, ...sysInfo };
+            // Get cached updates data
+            const updatesData = bulkUpdatesCache.get(address);
+
+            // Update bulk cache with fresh data
+            bulkStatusCache.set(address, {
+                success: true,
+                status: statusData.status,
+                testMode: statusData.testMode,
+                sysStatus: sysInfo,
+                connectivity: connectivityState
+            });
+
+            return {
+                success: true,
+                address,
+                status: statusData.status,
+                testMode: statusData.testMode,
+                watcherVersion: updatesData?.version || null,
+                pluginUpdates: updatesData?.updates || [],
+                connectivityState,
+                ...sysInfo
+            };
+        }
     } catch (error) {
         return { success: false, address, error: error.message };
     }
@@ -1023,21 +1095,27 @@ async function refreshAllStatus() {
     document.getElementById('controlContent').style.display = 'block';
 
     try {
-        // Determine which data sources should be fetched this cycle based on their intervals
-        updateFetchFlags();
+        // Fetch FPP release info (60s interval)
+        if (shouldFetch('fppRelease')) {
+            await fetchLatestFPPRelease();
+            markFetched('fppRelease');
+        }
 
-        // Fetch latest FPP release first (for cross-version upgrade detection)
-        await fetchLatestFPPRelease();
-
+        // Fetch all data in parallel using bulk endpoints for remotes
         await Promise.all([
-            fetchSystemStatus('localhost').then(result => updateCardUI('localhost', result)),
-            ...remoteAddresses.map(addr =>
-                fetchSystemStatus(addr).then(result => updateCardUI(result.address, result))
-            ),
+            fetchLocalStatus(),
+            fetchBulkStatus(),
+            fetchBulkUpdates(),
             fetchIssues().then(data => renderIssues(data))
         ]);
+
+        // Update UI from cached data
+        updateCardUI('localhost', getLocalCardData());
+        for (const addr of remoteAddresses) {
+            updateCardUI(addr, getRemoteCardData(addr));
+        }
+
         document.getElementById('lastUpdateTime').textContent = new Date().toLocaleTimeString();
-        updateLastFetchTimes();
     } finally {
         refreshBtn.innerHTML = '<i class="fas fa-sync-alt"></i> Refresh All';
         refreshBtn.disabled = false;
@@ -1535,14 +1613,20 @@ function showFPPUpgradeModal() {
     crossVersionRadio.disabled = crossVersionCount === 0;
     branchUpdateRadio.disabled = branchUpdateCount === 0;
 
-    // Select the type with available hosts (prefer crossVersion)
-    if (crossVersionCount > 0) {
-        fppSelectedUpgradeType = 'crossVersion';
-        crossVersionRadio.checked = true;
-    } else if (branchUpdateCount > 0) {
-        fppSelectedUpgradeType = 'branchUpdate';
-        branchUpdateRadio.checked = true;
+    // Only auto-select if current selection has no available hosts (respect explicit user selection)
+    const currentTypeHasHosts = (fppSelectedUpgradeType === 'crossVersion' && crossVersionCount > 0)
+        || (fppSelectedUpgradeType === 'branchUpdate' && branchUpdateCount > 0);
+
+    if (!currentTypeHasHosts) {
+        // Current type invalid - auto-select first available (prefer crossVersion)
+        if (crossVersionCount > 0) {
+            fppSelectedUpgradeType = 'crossVersion';
+        } else if (branchUpdateCount > 0) {
+            fppSelectedUpgradeType = 'branchUpdate';
+        }
     }
+    // Update radio button to match selection
+    document.querySelector(`input[name="fppUpgradeType"][value="${fppSelectedUpgradeType}"]`).checked = true;
 
     // Build accordion for selected type
     buildFPPAccordion();
@@ -1874,8 +1958,8 @@ let issuesExpanded = false;
 let cachedIssuesData = null;
 
 async function fetchIssues() {
-    // Use interval-based caching (issues is a global check, uses 'global' as key)
-    if (!fetchFlags.discrepancies) {
+    // Use interval-based caching (60s)
+    if (!shouldFetch('discrepancies')) {
         return cachedIssuesData;
     }
 
@@ -1885,6 +1969,7 @@ async function fetchIssues() {
         const data = await response.json();
         if (data.success) {
             cachedIssuesData = data;
+            markFetched('discrepancies');
             return data;
         }
         return cachedIssuesData;
@@ -1972,8 +2057,8 @@ function toggleIssuesDetails() {
     }
 }
 
-// Auto-refresh every 30 seconds
-setInterval(() => { if (!isRefreshing) refreshAllStatus(); }, 30000);
+// Auto-refresh every 10 seconds (individual intervals control actual fetch frequency)
+setInterval(() => { if (!isRefreshing) refreshAllStatus(); }, 10000);
 
 // Load on page ready
 document.addEventListener('DOMContentLoaded', refreshAllStatus);

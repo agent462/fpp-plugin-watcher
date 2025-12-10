@@ -478,6 +478,50 @@ if ($isPlayerMode) {
                 </div>
             </div>
         </div>
+
+        <!-- Advanced Configuration Panel -->
+        <div class="settingsPanel collapsed">
+            <div class="panelHeader" onclick="watcherTogglePanel(this)">
+                <div class="panelTitle">
+                    <i class="fas fa-cogs"></i>
+                    Advanced Configuration
+                </div>
+                <i class="fas fa-chevron-down panelToggle"></i>
+            </div>
+            <div class="panelBody">
+                <div class="panelDesc" style="margin-bottom: 1rem;">
+                    These options are for power users who need to customize the underlying configuration files.
+                </div>
+                <div class="advancedConfigItem" style="margin-bottom: 0.75rem;">
+                    <div class="advancedConfigInfo">
+                        <div class="advancedConfigTitle">
+                            <i class="fas fa-sliders-h"></i>
+                            Watcher Configuration
+                        </div>
+                        <div class="advancedConfigDesc">
+                            Edit the watcher plugin configuration file directly. Use with caution.
+                        </div>
+                    </div>
+                    <button type="button" class="buttons btn-outline-secondary" onclick="openWatcherEditor()">
+                        <i class="fas fa-edit"></i> Edit Config
+                    </button>
+                </div>
+                <div class="advancedConfigItem">
+                    <div class="advancedConfigInfo">
+                        <div class="advancedConfigTitle">
+                            <i class="fas fa-file-code"></i>
+                            Collectd Configuration
+                        </div>
+                        <div class="advancedConfigDesc">
+                            View the collectd.conf file used for system metrics collection.
+                        </div>
+                    </div>
+                    <button type="button" class="buttons btn-outline-secondary" onclick="viewCollectdConfig()">
+                        <i class="fas fa-eye"></i> View Config
+                    </button>
+                </div>
+            </div>
+        </div>
     </div>
 
     <script>
@@ -791,13 +835,6 @@ if ($isPlayerMode) {
             document.getElementById('terminalModal').style.display = 'none';
         }
 
-        // Close modal on escape key
-        document.addEventListener('keydown', function(e) {
-            if (e.key === 'Escape') {
-                closeTerminalModal();
-            }
-        });
-
         // Load data stats when Data Management panel is expanded
         document.addEventListener('DOMContentLoaded', function() {
             const dataPanel = document.querySelector('.settingsPanel:has(#dataStatsContainer)');
@@ -812,6 +849,138 @@ if ($isPlayerMode) {
                     });
                 });
                 observer.observe(dataPanel, { attributes: true });
+            }
+        });
+
+        // Collectd Config Viewer (read-only)
+        async function viewCollectdConfig() {
+            const modal = document.getElementById('collectdViewerModal');
+            const content = document.getElementById('collectdViewerContent');
+
+            content.textContent = 'Loading...';
+            modal.style.display = 'flex';
+
+            try {
+                const response = await fetch('/api/plugin/fpp-plugin-watcher/config/collectd');
+                const result = await response.json();
+
+                if (result.success) {
+                    content.textContent = result.content || '(empty file)';
+                } else {
+                    content.textContent = 'Error: ' + (result.error || 'Failed to load configuration');
+                }
+            } catch (error) {
+                content.textContent = 'Error: ' + error.message;
+            }
+        }
+
+        function closeCollectdViewer() {
+            document.getElementById('collectdViewerModal').style.display = 'none';
+        }
+
+        // Watcher Config Editor Functions
+        let watcherEditorOriginalContent = '';
+
+        async function openWatcherEditor() {
+            const modal = document.getElementById('watcherEditorModal');
+            const textarea = document.getElementById('watcherEditorContent');
+            const status = document.getElementById('watcherEditorStatus');
+
+            textarea.value = 'Loading...';
+            status.textContent = '';
+            status.className = 'configEditorStatus';
+            modal.style.display = 'flex';
+
+            try {
+                const response = await fetch('/api/plugin/fpp-plugin-watcher/config/watcher');
+                const result = await response.json();
+
+                if (result.success) {
+                    textarea.value = result.content;
+                    watcherEditorOriginalContent = result.content;
+                } else {
+                    textarea.value = 'Error: ' + (result.error || 'Failed to load configuration');
+                    status.textContent = 'Load failed';
+                    status.className = 'configEditorStatus error';
+                }
+            } catch (error) {
+                textarea.value = 'Error: ' + error.message;
+                status.textContent = 'Load failed';
+                status.className = 'configEditorStatus error';
+            }
+        }
+
+        async function saveWatcherConfig() {
+            const textarea = document.getElementById('watcherEditorContent');
+            const saveBtn = document.getElementById('saveWatcherBtn');
+            const status = document.getElementById('watcherEditorStatus');
+            const content = textarea.value;
+
+            if (content === watcherEditorOriginalContent) {
+                status.textContent = 'No changes to save';
+                status.className = 'configEditorStatus';
+                return;
+            }
+
+            const originalBtnHtml = saveBtn.innerHTML;
+            saveBtn.disabled = true;
+            saveBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Saving...';
+            status.textContent = '';
+            status.className = 'configEditorStatus';
+
+            try {
+                const response = await fetch('/api/plugin/fpp-plugin-watcher/config/watcher', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ content: content })
+                });
+
+                const result = await response.json();
+
+                if (result.success) {
+                    watcherEditorOriginalContent = content;
+                    status.textContent = 'Saved! Some changes may require FPP restart.';
+                    status.className = 'configEditorStatus';
+                } else {
+                    status.textContent = 'Error: ' + (result.error || 'Failed to save');
+                    status.className = 'configEditorStatus error';
+                }
+            } catch (error) {
+                status.textContent = 'Error: ' + error.message;
+                status.className = 'configEditorStatus error';
+            } finally {
+                saveBtn.disabled = false;
+                saveBtn.innerHTML = originalBtnHtml;
+            }
+        }
+
+        function closeWatcherEditor() {
+            const modal = document.getElementById('watcherEditorModal');
+            const textarea = document.getElementById('watcherEditorContent');
+
+            if (textarea.value !== watcherEditorOriginalContent) {
+                if (!confirm('You have unsaved changes. Are you sure you want to close?')) {
+                    return;
+                }
+            }
+
+            modal.style.display = 'none';
+        }
+
+        // Escape key handler for all modals
+        document.addEventListener('keydown', function(e) {
+            if (e.key === 'Escape') {
+                const terminalModal = document.getElementById('terminalModal');
+                const collectdModal = document.getElementById('collectdViewerModal');
+                const watcherModal = document.getElementById('watcherEditorModal');
+
+                if (watcherModal && watcherModal.style.display === 'flex') {
+                    closeWatcherEditor();
+                } else if (collectdModal && collectdModal.style.display === 'flex') {
+                    closeCollectdViewer();
+                } else if (terminalModal && terminalModal.style.display === 'flex') {
+                    closeTerminalModal();
+                }
             }
         });
     </script>
@@ -836,6 +1005,59 @@ if ($isPlayerMode) {
             <pre id="terminalContent" class="terminalContent">Loading...</pre>
             <div class="terminalModalFooter">
                 <span class="terminalFooterText">Last 100 lines &bull; Press ESC to close</span>
+            </div>
+        </div>
+    </div>
+
+    <!-- Collectd Config Viewer Modal (read-only) -->
+    <div id="collectdViewerModal" class="terminalModal" onclick="if(event.target === this) closeCollectdViewer()">
+        <div class="terminalModalContent configEditorContent">
+            <div class="terminalModalHeader">
+                <div class="terminalModalTitle">
+                    <i class="fas fa-file-code"></i>
+                    <span>collectd.conf</span>
+                </div>
+                <div class="terminalModalActions">
+                    <button type="button" class="buttons btn-sm" onclick="closeCollectdViewer()" title="Close">
+                        <i class="fas fa-times"></i>
+                    </button>
+                </div>
+            </div>
+            <pre id="collectdViewerContent" class="terminalContent">Loading...</pre>
+            <div class="terminalModalFooter">
+                <span class="terminalFooterText">Read-only view &bull; Press ESC to close</span>
+            </div>
+        </div>
+    </div>
+
+    <!-- Watcher Config Editor Modal -->
+    <div id="watcherEditorModal" class="terminalModal" onclick="if(event.target === this) closeWatcherEditor()">
+        <div class="terminalModalContent configEditorContent">
+            <div class="terminalModalHeader">
+                <div class="terminalModalTitle">
+                    <i class="fas fa-sliders-h"></i>
+                    <span>plugin.fpp-plugin-watcher</span>
+                </div>
+                <div class="terminalModalActions">
+                    <button type="button" class="buttons btn-sm btn-success" id="saveWatcherBtn" onclick="saveWatcherConfig()" title="Save">
+                        <i class="fas fa-save"></i> Save
+                    </button>
+                    <button type="button" class="buttons btn-sm" onclick="closeWatcherEditor()" title="Close">
+                        <i class="fas fa-times"></i>
+                    </button>
+                </div>
+            </div>
+            <div class="configEditorWarning">
+                <i class="fas fa-exclamation-triangle"></i>
+                <div>
+                    <strong>Warning:</strong> Editing this file incorrectly may break the plugin. Only modify values you understand.
+                    Some changes may require an FPP restart to take effect.
+                </div>
+            </div>
+            <textarea id="watcherEditorContent" class="configEditorTextarea" spellcheck="false">Loading...</textarea>
+            <div class="terminalModalFooter">
+                <span class="terminalFooterText">Press ESC to close without saving</span>
+                <span class="configEditorStatus" id="watcherEditorStatus"></span>
             </div>
         </div>
     </div>

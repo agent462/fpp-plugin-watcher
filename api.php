@@ -119,6 +119,10 @@ function getEndpointsfpppluginwatcher() {
         // Remote systems list (single source of truth for filtered remote list)
         ['method' => 'GET', 'endpoint' => 'remotes', 'callback' => 'fpppluginWatcherRemotes'],
 
+        // Bulk remote endpoints (parallel fetch for all remotes)
+        ['method' => 'GET', 'endpoint' => 'remote/bulk/status', 'callback' => 'fpppluginWatcherRemoteBulkStatus'],
+        ['method' => 'GET', 'endpoint' => 'remote/bulk/updates', 'callback' => 'fpppluginWatcherRemoteBulkUpdates'],
+
         // Remote control proxy
         ['method' => 'GET', 'endpoint' => 'remote/status', 'callback' => 'fpppluginWatcherRemoteStatus'],
         ['method' => 'POST', 'endpoint' => 'remote/command', 'callback' => 'fpppluginWatcherRemoteCommand'],
@@ -169,6 +173,11 @@ function getEndpointsfpppluginwatcher() {
         ['method' => 'GET', 'endpoint' => 'data/:category/:filename/tail', 'callback' => 'fpppluginWatcherDataTail'],
         ['method' => 'DELETE', 'endpoint' => 'data/:category', 'callback' => 'fpppluginWatcherDataClear'],
         ['method' => 'DELETE', 'endpoint' => 'data/:category/:filename', 'callback' => 'fpppluginWatcherDataClearFile'],
+
+        // Advanced configuration
+        ['method' => 'GET', 'endpoint' => 'config/collectd', 'callback' => 'fpppluginWatcherCollectdConfigGet'],
+        ['method' => 'GET', 'endpoint' => 'config/watcher', 'callback' => 'fpppluginWatcherConfigGet'],
+        ['method' => 'POST', 'endpoint' => 'config/watcher', 'callback' => 'fpppluginWatcherConfigSave'],
     ];
 }
 
@@ -576,6 +585,20 @@ function fpppluginwatcherFalconDiscover() {
 function fpppluginWatcherRemotes() {
     /** @disregard P1010 */
     return json(getMultiSyncRemoteSystems());
+}
+
+// GET /api/plugin/fpp-plugin-watcher/remote/bulk/status
+// Bulk fetch status data from all remote hosts in parallel
+function fpppluginWatcherRemoteBulkStatus() {
+    /** @disregard P1010 */
+    return json(getBulkRemoteStatus());
+}
+
+// GET /api/plugin/fpp-plugin-watcher/remote/bulk/updates
+// Bulk fetch version and plugin update data from all remote hosts in parallel
+function fpppluginWatcherRemoteBulkUpdates() {
+    /** @disregard P1010 */
+    return json(getBulkRemoteUpdates());
 }
 
 // GET /api/plugin/fpp-plugin-watcher/remote/status?host=x
@@ -1165,4 +1188,106 @@ function fpppluginWatcherDataClearFile() {
     $result = clearDataFile($category, $filename);
     /** @disregard P1010 */
     return json($result);
+}
+
+// GET /api/plugin/fpp-plugin-watcher/config/collectd
+// Read the collectd configuration file
+function fpppluginWatcherCollectdConfigGet() {
+    $configPath = WATCHERPLUGINDIR . '/config/collectd.conf';
+
+    if (!file_exists($configPath)) {
+        /** @disregard P1010 */
+        return json([
+            'success' => false,
+            'error' => 'Configuration file not found'
+        ]);
+    }
+
+    $content = file_get_contents($configPath);
+    if ($content === false) {
+        /** @disregard P1010 */
+        return json([
+            'success' => false,
+            'error' => 'Failed to read configuration file'
+        ]);
+    }
+
+    /** @disregard P1010 */
+    return json([
+        'success' => true,
+        'content' => $content,
+        'path' => $configPath
+    ]);
+}
+
+// GET /api/plugin/fpp-plugin-watcher/config/watcher
+// Read the watcher plugin configuration file
+function fpppluginWatcherConfigGet() {
+    $configPath = WATCHERCONFIGFILELOCATION;
+
+    if (!file_exists($configPath)) {
+        /** @disregard P1010 */
+        return json([
+            'success' => true,
+            'content' => '',
+            'path' => $configPath,
+            'message' => 'Configuration file does not exist yet'
+        ]);
+    }
+
+    $content = file_get_contents($configPath);
+    if ($content === false) {
+        /** @disregard P1010 */
+        return json([
+            'success' => false,
+            'error' => 'Failed to read configuration file'
+        ]);
+    }
+
+    /** @disregard P1010 */
+    return json([
+        'success' => true,
+        'content' => $content,
+        'path' => $configPath
+    ]);
+}
+
+// POST /api/plugin/fpp-plugin-watcher/config/watcher
+// Save the watcher plugin configuration file
+function fpppluginWatcherConfigSave() {
+    $input = getJsonBody();
+
+    if (!isset($input['content'])) {
+        /** @disregard P1010 */
+        return json([
+            'success' => false,
+            'error' => 'Missing content parameter'
+        ]);
+    }
+
+    $configPath = WATCHERCONFIGFILELOCATION;
+    $content = $input['content'];
+
+    // Write the file
+    $result = file_put_contents($configPath, $content);
+    if ($result === false) {
+        /** @disregard P1010 */
+        return json([
+            'success' => false,
+            'error' => 'Failed to write configuration file'
+        ]);
+    }
+
+    // Ensure proper ownership
+    ensureFppOwnership($configPath);
+
+    // Log the change
+    logMessage("Watcher configuration updated via API");
+
+    /** @disregard P1010 */
+    return json([
+        'success' => true,
+        'message' => 'Configuration saved successfully. Some changes may require FPP restart.',
+        'bytesWritten' => $result
+    ]);
 }

@@ -468,3 +468,135 @@
     font-size: 0.75rem;
     font-family: 'Consolas', 'Monaco', 'Courier New', monospace;
 }
+
+/* Advanced Configuration Section */
+.advancedConfigItem {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 0.75rem 1rem;
+    background: #f8f9fa;
+    border: 1px solid #dee2e6;
+    border-radius: 0.375rem;
+    gap: 1rem;
+}
+
+.advancedConfigInfo {
+    flex: 1;
+    min-width: 0;
+}
+
+.advancedConfigTitle {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    font-weight: 600;
+    color: #212529;
+    margin-bottom: 0.25rem;
+}
+
+.advancedConfigTitle i {
+    color: #6c757d;
+}
+
+.advancedConfigDesc {
+    font-size: 0.8rem;
+    color: #6c757d;
+}
+
+/* Config Editor Modal */
+.configEditorContent {
+    max-width: 1000px;
+}
+
+.configEditorWarning {
+    display: flex;
+    align-items: flex-start;
+    gap: 0.75rem;
+    padding: 0.75rem 1rem;
+    background: #fff3cd;
+    border-bottom: 1px solid #ffc107;
+    color: #856404;
+    font-size: 0.85rem;
+}
+
+.configEditorWarning i {
+    color: #ffc107;
+    font-size: 1.1rem;
+    flex-shrink: 0;
+    margin-top: 0.1rem;
+}
+
+.configEditorWarning a {
+    color: #533f03;
+    text-decoration: underline;
+}
+
+.configEditorWarning a:hover {
+    color: #1d1600;
+}
+
+.configEditorTextarea {
+    flex: 1;
+    width: 100%;
+    margin: 0;
+    padding: 1rem;
+    background: #1e1e1e;
+    color: #d4d4d4;
+    font-family: 'Consolas', 'Monaco', 'Courier New', monospace;
+    font-size: 0.8rem;
+    line-height: 1.4;
+    border: none;
+    resize: none;
+    min-height: 400px;
+    max-height: 50vh;
+    box-sizing: border-box;
+}
+
+.configEditorTextarea:focus {
+    outline: none;
+}
+
+.configEditorTextarea::-webkit-scrollbar {
+    width: 10px;
+}
+
+.configEditorTextarea::-webkit-scrollbar-track {
+    background: #2d2d2d;
+}
+
+.configEditorTextarea::-webkit-scrollbar-thumb {
+    background: #555;
+    border-radius: 5px;
+}
+
+.configEditorTextarea::-webkit-scrollbar-thumb:hover {
+    background: #666;
+}
+
+.configEditorStatus {
+    color: #00ff00;
+    font-size: 0.75rem;
+    font-family: 'Consolas', 'Monaco', 'Courier New', monospace;
+}
+
+.configEditorStatus.error {
+    color: #ff6b6b;
+}
+
+.terminalModalFooter {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}
+
+.btn-success {
+    background: #28a745;
+    border-color: #28a745;
+    color: white;
+}
+
+.btn-success:hover {
+    background: #218838;
+    border-color: #1e7e34;
+}

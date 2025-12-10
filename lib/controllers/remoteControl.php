@@ -602,4 +602,306 @@ function getOutputDiscrepancies() {
 
     return $result;
 }
+
+/**
+ * Bulk fetch status data from all remote hosts in parallel
+ * Consolidates: fppd/status, system/status, connectivity/state
+ *
+ * @return array Result with host data keyed by address
+ */
+function getBulkRemoteStatus() {
+    $remoteSystems = getMultiSyncRemoteSystems();
+    if (empty($remoteSystems)) {
+        return ['success' => true, 'hosts' => []];
+    }
+
+    $timeout = 5;
+    $mh = curl_multi_init();
+    $handles = [];
+
+    // Create handles for each host and each endpoint
+    foreach ($remoteSystems as $system) {
+        $address = $system['address'];
+        $hostname = $system['hostname'];
+
+        $endpoints = [
+            'fppd' => "http://{$address}/api/fppd/status",
+            'sysStatus' => "http://{$address}/api/system/status",
+            'connectivity' => "http://{$address}/api/plugin/fpp-plugin-watcher/connectivity/state"
+        ];
+
+        foreach ($endpoints as $key => $url) {
+            $ch = curl_init($url);
+            curl_setopt_array($ch, [
+                CURLOPT_RETURNTRANSFER => true,
+                CURLOPT_TIMEOUT => $timeout,
+                CURLOPT_CONNECTTIMEOUT => $timeout,
+                CURLOPT_HTTPHEADER => ['Accept: application/json']
+            ]);
+            curl_multi_add_handle($mh, $ch);
+            $handles[] = [
+                'handle' => $ch,
+                'address' => $address,
+                'hostname' => $hostname,
+                'endpoint' => $key
+            ];
+        }
+    }
+
+    // Execute all requests in parallel
+    do {
+        $status = curl_multi_exec($mh, $active);
+        if ($active) curl_multi_select($mh);
+    } while ($active && $status === CURLM_OK);
+
+    // Collect results grouped by host
+    $hostData = [];
+    foreach ($handles as $info) {
+        $ch = $info['handle'];
+        $address = $info['address'];
+        $endpoint = $info['endpoint'];
+
+        $response = curl_multi_getcontent($ch);
+        $httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+        curl_multi_remove_handle($mh, $ch);
+        curl_close($ch);
+
+        // Initialize host entry if needed
+        if (!isset($hostData[$address])) {
+            $hostData[$address] = [
+                'success' => true,
+                'hostname' => $info['hostname'],
+                'status' => null,
+                'testMode' => null,
+                'sysStatus' => null,
+                'connectivity' => null
+            ];
+        }
+
+        // Parse response based on endpoint type
+        if ($httpCode === 200 && $response) {
+            $data = json_decode($response, true);
+            if ($data) {
+                switch ($endpoint) {
+                    case 'fppd':
+                        $hostData[$address]['status'] = [
+                            'platform' => $data['platform'] ?? '--',
+                            'branch' => $data['branch'] ?? '--',
+                            'mode_name' => $data['mode_name'] ?? '--',
+                            'status_name' => $data['status_name'] ?? 'idle',
+                            'rebootFlag' => $data['rebootFlag'] ?? 0,
+                            'restartFlag' => $data['restartFlag'] ?? 0
+                        ];
+                        $hostData[$address]['testMode'] = [
+                            'enabled' => ($data['status_name'] ?? '') === 'testing' ? 1 : 0
+                        ];
+                        break;
+
+                    case 'sysStatus':
+                        $hostData[$address]['sysStatus'] = $data;
+                        break;
+
+                    case 'connectivity':
+                        $hostData[$address]['connectivity'] = $data;
+                        break;
+                }
+            }
+        } else {
+            // Mark as failed if fppd endpoint fails (primary indicator of host being offline)
+            if ($endpoint === 'fppd') {
+                $hostData[$address]['success'] = false;
+                $hostData[$address]['error'] = 'Connection failed';
+            }
+        }
+    }
+
+    curl_multi_close($mh);
+
+    return ['success' => true, 'hosts' => $hostData];
+}
+
+/**
+ * Bulk fetch update data from all remote hosts in parallel
+ * Consolidates: watcher version, plugin updates
+ *
+ * @return array Result with host data keyed by address
+ */
+function getBulkRemoteUpdates() {
+    $remoteSystems = getMultiSyncRemoteSystems();
+    if (empty($remoteSystems)) {
+        return ['success' => true, 'hosts' => []];
+    }
+
+    // Get latest Watcher version from GitHub once for all comparisons
+    $latestWatcherVersion = getLatestWatcherVersion();
+
+    $timeout = 5;
+    $mh = curl_multi_init();
+    $handles = [];
+
+    // Create handles for each host - version and plugin list
+    foreach ($remoteSystems as $system) {
+        $address = $system['address'];
+        $hostname = $system['hostname'];
+
+        $endpoints = [
+            'version' => "http://{$address}/api/plugin/fpp-plugin-watcher/version",
+            'plugins' => "http://{$address}/api/plugin"
+        ];
+
+        foreach ($endpoints as $key => $url) {
+            $ch = curl_init($url);
+            curl_setopt_array($ch, [
+                CURLOPT_RETURNTRANSFER => true,
+                CURLOPT_TIMEOUT => $timeout,
+                CURLOPT_CONNECTTIMEOUT => $timeout,
+                CURLOPT_HTTPHEADER => ['Accept: application/json']
+            ]);
+            curl_multi_add_handle($mh, $ch);
+            $handles[] = [
+                'handle' => $ch,
+                'address' => $address,
+                'hostname' => $hostname,
+                'endpoint' => $key
+            ];
+        }
+    }
+
+    // Execute all requests in parallel
+    do {
+        $status = curl_multi_exec($mh, $active);
+        if ($active) curl_multi_select($mh);
+    } while ($active && $status === CURLM_OK);
+
+    // Collect results grouped by host
+    $hostData = [];
+    $pluginLists = []; // Temporary storage for plugin lists
+
+    foreach ($handles as $info) {
+        $ch = $info['handle'];
+        $address = $info['address'];
+        $endpoint = $info['endpoint'];
+
+        $response = curl_multi_getcontent($ch);
+        $httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+        curl_multi_remove_handle($mh, $ch);
+        curl_close($ch);
+
+        // Initialize host entry if needed
+        if (!isset($hostData[$address])) {
+            $hostData[$address] = [
+                'success' => true,
+                'hostname' => $info['hostname'],
+                'version' => null,
+                'updates' => []
+            ];
+        }
+
+        if ($httpCode === 200 && $response) {
+            $data = json_decode($response, true);
+            if ($data) {
+                switch ($endpoint) {
+                    case 'version':
+                        $hostData[$address]['version'] = $data['version'] ?? null;
+                        break;
+
+                    case 'plugins':
+                        // Store plugin list for second phase
+                        if (is_array($data)) {
+                            $pluginLists[$address] = $data;
+                        }
+                        break;
+                }
+            }
+        } else {
+            if ($endpoint === 'version') {
+                $hostData[$address]['success'] = false;
+                $hostData[$address]['error'] = 'Connection failed';
+            }
+        }
+    }
+
+    curl_multi_close($mh);
+
+    // Second phase: fetch plugin details to check for updates
+    if (!empty($pluginLists)) {
+        $mh2 = curl_multi_init();
+        $handles2 = [];
+
+        foreach ($pluginLists as $address => $pluginNames) {
+            foreach ($pluginNames as $repoName) {
+                if (!is_string($repoName)) continue;
+                $ch = curl_init("http://{$address}/api/plugin/{$repoName}");
+                curl_setopt_array($ch, [
+                    CURLOPT_RETURNTRANSFER => true,
+                    CURLOPT_TIMEOUT => $timeout,
+                    CURLOPT_CONNECTTIMEOUT => $timeout,
+                    CURLOPT_HTTPHEADER => ['Accept: application/json']
+                ]);
+                curl_multi_add_handle($mh2, $ch);
+                $handles2[] = [
+                    'handle' => $ch,
+                    'address' => $address,
+                    'repoName' => $repoName
+                ];
+            }
+        }
+
+        // Execute plugin detail requests
+        do {
+            $status = curl_multi_exec($mh2, $active);
+            if ($active) curl_multi_select($mh2);
+        } while ($active && $status === CURLM_OK);
+
+        // Process plugin details
+        foreach ($handles2 as $info) {
+            $ch = $info['handle'];
+            $address = $info['address'];
+            $repoName = $info['repoName'];
+
+            $response = curl_multi_getcontent($ch);
+            $httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+            curl_multi_remove_handle($mh2, $ch);
+            curl_close($ch);
+
+            if ($httpCode === 200 && $response) {
+                $pluginInfo = json_decode($response, true);
+                if ($pluginInfo && is_array($pluginInfo)) {
+                    $hasUpdate = false;
+                    $installedVersion = $pluginInfo['version'] ?? 'unknown';
+                    $pluginName = $pluginInfo['name'] ?? $repoName;
+
+                    // Check FPP's built-in update flag
+                    if (!empty($pluginInfo['updatesAvailable'])) {
+                        $hasUpdate = true;
+                    }
+
+                    // For Watcher plugin, also compare against GitHub version
+                    if ($repoName === WATCHERPLUGINNAME && $latestWatcherVersion && $installedVersion !== 'unknown') {
+                        if (version_compare($latestWatcherVersion, $installedVersion, '>')) {
+                            $hasUpdate = true;
+                        }
+                    }
+
+                    if ($hasUpdate) {
+                        $updateInfo = [
+                            'repoName' => $repoName,
+                            'name' => $pluginName,
+                            'installedVersion' => $installedVersion,
+                            'updatesAvailable' => true
+                        ];
+                        if ($repoName === WATCHERPLUGINNAME && $latestWatcherVersion) {
+                            $updateInfo['latestVersion'] = $latestWatcherVersion;
+                        }
+                        $hostData[$address]['updates'][] = $updateInfo;
+                    }
+                }
+            }
+        }
+
+        curl_multi_close($mh2);
+    }
+
+    return ['success' => true, 'hosts' => $hostData];
+}
 ?>
