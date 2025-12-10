@@ -133,6 +133,7 @@ function getEndpointsfpppluginwatcher() {
         ['method' => 'GET', 'endpoint' => 'remote/plugins/updates', 'callback' => 'fpppluginWatcherRemotePluginUpdates'],
         ['method' => 'GET', 'endpoint' => 'remote/playback/sync', 'callback' => 'fpppluginWatcherRemotePlaybackSync'],
         ['method' => 'POST', 'endpoint' => 'remote/fpp/upgrade', 'callback' => 'fpppluginWatcherRemoteFPPUpgrade'],
+        ['method' => 'POST', 'endpoint' => 'remote/watcher/upgrade', 'callback' => 'fpppluginWatcherRemoteWatcherUpgrade'],
         ['method' => 'GET', 'endpoint' => 'remote/connectivity/state', 'callback' => 'fpppluginWatcherRemoteConnectivityState'],
         ['method' => 'POST', 'endpoint' => 'remote/connectivity/state/clear', 'callback' => 'fpppluginWatcherRemoteConnectivityStateClear'],
         ['method' => 'GET', 'endpoint' => 'remote/version', 'callback' => 'fpppluginWatcherRemoteVersion'],
@@ -809,6 +810,20 @@ function fpppluginWatcherRemoteFPPUpgrade() {
 
     $targetVersion = isset($input['version']) ? trim($input['version']) : null;
     streamRemoteFPPUpgrade(trim($input['host']), $targetVersion);
+}
+
+// POST /api/plugin/fpp-plugin-watcher/remote/watcher/upgrade
+// Streams the Watcher plugin upgrade output from a remote host
+function fpppluginWatcherRemoteWatcherUpgrade() {
+    $input = json_decode(file_get_contents('php://input'), true);
+
+    if (!isset($input['host'])) {
+        header('Content-Type: application/json');
+        echo json_encode(['success' => false, 'error' => 'Missing host parameter']);
+        return;
+    }
+
+    streamRemoteWatcherUpgrade(trim($input['host']));
 }
 
 // GET /api/plugin/fpp-plugin-watcher/connectivity/state

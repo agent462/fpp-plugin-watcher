@@ -335,6 +335,33 @@ renderCSSIncludes(false);
         </div>
     </div>
 
+    <!-- Watcher Upgrade Modal (with parallel streaming output) -->
+    <div id="watcherUpgradeModal" class="watcher-modal watcher-modal--dark" style="display: none;">
+        <div class="modal-content modal-content--lg">
+            <h4><i class="fas fa-arrow-circle-up" style="color: #28a745;"></i> Upgrade Watcher Plugin</h4>
+            <div class="fpp-upgrade-summary" id="watcherUpgradeSummary">
+                <div class="fpp-upgrade-summary-text">
+                    <strong id="watcherUpgradeCount">0</strong> systems ready to upgrade
+                </div>
+                <div class="fpp-upgrade-actions">
+                    <div class="fpp-upgrade-selection">
+                        <button onclick="watcherSelectAll()"><i class="fas fa-check-square"></i> All</button>
+                        <button onclick="watcherSelectNone()"><i class="fas fa-square"></i> None</button>
+                    </div>
+                    <button onclick="watcherExpandAll()"><i class="fas fa-chevron-down"></i> Expand</button>
+                    <button onclick="watcherCollapseAll()"><i class="fas fa-chevron-up"></i> Collapse</button>
+                </div>
+            </div>
+            <div class="fpp-accordion" id="watcherAccordion"></div>
+            <div class="modal-buttons modal-buttons--center">
+                <button class="btn btn--fixed btn-primary" id="watcherUpgradeStartBtn" onclick="startAllWatcherUpgrades()">
+                    <i class="fas fa-play"></i> Start All
+                </button>
+                <button class="btn btn--fixed btn-muted" id="watcherUpgradeCloseBtn" onclick="closeWatcherUpgradeModal()">Close</button>
+            </div>
+        </div>
+    </div>
+
     <?php endif; ?>
     <?php endif; ?>
 </div>
@@ -1059,13 +1086,17 @@ function updateCardUI(address, data) {
         let html = '';
         pluginUpdates.forEach(plugin => {
             const versionDisplay = plugin.latestVersion ? `v${plugin.installedVersion} → v${plugin.latestVersion}` : `v${plugin.installedVersion}`;
+            // Use streaming modal for Watcher plugin, standard upgrade for others
+            const onclickHandler = plugin.repoName === 'fpp-plugin-watcher'
+                ? `upgradeWatcherSingle('${address}')`
+                : `upgradePlugin('${address}', '${plugin.repoName}')`;
             html += `
                 <div class="upgrade-item" id="upgrade-item-${address}-${plugin.repoName}">
                     <div class="update-info">
                         <span class="update-name">${plugin.name}</span>
                         <span class="update-version">${versionDisplay}</span>
                     </div>
-                    <button class="banner-btn" onclick="upgradePlugin('${address}', '${plugin.repoName}')" id="upgrade-btn-${address}-${plugin.repoName}">
+                    <button class="banner-btn" onclick="${onclickHandler}" id="upgrade-btn-${address}-${plugin.repoName}">
                         <i class="fas fa-download"></i> Upgrade
                     </button>
                 </div>`;
@@ -1401,28 +1432,6 @@ const bulkConfig = {
         },
         refreshDelay: 1000
     },
-    upgrade: {
-        title: '<i class="fas fa-arrow-circle-up" style="color: #28a745;"></i> Upgrading Watcher',
-        getHosts: () => hostsWithWatcherUpdates,
-        parallel: true,
-        operation: async ([address], updateStatus) => {
-            updateStatus('spinner fa-spin', 'Updating...');
-            const response = await fetch('/api/plugin/fpp-plugin-watcher/remote/upgrade', {
-                method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ host: address, plugin: 'fpp-plugin-watcher' })
-            });
-            const data = await response.json();
-            if (!data.success) throw new Error(data.error);
-
-            updateStatus('spinner fa-spin', 'Restarting FPPD...');
-            await fetch('/api/plugin/fpp-plugin-watcher/remote/restart', {
-                method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ host: address })
-            });
-
-            updateStatus('hourglass-half', 'Waiting...');
-            await new Promise(resolve => setTimeout(resolve, 2000));
-        },
-        refreshDelay: 3000
-    },
     restart: {
         title: '<i class="fas fa-sync" style="color: #fd7e14;"></i> Restarting Systems',
         getHosts: () => hostsNeedingRestart,
@@ -1453,14 +1462,12 @@ const bulkConfig = {
             }
         },
         refreshDelay: 3000
-    },
-    fpp: {
-        // FPP uses separate modal with streaming
     }
 };
 
 async function showBulkModal(type) {
     if (type === 'fpp') { showFPPUpgradeModal(); return; }
+    if (type === 'upgrade') { showWatcherUpgradeModal(); return; }
 
     const config = bulkConfig[type];
     const hostsMap = config.getHosts();
@@ -1560,15 +1567,15 @@ function buildFPPAccordion() {
                 : `v${info.localVersion} → v${info.remoteVersion}`;
             html += `
                 <div class="fpp-accordion-item" id="fpp-item-${safeId}" data-address="${addr}">
-                    <div class="fpp-accordion-header">
+                    <div class="fpp-accordion-header" onclick="toggleFPPAccordion('${addr}')">
                         <input type="checkbox" class="fpp-accordion-checkbox" id="fpp-check-${safeId}" checked onclick="event.stopPropagation(); toggleFPPSelection('${addr}')">
-                        <div class="fpp-accordion-toggle" onclick="toggleFPPAccordion('${addr}')"><i class="fas fa-chevron-right"></i></div>
-                        <div class="fpp-accordion-info" onclick="toggleFPPAccordion('${addr}')">
+                        <div class="fpp-accordion-toggle"><i class="fas fa-chevron-right"></i></div>
+                        <div class="fpp-accordion-info">
                             <span class="fpp-accordion-hostname">${info.hostname}</span>
                             <span class="fpp-accordion-address">${addr}</span>
                             <span class="fpp-accordion-version">${versionDisplay}</span>
                         </div>
-                        <div class="fpp-accordion-status pending" id="fpp-status-${safeId}">
+                        <div class="fpp-accordion-status pending" id="fpp-status-${safeId}" onclick="event.stopPropagation()">
                             <i class="fas fa-clock"></i> Pending
                         </div>
                     </div>
@@ -1948,6 +1955,345 @@ async function upgradeFPPBranch(address) {
     fppSelectedUpgradeType = 'branchUpdate';
     showFPPUpgradeModal();
     setTimeout(() => expandFPPItem(address), 100);
+}
+
+// =============================================================================
+// Watcher Upgrade (Parallel Streaming Modal with Accordion)
+// =============================================================================
+
+let watcherUpgradeStates = new Map(); // address → {status, abortController, expanded, selected}
+let watcherUpgradeIsRunning = false;
+
+function buildWatcherAccordion() {
+    const accordion = document.getElementById('watcherAccordion');
+
+    // Reset state
+    watcherUpgradeStates.clear();
+
+    // Build accordion items from hostsWithWatcherUpdates
+    let html = '';
+    if (hostsWithWatcherUpdates.size === 0) {
+        html = '<div style="text-align: center; padding: 2rem; color: #6c757d;"><i class="fas fa-info-circle"></i> No hosts need Watcher updates</div>';
+    } else {
+        hostsWithWatcherUpdates.forEach((info, addr) => {
+            const safeId = escapeId(addr);
+            watcherUpgradeStates.set(addr, { status: 'pending', abortController: null, expanded: false, selected: true });
+            const versionDisplay = `${info.installedVersion || '?'} → ${info.latestVersion || '?'}`;
+            html += `
+                <div class="fpp-accordion-item" id="watcher-item-${safeId}" data-address="${addr}">
+                    <div class="fpp-accordion-header" onclick="toggleWatcherAccordion('${addr}')">
+                        <input type="checkbox" class="fpp-accordion-checkbox" id="watcher-check-${safeId}" checked onclick="event.stopPropagation(); toggleWatcherSelection('${addr}')">
+                        <div class="fpp-accordion-toggle"><i class="fas fa-chevron-right"></i></div>
+                        <div class="fpp-accordion-info">
+                            <span class="fpp-accordion-hostname">${info.hostname}</span>
+                            <span class="fpp-accordion-address">${addr}</span>
+                            <span class="fpp-accordion-version">${versionDisplay}</span>
+                        </div>
+                        <div class="fpp-accordion-status pending" id="watcher-status-${safeId}" onclick="event.stopPropagation()">
+                            <i class="fas fa-clock"></i> Pending
+                        </div>
+                    </div>
+                    <div class="fpp-accordion-body">
+                        <div class="fpp-accordion-log" id="watcher-log-${safeId}"></div>
+                    </div>
+                </div>`;
+        });
+    }
+
+    accordion.innerHTML = html;
+    updateWatcherSummary();
+}
+
+function showWatcherUpgradeModal() {
+    if (hostsWithWatcherUpdates.size < 1) return;
+
+    const modal = document.getElementById('watcherUpgradeModal');
+    const startBtn = document.getElementById('watcherUpgradeStartBtn');
+    const closeBtn = document.getElementById('watcherUpgradeCloseBtn');
+
+    // Reset state
+    watcherUpgradeIsRunning = false;
+
+    // Build accordion
+    buildWatcherAccordion();
+
+    startBtn.disabled = false;
+    startBtn.style.display = '';
+    startBtn.innerHTML = '<i class="fas fa-play"></i> Start Selected';
+    closeBtn.disabled = false;
+    closeBtn.classList.remove('btn-success');
+    closeBtn.classList.add('btn-muted');
+    closeBtn.innerHTML = 'Close';
+    modal.style.display = 'flex';
+}
+
+function toggleWatcherAccordion(address) {
+    const safeId = escapeId(address);
+    const item = document.getElementById(`watcher-item-${safeId}`);
+    const state = watcherUpgradeStates.get(address);
+    if (!item || !state) return;
+
+    state.expanded = !state.expanded;
+    item.classList.toggle('expanded', state.expanded);
+}
+
+function watcherExpandAll() {
+    watcherUpgradeStates.forEach((state, address) => {
+        state.expanded = true;
+        document.getElementById(`watcher-item-${escapeId(address)}`)?.classList.add('expanded');
+    });
+}
+
+function watcherCollapseAll() {
+    watcherUpgradeStates.forEach((state, address) => {
+        state.expanded = false;
+        document.getElementById(`watcher-item-${escapeId(address)}`)?.classList.remove('expanded');
+    });
+}
+
+function toggleWatcherSelection(address) {
+    const safeId = escapeId(address);
+    const checkbox = document.getElementById(`watcher-check-${safeId}`);
+    const item = document.getElementById(`watcher-item-${safeId}`);
+    const state = watcherUpgradeStates.get(address);
+    if (!state || !checkbox || !item) return;
+
+    state.selected = checkbox.checked;
+    item.classList.toggle('excluded', !state.selected);
+    updateWatcherSummary();
+}
+
+function watcherSelectAll() {
+    watcherUpgradeStates.forEach((state, address) => {
+        if (state.status === 'pending') {
+            state.selected = true;
+            const safeId = escapeId(address);
+            const checkbox = document.getElementById(`watcher-check-${safeId}`);
+            const item = document.getElementById(`watcher-item-${safeId}`);
+            if (checkbox) checkbox.checked = true;
+            item?.classList.remove('excluded');
+        }
+    });
+    updateWatcherSummary();
+}
+
+function watcherSelectNone() {
+    watcherUpgradeStates.forEach((state, address) => {
+        if (state.status === 'pending') {
+            state.selected = false;
+            const safeId = escapeId(address);
+            const checkbox = document.getElementById(`watcher-check-${safeId}`);
+            const item = document.getElementById(`watcher-item-${safeId}`);
+            if (checkbox) checkbox.checked = false;
+            item?.classList.add('excluded');
+        }
+    });
+    updateWatcherSummary();
+}
+
+function updateWatcherStatus(address, status, icon, text) {
+    const safeId = escapeId(address);
+    const statusEl = document.getElementById(`watcher-status-${safeId}`);
+    const state = watcherUpgradeStates.get(address);
+    if (statusEl && state) {
+        state.status = status;
+        statusEl.className = `fpp-accordion-status ${status}`;
+        statusEl.innerHTML = `<i class="fas fa-${icon}"></i> ${text}`;
+    }
+}
+
+function updateWatcherSummary() {
+    const countEl = document.getElementById('watcherUpgradeCount');
+    const startBtn = document.getElementById('watcherUpgradeStartBtn');
+    let pending = 0, upgrading = 0, success = 0, error = 0, selected = 0;
+    watcherUpgradeStates.forEach(state => {
+        if (state.status === 'pending') {
+            pending++;
+            if (state.selected) selected++;
+        }
+        else if (state.status === 'upgrading') upgrading++;
+        else if (state.status === 'success') success++;
+        else if (state.status === 'error') error++;
+    });
+    const total = watcherUpgradeStates.size;
+    if (upgrading > 0) {
+        countEl.textContent = `${upgrading} upgrading, ${success + error} of ${total} complete`;
+    } else if (success + error > 0) {
+        countEl.textContent = `${success} succeeded, ${error} failed of ${total}`;
+    } else {
+        countEl.textContent = `${selected} of ${total} selected`;
+    }
+    // Disable start button if nothing selected
+    if (startBtn && !watcherUpgradeIsRunning) {
+        startBtn.disabled = selected === 0;
+    }
+}
+
+async function startSingleWatcherUpgrade(address) {
+    const safeId = escapeId(address);
+    const logEl = document.getElementById(`watcher-log-${safeId}`);
+    const item = document.getElementById(`watcher-item-${safeId}`);
+    const state = watcherUpgradeStates.get(address);
+    if (!logEl || !state) return;
+
+    state.abortController = new AbortController();
+    updateWatcherStatus(address, 'upgrading', 'spinner fa-spin', 'Upgrading...');
+    updateWatcherSummary();
+    logEl.textContent = '';
+
+    try {
+        const response = await fetch('/api/plugin/fpp-plugin-watcher/remote/watcher/upgrade', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ host: address }),
+            signal: state.abortController.signal
+        });
+
+        if (!response.ok) throw new Error(`HTTP error: ${response.status}`);
+
+        const reader = response.body.getReader();
+        const decoder = new TextDecoder();
+        let fullOutput = '';
+
+        while (true) {
+            const { done, value } = await reader.read();
+            if (done) break;
+            const chunk = decoder.decode(value, { stream: true });
+            fullOutput += chunk;
+            logEl.textContent += chunk;
+            logEl.scrollTop = logEl.scrollHeight;
+        }
+
+        // Check if output contains error marker from backend
+        const hasError = fullOutput.includes('=== ERROR:');
+        if (hasError) {
+            updateWatcherStatus(address, 'error', 'times', 'Failed');
+            state.expanded = true;
+            item?.classList.add('expanded');
+            return;
+        }
+
+        logEl.textContent += '\n\n=== Upgrade complete, restarting FPPD... ===';
+        updateWatcherStatus(address, 'success', 'sync fa-spin', 'Restarting...');
+
+        // Restart FPPD after successful upgrade
+        try {
+            await fetch('/api/plugin/fpp-plugin-watcher/remote/restart', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ host: address })
+            });
+            logEl.textContent += '\nFPPD restart initiated.';
+        } catch (restartErr) {
+            logEl.textContent += '\nFPPD restart may have failed: ' + restartErr.message;
+        }
+
+        updateWatcherStatus(address, 'success', 'check', 'Complete');
+    } catch (error) {
+        if (error.name === 'AbortError') {
+            logEl.textContent += '\n\n=== Upgrade cancelled ===';
+            updateWatcherStatus(address, 'error', 'ban', 'Cancelled');
+        } else {
+            logEl.textContent += `\n\n=== ERROR: ${error.message} ===`;
+            updateWatcherStatus(address, 'error', 'times', 'Failed');
+            // Auto-expand on error
+            state.expanded = true;
+            item?.classList.add('expanded');
+        }
+    } finally {
+        state.abortController = null;
+        updateWatcherSummary();
+    }
+}
+
+async function startAllWatcherUpgrades() {
+    if (watcherUpgradeIsRunning) return;
+
+    // Get selected hosts
+    const selectedHosts = [];
+    watcherUpgradeStates.forEach((state, address) => {
+        if (state.status === 'pending' && state.selected) {
+            selectedHosts.push(address);
+        }
+    });
+
+    if (selectedHosts.length === 0) return;
+
+    watcherUpgradeIsRunning = true;
+    const startBtn = document.getElementById('watcherUpgradeStartBtn');
+    const closeBtn = document.getElementById('watcherUpgradeCloseBtn');
+
+    startBtn.disabled = true;
+    startBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Upgrading...';
+    closeBtn.disabled = true;
+
+    // Disable checkboxes during upgrade
+    watcherUpgradeStates.forEach((state, address) => {
+        const checkbox = document.getElementById(`watcher-check-${escapeId(address)}`);
+        if (checkbox) checkbox.disabled = true;
+    });
+
+    // Start selected upgrades in parallel
+    const upgradePromises = selectedHosts.map(address => startSingleWatcherUpgrade(address));
+    await Promise.allSettled(upgradePromises);
+
+    watcherUpgradeIsRunning = false;
+    closeBtn.disabled = false;
+
+    // Check if all are complete (no pending left)
+    let hasPending = false;
+    watcherUpgradeStates.forEach(state => {
+        if (state.status === 'pending') hasPending = true;
+    });
+
+    if (hasPending) {
+        // Some hosts weren't selected, allow restarting
+        startBtn.disabled = false;
+        startBtn.innerHTML = '<i class="fas fa-play"></i> Start Selected';
+        // Re-enable checkboxes for remaining pending hosts
+        watcherUpgradeStates.forEach((state, address) => {
+            if (state.status === 'pending') {
+                const checkbox = document.getElementById(`watcher-check-${escapeId(address)}`);
+                if (checkbox) checkbox.disabled = false;
+            }
+        });
+    } else {
+        // All done - hide start button, make close green
+        startBtn.style.display = 'none';
+        closeBtn.classList.remove('btn-muted');
+        closeBtn.classList.add('btn-success');
+        closeBtn.innerHTML = '<i class="fas fa-check"></i> Done';
+    }
+    updateWatcherSummary();
+}
+
+function closeWatcherUpgradeModal() {
+    // Abort all running upgrades
+    watcherUpgradeStates.forEach(state => {
+        if (state.abortController) {
+            state.abortController.abort();
+        }
+    });
+    watcherUpgradeStates.clear();
+    watcherUpgradeIsRunning = false;
+    document.getElementById('watcherUpgradeModal').style.display = 'none';
+    refreshAllStatus();
+}
+
+function expandWatcherItem(address) {
+    const safeId = escapeId(address);
+    const item = document.getElementById(`watcher-item-${safeId}`);
+    const state = watcherUpgradeStates.get(address);
+    if (item && state) {
+        state.expanded = true;
+        item.classList.add('expanded');
+    }
+}
+
+function upgradeWatcherSingle(address) {
+    if (!hostsWithWatcherUpdates.has(address)) { alert('No Watcher update available.'); return; }
+    showWatcherUpgradeModal();
+    setTimeout(() => expandWatcherItem(address), 100);
 }
 
 // =============================================================================

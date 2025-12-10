@@ -931,14 +931,21 @@ function updateSyncHealth(status, issues) {
     const avgDrift = Math.abs(status.avgFrameDrift ?? 0);
     const hasIssues = issues && issues.length > 0;
     const hasCriticalIssues = issues && issues.some(i => i.severity >= 3);
+    // Check if player is actively playing (from sync packet data)
+    const isPlayerPlaying = status.sequencePlaying === true;
 
     let health = 'good';
     let healthText = 'Healthy';
 
-    if (hasCriticalIssues || secondsSinceSync > 30 || avgDrift > 10) {
+    // Only flag old sync packets as an issue if the player is actively playing
+    // When player is idle, not receiving sync packets is expected behavior
+    const syncPacketIssue = isPlayerPlaying && secondsSinceSync > 30;
+    const syncPacketWarning = isPlayerPlaying && secondsSinceSync > 10;
+
+    if (hasCriticalIssues || syncPacketIssue || avgDrift > 10) {
         health = 'critical';
         healthText = 'Critical';
-    } else if (hasIssues || secondsSinceSync > 10 || avgDrift > 5) {
+    } else if (hasIssues || syncPacketWarning || avgDrift > 5) {
         health = 'warning';
         healthText = 'Warning';
     } else if (secondsSinceSync < 0 || status.totalPacketsReceived === 0) {

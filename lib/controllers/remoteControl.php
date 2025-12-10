@@ -392,6 +392,71 @@ function streamRemoteFPPUpgrade($host, $targetVersion = null) {
 }
 
 /**
+ * Stream Watcher plugin upgrade output in real-time
+ * Uses FPP's native plugin upgrade endpoint with streaming support
+ *
+ * @param string $host The remote host
+ */
+function streamRemoteWatcherUpgrade($host) {
+    if (!validateHost($host)) {
+        header('Content-Type: application/json');
+        echo json_encode([
+            'success' => false,
+            'error' => 'Invalid host format'
+        ]);
+        return;
+    }
+
+    // Disable output buffering for streaming
+    if (ob_get_level()) {
+        ob_end_clean();
+    }
+
+    // Set headers for streaming text
+    header('Content-Type: text/plain; charset=utf-8');
+    header('Cache-Control: no-cache');
+    header('X-Accel-Buffering: no'); // Disable nginx buffering
+
+    // Flush headers
+    flush();
+
+    echo "=== Starting Watcher plugin upgrade on {$host} ===\n\n";
+    flush();
+
+    // Use FPP's native plugin upgrade endpoint with streaming
+    $upgradeUrl = "http://{$host}/api/plugin/fpp-plugin-watcher/upgrade?stream=true";
+
+    $ch = curl_init();
+    curl_setopt($ch, CURLOPT_URL, $upgradeUrl);
+    curl_setopt($ch, CURLOPT_RETURNTRANSFER, false);
+    curl_setopt($ch, CURLOPT_POST, true);
+    curl_setopt($ch, CURLOPT_TIMEOUT, 300); // 5 minute timeout
+    curl_setopt($ch, CURLOPT_CONNECTTIMEOUT, 30);
+    curl_setopt($ch, CURLOPT_FOLLOWLOCATION, true);
+    curl_setopt($ch, CURLOPT_USERAGENT, 'FPP-Plugin-Watcher');
+
+    // Stream output as it arrives
+    curl_setopt($ch, CURLOPT_WRITEFUNCTION, function($ch, $data) {
+        echo $data;
+        flush();
+        return strlen($data);
+    });
+
+    $result = curl_exec($ch);
+    $httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+    $error = curl_error($ch);
+    curl_close($ch);
+
+    if ($result === false || ($httpCode !== 200 && $httpCode !== 0)) {
+        echo "\n=== ERROR: Failed to complete upgrade (HTTP {$httpCode}): {$error} ===\n";
+    } else {
+        echo "\n=== Watcher plugin upgrade completed on {$host} ===\n";
+    }
+
+    flush();
+}
+
+/**
  * Check for configuration issues between player and remote systems
  * Includes output discrepancies and missing sequences
  * Results are cached for 60 seconds to reduce API calls
