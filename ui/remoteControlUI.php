@@ -1475,7 +1475,8 @@ function buildFPPAccordion() {
     } else {
         hostsForType.forEach((info, addr) => {
             const safeId = escapeId(addr);
-            fppUpgradeStates.set(addr, { status: 'pending', abortController: null, expanded: false, selected: true });
+            // Store upgrade info at the time modal is opened to prevent race conditions with background poll
+            fppUpgradeStates.set(addr, { status: 'pending', abortController: null, expanded: false, selected: true, upgradeInfo: info });
             const versionDisplay = info.branch
                 ? `${info.branch}: ${info.localVersion} → ${info.remoteVersion}`
                 : `v${info.localVersion} → v${info.remoteVersion}`;
@@ -1665,9 +1666,8 @@ async function startSingleFPPUpgrade(address) {
     const state = fppUpgradeStates.get(address);
     if (!logEl || !state) return;
 
-    // Get upgrade info based on currently selected upgrade type
-    const hostsForType = getHostsForUpgradeType(fppSelectedUpgradeType);
-    const upgradeInfo = hostsForType.get(address);
+    // Use upgrade info stored when modal was opened (prevents race conditions with background poll)
+    const upgradeInfo = state.upgradeInfo;
     const isCrossVersion = fppSelectedUpgradeType === 'crossVersion';
 
     state.abortController = new AbortController();
