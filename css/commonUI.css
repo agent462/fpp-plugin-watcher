@@ -281,7 +281,7 @@
    Shared Modal Styles
 
    Usage: Add class="watcher-modal" to modal backdrop
-   Content sizes: modal-content--sm (400px), --md (500px), --lg (700px)
+   Content sizes: modal-content--sm (400px), --md (500px), --lg (900px)
    Button styles: btn-primary, btn-secondary, btn-danger, btn-success, btn-muted
    ========================================================================== */
 
@@ -329,9 +329,9 @@
     max-width: 500px;
 }
 
-/** Large modal (700px) - streaming output, detailed views */
+/** Large modal (900px) - streaming output, detailed views */
 .watcher-modal .modal-content--lg {
-    max-width: 700px;
+    max-width: 900px;
     max-height: 80vh;
     display: flex;
     flex-direction: column;

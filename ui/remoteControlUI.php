@@ -1693,12 +1693,24 @@ async function startSingleFPPUpgrade(address) {
 
         const reader = response.body.getReader();
         const decoder = new TextDecoder();
+        let fullOutput = '';
 
         while (true) {
             const { done, value } = await reader.read();
             if (done) break;
-            logEl.textContent += decoder.decode(value, { stream: true });
+            const chunk = decoder.decode(value, { stream: true });
+            fullOutput += chunk;
+            logEl.textContent += chunk;
             logEl.scrollTop = logEl.scrollHeight;
+        }
+
+        // Check if output contains error marker from backend
+        const hasError = fullOutput.includes('=== ERROR:');
+        if (hasError) {
+            updateFPPStatus(address, 'error', 'times', 'Failed');
+            state.expanded = true;
+            item?.classList.add('expanded');
+            return;
         }
 
         logEl.textContent += '\n\n=== Upgrade complete ===';
