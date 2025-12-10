@@ -15,6 +15,9 @@ include_once __DIR__ . '/../lib/multisync/syncStatus.php';
 $config = readPluginConfig();
 $localSystem = apiCall('GET', 'http://127.0.0.1/api/fppd/status', [], true, 5) ?: [];
 
+// Get filtered remote systems (single source of truth for comparison)
+$remoteSystems = getMultiSyncRemoteSystems();
+
 // Check if multi-sync is enabled (player-only setting)
 $multiSyncEnabled = ($localSystem['multisync'] ?? false) === true;
 
@@ -525,6 +528,8 @@ renderCommonJS();
 <script>
 const IS_PLAYER_MODE = <?php echo $isPlayerMode ? 'true' : 'false'; ?>;
 const IS_REMOTE_MODE = <?php echo $isRemoteMode ? 'true' : 'false'; ?>;
+// Filtered remote systems from PHP (single source of truth - matches comparison API)
+const remoteSystems = <?php echo json_encode($remoteSystems); ?>;
 let refreshInterval = null;
 let latencyJitterChart = null;
 let packetLossChart = null;

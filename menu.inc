@@ -114,8 +114,8 @@ if ($showMultiSyncMenu || $showMultiSyncPingMenu || isRemoteModeWithMultiSync())
 }
 
 
-// Add Remote Control UI menu entry only if enabled
-if ($showControlUIMenu) {
+// Add Remote Control UI menu entry only if enabled (player mode only)
+if ($showControlUIMenu && isPlayerMode()) {
 	// Find the Help entry index (it may have shifted due to previous entries)
 	$helpIndex = count($menuEntries) - 1;
 	array_splice($menuEntries, $helpIndex, 0, [

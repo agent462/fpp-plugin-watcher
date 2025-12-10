@@ -116,6 +116,9 @@ function getEndpointsfpppluginwatcher() {
         ['method' => 'POST', 'endpoint' => 'falcon/reboot', 'callback' => 'fpppluginWatcherFalconReboot'],
         ['method' => 'GET', 'endpoint' => 'falcon/discover', 'callback' => 'fpppluginWatcherFalconDiscover'],
 
+        // Remote systems list (single source of truth for filtered remote list)
+        ['method' => 'GET', 'endpoint' => 'remotes', 'callback' => 'fpppluginWatcherRemotes'],
+
         // Remote control proxy
         ['method' => 'GET', 'endpoint' => 'remote/status', 'callback' => 'fpppluginWatcherRemoteStatus'],
         ['method' => 'POST', 'endpoint' => 'remote/command', 'callback' => 'fpppluginWatcherRemoteCommand'],
@@ -565,6 +568,13 @@ function fpppluginwatcherFalconDiscover() {
             'error' => $e->getMessage()
         ]);
     }
+}
+
+// GET /api/plugin/fpp-plugin-watcher/remotes
+// Returns filtered, deduplicated list of remote systems (single source of truth)
+function fpppluginWatcherRemotes() {
+    /** @disregard P1010 */
+    return json(getMultiSyncRemoteSystems());
 }
 
 // GET /api/plugin/fpp-plugin-watcher/remote/status?host=x

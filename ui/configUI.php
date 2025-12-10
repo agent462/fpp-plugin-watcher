@@ -148,6 +148,14 @@ $isPlayerMode = isPlayerMode();
 // Check for connectivity reset state
 $resetState = readResetState();
 
+// Get plugin version from pluginInfo.json
+$pluginVersion = '';
+$pluginInfoPath = __DIR__ . '/../pluginInfo.json';
+if (file_exists($pluginInfoPath)) {
+    $pluginInfo = json_decode(file_get_contents($pluginInfoPath), true);
+    $pluginVersion = $pluginInfo['version'] ?? '';
+}
+
 // Count remote systems for display
 $remoteSystemCount = 0;
 if ($isPlayerMode) {
@@ -164,6 +172,10 @@ if ($isPlayerMode) {
 ?>
 
     <div class="watcherSettingsContainer">
+        <?php if ($pluginVersion): ?>
+        <div class="watcherVersionBadge">Watcher v<?php echo htmlspecialchars($pluginVersion); ?></div>
+        <?php endif; ?>
+
         <?php if ($statusMessage): ?>
         <div class="statusMessage <?php echo htmlspecialchars($statusType); ?>">
             <?php echo htmlspecialchars($statusMessage); ?>

@@ -153,6 +153,26 @@ renderCommonJS();
 - API endpoints return via `json($result)` function
 - Menu entries use `$menuEntries` array with type: status/content/help
 
+### Remote System Lists
+Always use `getMultiSyncRemoteSystems()` from `lib/core/watcherCommon.php` as the single source of truth for remote system lists. This function provides:
+- Filters out local systems
+- Filters to player/remote modes only (excludes bridge)
+- Deduplicates by hostname (prefers entries with UUID)
+- Validates hostname is not empty
+- Sorts by IP address
+
+**PHP usage:**
+```php
+$remoteSystems = getMultiSyncRemoteSystems();
+```
+
+**JavaScript usage (pass from PHP):**
+```php
+<script>const remoteSystems = <?php echo json_encode(getMultiSyncRemoteSystems()); ?>;</script>
+```
+
+**API endpoint:** `GET /api/plugin/fpp-plugin-watcher/remotes`
+
 ### Metrics Rollup System
 - Raw data aggregates into 1min, 5min, 15min, 1hour buckets
 - State tracked in JSON files (last_processed, last_bucket_end timestamps)
