@@ -54,19 +54,20 @@ define("WATCHERDEFAULTSETTINGS",
         'issueCheckSequences' => true)
         );
 
-// Settings that require FPP restart when changed (daemons/services managed by postStart.sh)
-// UI-only settings (controlUIEnabled, falconMonitorEnabled, etc.) don't require restart
+// Settings that require FPP restart when changed
+// Most connectivity settings now support hot-reload (checked every 60 seconds by daemon)
+// Only collectd and MQTT require restart as they are separate services
 define("WATCHERSETTINGSRESTARTREQUIRED",
     array(
-        'connectivityCheckEnabled' => true,   // Daemon started/stopped in postStart.sh
-        'checkInterval' => true,              // Daemon config
-        'maxFailures' => true,                // Daemon config
-        'networkAdapter' => true,             // Daemon config
-        'testHosts' => true,                  // Daemon config
+        'connectivityCheckEnabled' => false,  // Hot-reloadable (daemon exits gracefully if disabled)
+        'checkInterval' => false,             // Hot-reloadable
+        'maxFailures' => false,               // Hot-reloadable
+        'networkAdapter' => false,            // Hot-reloadable
+        'testHosts' => false,                 // Hot-reloadable
         'collectdEnabled' => true,            // Service managed in postStart.sh
         'multiSyncMetricsEnabled' => false,   // UI visibility only
-        'multiSyncPingEnabled' => true,       // Ping daemon started/stopped
-        'multiSyncPingInterval' => true,      // Ping daemon config
+        'multiSyncPingEnabled' => false,      // Hot-reloadable
+        'multiSyncPingInterval' => false,     // Hot-reloadable
         'falconMonitorEnabled' => false,      // UI visibility only
         'controlUIEnabled' => false,          // UI visibility only
         'mqttMonitorEnabled' => true,         // MQTT subscriber started/stopped

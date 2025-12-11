@@ -15,6 +15,77 @@ include_once __DIR__ ."/lib/controllers/networkAdapter.php";
 
 $config = readPluginConfig(); // Load and prepare configuration
 
+// Config hot-reload tracking
+$configCheckInterval = 60; // Check for config changes every 60 seconds
+$lastConfigCheck = 0;
+$lastConfigMtime = file_exists(WATCHERCONFIGFILELOCATION) ? filemtime(WATCHERCONFIGFILELOCATION) : 0;
+
+/**
+ * Check if config file has changed and reload if necessary
+ * Returns true if config was reloaded, false otherwise
+ */
+function checkAndReloadConfig() {
+    global $config, $lastConfigMtime, $actualNetworkAdapter, $networkAdapterDisplay;
+    global $cachedRemoteSystems, $lastRemoteSystemsFetch;
+
+    $currentMtime = file_exists(WATCHERCONFIGFILELOCATION) ? filemtime(WATCHERCONFIGFILELOCATION) : 0;
+
+    if ($currentMtime <= $lastConfigMtime) {
+        return false;
+    }
+
+    logMessage("Config file changed (mtime: $lastConfigMtime -> $currentMtime), reloading configuration...");
+    $lastConfigMtime = $currentMtime;
+
+    // Force reload config (bypass cache)
+    $newConfig = readPluginConfig(true);
+
+    // Check if connectivity check was disabled
+    if (!$newConfig['connectivityCheckEnabled']) {
+        logMessage("Connectivity check disabled via config reload. Exiting gracefully.");
+        exit(0);
+    }
+
+    // Update network adapter if changed
+    if ($newConfig['networkAdapter'] === 'default') {
+        $newAdapter = detectActiveNetworkInterface();
+        $newDisplay = "default (detected: $newAdapter)";
+    } else {
+        $newAdapter = $newConfig['networkAdapter'];
+        $newDisplay = $newAdapter;
+    }
+
+    if ($newAdapter !== $actualNetworkAdapter) {
+        logMessage("Network adapter changed: $actualNetworkAdapter -> $newAdapter");
+        $actualNetworkAdapter = $newAdapter;
+        $networkAdapterDisplay = $newDisplay;
+    }
+
+    // Log significant changes
+    if ($newConfig['checkInterval'] !== $config['checkInterval']) {
+        logMessage("Check interval changed: {$config['checkInterval']} -> {$newConfig['checkInterval']} seconds");
+    }
+    if ($newConfig['maxFailures'] !== $config['maxFailures']) {
+        logMessage("Max failures changed: {$config['maxFailures']} -> {$newConfig['maxFailures']}");
+    }
+    if ($newConfig['testHosts'] !== $config['testHosts']) {
+        logMessage("Test hosts changed: " . implode(',', $config['testHosts']) . " -> " . implode(',', $newConfig['testHosts']));
+    }
+    if ($newConfig['multiSyncPingEnabled'] !== $config['multiSyncPingEnabled']) {
+        logMessage("Multi-sync ping " . ($newConfig['multiSyncPingEnabled'] ? 'enabled' : 'disabled'));
+    }
+
+    // Clear cached remote systems to force refresh on next cycle
+    $cachedRemoteSystems = null;
+    $lastRemoteSystemsFetch = 0;
+
+    // Apply new config
+    $config = $newConfig;
+
+    logMessage("Configuration reloaded successfully");
+    return true;
+}
+
 // Resolve 'default' network adapter to actual interface and save it
 if ($config['networkAdapter'] === 'default') {
     $actualNetworkAdapter = detectActiveNetworkInterface();
@@ -134,6 +205,12 @@ logMessage("Multi-Sync Ping Monitoring: " . ($config['multiSyncPingEnabled'] ? '
 
 while (true) {
     $currentTime = time(); // Single timestamp for this iteration
+
+    // Check for config changes every 60 seconds
+    if (($currentTime - $lastConfigCheck) >= $configCheckInterval) {
+        checkAndReloadConfig();
+        $lastConfigCheck = $currentTime;
+    }
 
     if (checkConnectivity($config['testHosts'], $actualNetworkAdapter)) {
         if ($failureCount > 0) {

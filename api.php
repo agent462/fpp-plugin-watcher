@@ -179,6 +179,7 @@ function getEndpointsfpppluginwatcher() {
         // Connectivity state (local)
         ['method' => 'GET', 'endpoint' => 'connectivity/state', 'callback' => 'fpppluginWatcherConnectivityState'],
         ['method' => 'POST', 'endpoint' => 'connectivity/state/clear', 'callback' => 'fpppluginWatcherConnectivityStateClear'],
+        ['method' => 'POST', 'endpoint' => 'connectivity/reload', 'callback' => 'fpppluginWatcherConnectivityReload'],
 
         // MultiSync comparison
         ['method' => 'GET', 'endpoint' => 'multisync/comparison', 'callback' => 'fpppluginWatcherMultiSyncComparison'],
@@ -721,6 +722,31 @@ function fpppluginWatcherConnectivityStateClear() {
     restartConnectivityDaemon();
 
     return apiSuccess(['message' => 'Reset state cleared and connectivity daemon restarted']);
+}
+
+// POST /api/plugin/fpp-plugin-watcher/connectivity/reload
+// Triggers the connectivity daemon to reload its configuration immediately
+function fpppluginWatcherConnectivityReload() {
+    $configPath = WATCHERCONFIGFILELOCATION;
+
+    if (!file_exists($configPath)) {
+        return apiError('Configuration file not found');
+    }
+
+    // Touch the config file to update its mtime, triggering daemon reload
+    $touched = touch($configPath);
+
+    if (!$touched) {
+        return apiError('Failed to trigger configuration reload');
+    }
+
+    logMessage("Configuration reload triggered via API");
+
+    return apiSuccess([
+        'message' => 'Configuration reload triggered. Daemon will reload within 60 seconds.',
+        'configFile' => $configPath,
+        'newMtime' => filemtime($configPath)
+    ]);
 }
 
 // GET /api/plugin/fpp-plugin-watcher/remote/connectivity/state?host=x

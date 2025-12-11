@@ -104,12 +104,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['save_settings'])) {
         }
 
         // Only set FPP restart flag if settings that require restart have changed
+        // (collectd or MQTT changes still need restart; connectivity settings are hot-reloaded)
         if (settingsRequireRestart($oldConfig, $settingsToSave)) {
             /** @disregard P1010 */
             WriteSettingToFile('restartFlag', 1);
-            $statusMessage = 'Settings saved successfully! FPP restart required.';
+            $statusMessage = 'Settings saved! FPP restart required for collectd/MQTT changes.';
         } else {
-            $statusMessage = 'Settings saved successfully!';
+            $statusMessage = 'Settings saved! Changes take effect within 60 seconds.';
         }
         $statusType = 'success';
 
