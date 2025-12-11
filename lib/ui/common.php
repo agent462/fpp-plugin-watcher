@@ -107,32 +107,6 @@ function renderAccessError($access) {
 }
 
 /**
- * Render a loading spinner
- * @param string $id - Element ID
- * @param string $message - Loading message
- */
-function renderLoadingSpinner($id, $message) {
-    ?>
-<div id="<?php echo htmlspecialchars($id); ?>" class="loadingSpinner">
-    <i class="fas fa-spinner"></i>
-    <p><?php echo htmlspecialchars($message); ?></p>
-</div>
-<?php
-}
-
-/**
- * Render a floating refresh button
- * @param string $onclick - JavaScript function to call
- */
-function renderRefreshButton($onclick = 'loadAllMetrics()') {
-    ?>
-<button class="refreshButton" onclick="<?php echo htmlspecialchars($onclick); ?>" title="Refresh Data">
-    <i class="fas fa-sync-alt"></i>
-</button>
-<?php
-}
-
-/**
  * Render a time range selector dropdown
  * @param string $id - Select element ID
  * @param string $onchange - JavaScript function to call

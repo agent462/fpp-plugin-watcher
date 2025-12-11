@@ -844,16 +844,6 @@ function clearDataFile($category, $filename) {
 }
 
 /**
- * Format bytes into human-readable size
- */
-function formatBytesSize($bytes) {
-    if ($bytes < 1024) return $bytes . ' B';
-    if ($bytes < 1048576) return round($bytes / 1024, 1) . ' KB';
-    if ($bytes < 1073741824) return round($bytes / 1048576, 1) . ' MB';
-    return round($bytes / 1073741824, 1) . ' GB';
-}
-
-/**
  * Get the last N lines of a file in a category
  * @param string $category Category key
  * @param string $filename Filename

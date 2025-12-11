@@ -60,11 +60,6 @@
         if (el) el.style.display = 'none';
     };
 
-    window.toggleVisible = function(id, visible) {
-        const el = document.getElementById(id);
-        if (el) el.classList.toggle('visible', visible);
-    };
-
     window.setLoading = function(id, show) {
         const el = document.getElementById(id);
         if (el) el.style.display = show ? 'flex' : 'none';
@@ -381,6 +376,24 @@
         if (celsius < 60) return { text: 'Normal', color: '#28a745', icon: '✅' };
         if (celsius < 80) return { text: 'Warm', color: '#ffc107', icon: '⚠️' };
         return { text: 'Hot', color: '#f5576c', icon: '🔥' };
+    };
+
+    /**
+     * Format thermal zone type for display.
+     * Converts "cpu-thermal" to "CPU Thermal", etc.
+     * @param {string} type - Raw type from sysfs (e.g., "cpu-thermal")
+     * @returns {string} Formatted display name (e.g., "CPU Thermal")
+     */
+    window.formatThermalZoneName = function(type) {
+        if (!type) return type;
+        const abbreviations = { cpu: 'CPU', gpu: 'GPU', soc: 'SoC', acpi: 'ACPI', pch: 'PCH' };
+        // Replace underscores/hyphens with spaces and capitalize each word
+        let formatted = type.replace(/[_-]/g, ' ').replace(/\b\w/g, c => c.toUpperCase());
+        // Apply abbreviation replacements (case-insensitive)
+        Object.entries(abbreviations).forEach(([search, replace]) => {
+            formatted = formatted.replace(new RegExp('\\b' + search + '\\b', 'gi'), replace);
+        });
+        return formatted;
     };
 
     window.loadTemperaturePreference = async function() {

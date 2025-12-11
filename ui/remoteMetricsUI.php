@@ -153,7 +153,8 @@ async function fetchSystemMetrics(system) {
             for (const zone of (zones.length ? zones : tempData.zones)) {
                 const valid = tempData.data.filter(d => d[zone] !== null);
                 if (valid.length) {
-                    result.temperature = { current: valid.at(-1)[zone], average: valid.reduce((a, b) => a + b[zone], 0) / valid.length, data: tempData.data.map(d => ({ timestamp: d.timestamp, temperature: d[zone] })), zone };
+                    const friendlyName = tempData.zone_names?.[zone] || zone;
+                    result.temperature = { current: valid.at(-1)[zone], average: valid.reduce((a, b) => a + b[zone], 0) / valid.length, data: tempData.data.map(d => ({ timestamp: d.timestamp, temperature: d[zone] })), zone, friendlyName };
                     break;
                 }
             }
@@ -349,7 +350,7 @@ async function refreshAllSystems() {
                     [['cpu', 'red', 'cpu_usage'], ['memory', 'purple', 'free_mb'], ['temp', 'orange', 'temperature'], ['wireless', 'teal', 'signal_dbm'], ['ping', 'indigo', 'avg_latency']]
                         .forEach(([key, color, field]) => {
                             const data = key === 'cpu' ? metrics.cpu?.data : key === 'memory' ? metrics.memory?.data : key === 'temp' ? metrics.temperature?.data : key === 'wireless' ? metrics.wireless?.data : metrics.ping?.data;
-                            const label = key === 'cpu' ? 'CPU %' : key === 'memory' ? 'Memory MB' : key === 'temp' ? 'Temp ' + getTempUnit(useFahrenheit) : key === 'wireless' ? 'Signal dBm' : 'Latency ms';
+                            const label = key === 'cpu' ? 'CPU %' : key === 'memory' ? 'Memory MB' : key === 'temp' ? formatThermalZoneName(metrics.temperature?.friendlyName || 'Temp') + ' ' + getTempUnit(useFahrenheit) : key === 'wireless' ? 'Signal dBm' : 'Latency ms';
                             if (data) renderMiniChart(`${key === 'temp' ? 'temp' : key}Chart-${index}`, data, label, color, field);
                         });
                 }

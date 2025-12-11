@@ -68,9 +68,6 @@ define('WATCHER_PACKET_LOSS_THRESHOLDS', [
  * Calculate jitter using RFC 3550 algorithm
  * J(i) = J(i-1) + (|D(i-1,i)| - J(i-1)) / 16
  *
- * This is the standard algorithm used by RTP for VoIP quality monitoring.
- * The /16 provides smoothing (equivalent to exponential moving average).
- *
  * @param string $hostname Host identifier for state tracking
  * @param float $latency Current latency measurement in ms
  * @param array &$state By-reference state array for persistence
@@ -82,19 +79,14 @@ function calculateJitterRFC3550Generic($hostname, $latency, &$state) {
             'prevLatency' => $latency,
             'jitter' => 0.0
         ];
-        return null; // Need at least 2 samples
+        return null;
     }
 
     $prevLatency = $state[$hostname]['prevLatency'];
     $prevJitter = $state[$hostname]['jitter'];
-
-    // D = difference between consecutive latencies
     $d = abs($latency - $prevLatency);
-
-    // RFC 3550 jitter calculation
     $jitter = $prevJitter + ($d - $prevJitter) / 16.0;
 
-    // Update state
     $state[$hostname]['prevLatency'] = $latency;
     $state[$hostname]['jitter'] = $jitter;
 
@@ -103,7 +95,6 @@ function calculateJitterRFC3550Generic($hostname, $latency, &$state) {
 
 /**
  * Calculate jitter from an array of consecutive latency samples
- * Uses RFC 3550 algorithm applied to the array
  *
  * @param array $latencies Array of latency values in time order
  * @return array|null Array with 'avg' and 'max' jitter, or null if insufficient samples
@@ -158,7 +149,6 @@ function getQualityRatingGeneric($value, $goodThreshold, $fairThreshold, $poorTh
 
 /**
  * Get overall quality rating from individual ratings
- * Returns the worst quality among the inputs
  *
  * @param string $latencyRating Latency quality rating
  * @param string $jitterRating Jitter quality rating

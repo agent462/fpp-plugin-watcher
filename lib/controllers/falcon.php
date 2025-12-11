@@ -1049,16 +1049,3 @@ class FalconController
         return $discovered;
     }
 }
-
-/**
- * Helper function to create a FalconController instance
- *
- * @param string $host Controller IP address or hostname
- * @param int $port HTTP port (default 80)
- * @param int $timeout Connection timeout in seconds (default 5)
- * @return FalconController
- */
-function createFalconController($host, $port = 80, $timeout = 5)
-{
-    return new FalconController($host, $port, $timeout);
-}

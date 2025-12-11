@@ -665,9 +665,12 @@ async function fetchBulkUpdates() {
 // Fetch localhost status data
 async function fetchLocalStatus() {
     try {
-        // Fetch status (always at 10s interval)
+        // Fetch status and test mode (always at 10s interval)
         if (shouldFetch('localStatus')) {
-            const statusResponse = await fetch('/api/fppd/status');
+            const [statusResponse, testModeResponse] = await Promise.all([
+                fetch('/api/fppd/status'),
+                fetch('/api/testmode')
+            ]);
             if (statusResponse.ok) {
                 const fppStatus = await statusResponse.json();
                 localCache.status = {
@@ -678,7 +681,12 @@ async function fetchLocalStatus() {
                     rebootFlag: fppStatus.rebootFlag || 0,
                     restartFlag: fppStatus.restartFlag || 0
                 };
-                localCache.testMode = { enabled: fppStatus.status_name === 'testing' ? 1 : 0 };
+            }
+            if (testModeResponse.ok) {
+                const testModeData = await testModeResponse.json();
+                localCache.testMode = { enabled: testModeData.enabled ? 1 : 0 };
+            } else {
+                localCache.testMode = { enabled: 0 };
             }
             markFetched('localStatus');
         }

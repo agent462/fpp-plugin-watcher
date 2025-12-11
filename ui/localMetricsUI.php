@@ -206,7 +206,8 @@ const METRIC_DEFS = [
             const colorKeys = ['coral', 'blue', 'yellow', 'teal', 'indigo', 'orange', 'green', 'pink'];
             const unit = getTempUnit(useFahrenheit);
             const convertData = (response, key) => mapChartData(response, key).map(d => ({ x: d.x, y: useFahrenheit ? toFahrenheit(d.y) : d.y }));
-            return { datasets: p.zones.map((z, i) => createDataset(z, convertData(p, z), colorKeys[i % colorKeys.length], { fill: false })),
+            const getZoneLabel = z => formatThermalZoneName(p.zone_names?.[z] || z);
+            return { datasets: p.zones.map((z, i) => createDataset(getZoneLabel(z), convertData(p, z), colorKeys[i % colorKeys.length], { fill: false })),
                 opts: { yLabel: `Temperature (${unit})`, yTickFormatter: v => v.toFixed(0) + unit, tooltipLabel: c => c.dataset.label + ': ' + c.parsed.y.toFixed(1) + unit } }; } },
     { key: 'wireless', canvasId: 'wirelessChart', cardId: 'wirelessCard', loadingId: 'wirelessLoading',
         url: h => `/api/plugin/fpp-plugin-watcher/metrics/wireless?hours=${h}`,

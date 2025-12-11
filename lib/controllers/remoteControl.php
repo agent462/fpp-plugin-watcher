@@ -116,8 +116,12 @@ function getRemoteStatus($host) {
     $fppStatus = $result['data'];
     $status = extractRemoteStatusFields($fppStatus);
 
-    // Derive test mode from status_name
-    $testMode = ['enabled' => ($fppStatus['status_name'] ?? '') === 'testing' ? 1 : 0];
+    // Fetch actual test mode status from dedicated endpoint
+    $testModeResult = callRemoteApi($host, 'GET', '/api/testmode', [], 5);
+    $testMode = ['enabled' => 0];
+    if ($testModeResult['success'] && isset($testModeResult['data']['enabled'])) {
+        $testMode['enabled'] = $testModeResult['data']['enabled'] ? 1 : 0;
+    }
 
     return [
         'success' => true,
@@ -686,7 +690,8 @@ function getBulkRemoteStatus() {
         $endpoints = [
             'fppd' => "http://{$address}/api/fppd/status",
             'sysStatus' => "http://{$address}/api/system/status",
-            'connectivity' => "http://{$address}/api/plugin/fpp-plugin-watcher/connectivity/state"
+            'connectivity' => "http://{$address}/api/plugin/fpp-plugin-watcher/connectivity/state",
+            'testmode' => "http://{$address}/api/testmode"
         ];
 
         foreach ($endpoints as $key => $url) {
@@ -734,9 +739,6 @@ function getBulkRemoteStatus() {
                 switch ($endpoint) {
                     case 'fppd':
                         $hostData[$address]['status'] = extractRemoteStatusFields($data);
-                        $hostData[$address]['testMode'] = [
-                            'enabled' => ($data['status_name'] ?? '') === 'testing' ? 1 : 0
-                        ];
                         break;
 
                     case 'sysStatus':
@@ -745,6 +747,12 @@ function getBulkRemoteStatus() {
 
                     case 'connectivity':
                         $hostData[$address]['connectivity'] = $data;
+                        break;
+
+                    case 'testmode':
+                        $hostData[$address]['testMode'] = [
+                            'enabled' => !empty($data['enabled']) ? 1 : 0
+                        ];
                         break;
                 }
             }

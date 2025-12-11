@@ -523,6 +523,76 @@ function getThermalZones() {
 }
 
 /**
+ * Get friendly names for thermal zones from sysfs with JSON file caching.
+ * Thermal zone types don't change during runtime (hardware-based), so we cache them.
+ *
+ * @return array Map of zone name to friendly type (e.g., ['thermal_zone0' => 'cpu-thermal'])
+ */
+function getThermalZoneFriendlyNames() {
+    $cacheFile = WATCHERDATADIR . '/thermal_zone_names.json';
+
+    // Check cache first
+    if (file_exists($cacheFile)) {
+        $cached = json_decode(file_get_contents($cacheFile), true);
+        if (is_array($cached) && !empty($cached)) {
+            return $cached;
+        }
+    }
+
+    // Read from sysfs
+    $zones = glob('/sys/class/thermal/thermal_zone*', GLOB_ONLYDIR);
+    $friendlyNames = [];
+
+    foreach ($zones as $zonePath) {
+        $zone = basename($zonePath);
+        $typeFile = "{$zonePath}/type";
+        if (file_exists($typeFile)) {
+            $type = trim(file_get_contents($typeFile));
+            $friendlyNames[$zone] = $type ?: $zone;
+        } else {
+            $friendlyNames[$zone] = $zone;
+        }
+    }
+
+    // Cache to file if we found any zones
+    if (!empty($friendlyNames)) {
+        @file_put_contents($cacheFile, json_encode($friendlyNames));
+        ensureFppOwnership($cacheFile);
+    }
+
+    return $friendlyNames;
+}
+
+/**
+ * Format thermal zone type for display.
+ * Converts "cpu-thermal" to "CPU Thermal", etc.
+ *
+ * @param string $type Raw type from sysfs
+ * @return string Formatted display name
+ */
+function formatThermalZoneType($type) {
+    // Handle common abbreviations (case-insensitive matching)
+    $abbreviations = [
+        'cpu' => 'CPU',
+        'gpu' => 'GPU',
+        'soc' => 'SoC',
+        'acpi' => 'ACPI',
+        'pch' => 'PCH',
+    ];
+
+    // Replace underscores/hyphens with spaces and capitalize
+    $formatted = str_replace(['_', '-'], ' ', $type);
+    $formatted = ucwords($formatted);
+
+    // Apply abbreviation replacements
+    foreach ($abbreviations as $search => $replace) {
+        $formatted = preg_replace('/\b' . preg_quote(ucfirst($search), '/') . '\b/i', $replace, $formatted);
+    }
+
+    return $formatted;
+}
+
+/**
  * Get list of available wireless interfaces
  *
  * @return array List of wireless interface names
@@ -605,7 +675,8 @@ function getThermalMetrics($hoursBack = 24) {
         'count' => count($formattedData),
         'data' => $formattedData,
         'period' => $hoursBack . 'h',
-        'zones' => $zones
+        'zones' => $zones,
+        'zone_names' => getThermalZoneFriendlyNames()
     ];
 }
 
