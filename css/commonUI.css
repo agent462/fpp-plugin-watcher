@@ -3,12 +3,59 @@
  *
  * Shared styles used across multiple UI pages in the Watcher plugin.
  * This file contains reusable components for consistency across:
- * - controlUI.php (Remote System Control)
- * - metricsUI.php (System Metrics)
+ * - localMetricsUI.php (Local System Metrics)
  * - connectivityUI.php (Connectivity Monitoring)
  * - falconMonitorUI.php (Falcon Controller Monitor)
- * - allMetricsUI.php (All Metrics Dashboard)
- * - multiSyncPingUI.php (MultiSync Ping Metrics)
+ * - eventsUI.php (MQTT Events Dashboard)
+ * - remoteControlUI.php (Remote System Control)
+ * - remotePingUI.php (Remote Ping Statistics)
+ *
+ * ============================================================================
+ * CSS CLASS CONVENTIONS
+ * ============================================================================
+ *
+ * Card Components:
+ * ----------------
+ * .chartCard        - Standard card container for charts/visualizations.
+ *                     White background, rounded corners, subtle shadow.
+ *                     Use for: metrics charts, data tables, content sections.
+ *                     Pairs with: .chartTitle, .chartControls, .chartLoading
+ *
+ * .statsBar         - Horizontal summary bar with purple gradient.
+ *                     Use for: page-level statistics at top of dashboards.
+ *                     Contains: .statItem > .statLabel + .statValue
+ *
+ * Page-Specific Styles:
+ * ---------------------
+ * Some pages define local card styles for specialized layouts:
+ * - remoteMetricsUI: .systemCard, .summaryCard (grid-based system cards)
+ * - multiSyncMetricsUI: .msm-* namespace (sync status cards)
+ *
+ * When to use local vs shared styles:
+ * - Use .chartCard for standard chart/content containers
+ * - Use local styles when layout differs significantly (grids, custom colors)
+ * - Namespace local styles with page prefix (e.g., msm-*) to avoid conflicts
+ *
+ * Common Utilities:
+ * -----------------
+ * .metricsContainer - Page wrapper (max-width, centered, padded)
+ * .loadingSpinner   - Full-page loading state
+ * .refreshButton    - Fixed-position floating refresh button
+ * .infoBox          - Blue-bordered informational callout
+ * .warningBox       - Yellow-bordered warning callout
+ * .tierBadge        - Small badge showing data rollup tier
+ * .empty-message    - Centered empty state with icon (see renderEmptyMessage())
+ *
+ * Modal Components:
+ * -----------------
+ * .watcher-modal    - Modal backdrop (see Shared Modal Styles section)
+ * .modal-content    - Modal container with size modifiers (--sm, --md, --lg)
+ *
+ * Naming Convention:
+ * ------------------
+ * - Use camelCase for multi-word classes (e.g., chartCard, statsBar)
+ * - Prefix page-specific styles to avoid conflicts (e.g., msm-card)
+ * - Use watcher- prefix for plugin-wide components that might conflict with FPP
  */
 
 /* ==========================================================================
@@ -765,6 +812,8 @@
    Empty State Messages
 
    Usage: Shown when feature is disabled or no data available
+   PHP: Use renderEmptyMessage($icon, $title, $message) from lib/ui/common.php
+   JS:  Use <div class="empty-message"> with display: none/block for dynamic states
    ========================================================================== */
 
 .empty-message {
@@ -783,12 +832,23 @@
 
 .empty-message p {
     color: #6c757d;
+    margin-bottom: 1rem;
 }
 
 .empty-message i {
     font-size: 3rem;
     margin-bottom: 1rem;
     opacity: 0.5;
+    display: block;
+}
+
+.empty-message a {
+    color: #007bff;
+    text-decoration: underline;
+}
+
+.empty-message .btn {
+    margin-top: 0.5rem;
 }
 
 /* ==========================================================================

@@ -9,6 +9,7 @@ define('COLLECTD_HOSTNAME', 'fpplocal');
 
 /**
  * Fetch ping metrics from the last N hours
+ * Uses readJsonLinesFile() with regex optimization for efficient filtering.
  *
  * @param int $hoursBack Number of hours to fetch (default: 24)
  * @return array Result with success status and data
@@ -25,44 +26,21 @@ function getPingMetrics($hoursBack = 24) {
     }
 
     $cutoffTime = time() - ($hoursBack * 60 * 60);
-    $metrics = [];
 
-    // Read the file line by line
-    $file = fopen($metricsFile, 'r');
-    if ($file) {
-        while (($line = fgets($file)) !== false) {
-            // Quick extraction of timestamp without full JSON parse
-            // Format: [log timestamp] {"timestamp":1234567890,...}
-            if (preg_match('/"timestamp"\s*:\s*(\d+)/', $line, $tsMatch)) {
-                $timestamp = (int)$tsMatch[1];
+    // Use shared readJsonLinesFile with regex optimization for timestamp filtering
+    $entries = readJsonLinesFile($metricsFile, $cutoffTime);
 
-                // Skip old entries without expensive json_decode
-                if ($timestamp < $cutoffTime) {
-                    continue;
-                }
-
-                // Only parse JSON for entries within time range
-                if (preg_match('/\[.*?\]\s+(.+)$/', $line, $matches)) {
-                    $entry = json_decode(trim($matches[1]), true);
-
-                    if ($entry) {
-                        $metrics[] = [
-                            'timestamp' => $timestamp,
-                            'host' => $entry['host'],
-                            'latency' => isset($entry['latency']) && $entry['latency'] !== null
-                                ? floatval($entry['latency'])
-                                : null,
-                            'status' => $entry['status']
-                        ];
-                    }
-                }
-            }
-        }
-        fclose($file);
-    }
-
-    // Sort by timestamp ascending (oldest first)
-    sortByTimestamp($metrics);
+    // Transform to expected format (normalize latency to float)
+    $metrics = array_map(function($entry) {
+        return [
+            'timestamp' => $entry['timestamp'],
+            'host' => $entry['host'] ?? '',
+            'latency' => isset($entry['latency']) && $entry['latency'] !== null
+                ? floatval($entry['latency'])
+                : null,
+            'status' => $entry['status'] ?? ''
+        ];
+    }, $entries);
 
     return [
         'success' => true,

@@ -41,32 +41,14 @@ function calculateMultiSyncJitter($hostname, $latency) {
 
 /**
  * Ping a single remote host and return results
+ * Uses 2 second timeout for remote hosts which may have higher latency
  *
  * @param string $address IP address or hostname to ping
  * @param string $networkAdapter Network interface to use for ping
  * @return array Ping result with latency and status
  */
 function pingRemoteHost($address, $networkAdapter) {
-    $output = [];
-    $returnVar = 0;
-
-    exec("ping -I " . escapeshellarg($networkAdapter) . " -c 1 -W 2 " . escapeshellarg($address) . " 2>&1", $output, $returnVar);
-
-    $result = [
-        'success' => ($returnVar === 0),
-        'latency' => null
-    ];
-
-    if ($returnVar === 0) {
-        foreach ($output as $line) {
-            if (preg_match('/time=([0-9.]+)\s*ms/', $line, $matches)) {
-                $result['latency'] = floatval($matches[1]);
-                break;
-            }
-        }
-    }
-
-    return $result;
+    return pingHost($address, $networkAdapter, 2);
 }
 
 /**

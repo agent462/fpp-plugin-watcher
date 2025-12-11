@@ -1,4 +1,25 @@
 <?php
+/**
+ * Watcher Plugin API
+ *
+ * API Response Contract:
+ * ---------------------
+ * All endpoints return JSON with consistent structure:
+ *
+ * Success responses (use apiSuccess()):
+ *   - Direct data: {success: true, field1: value, field2: value, ...}
+ *   - Wrapped proxy: {success: true, data: {...proxied_response...}}
+ *
+ * Error responses (use apiError()):
+ *   - {success: false, error: "message"}
+ *   - HTTP status codes: 400 (bad request), 404 (not found), 500 (server error)
+ *
+ * Guidelines:
+ *   - Local/computed data: spread fields at top level (e.g., {success, version, count, items})
+ *   - Proxied remote data: wrap in 'data' key to distinguish plugin wrapper from remote response
+ *   - Always use apiSuccess() and apiError() helpers, never raw json()
+ */
+
 // Core
 include_once __DIR__ . '/lib/core/watcherCommon.php';
 include_once WATCHERPLUGINDIR . '/lib/core/config.php';
@@ -46,11 +67,8 @@ function getRequiredQueryParam($param) {
  * Get required JSON body field, returns null if missing
  */
 function getRequiredJsonField($field) {
-    static $jsonBody = null;
-    if ($jsonBody === null) {
-        $jsonBody = json_decode(file_get_contents('php://input'), true) ?: [];
-    }
-    return isset($jsonBody[$field]) ? $jsonBody[$field] : null;
+    $body = getJsonBody();
+    return isset($body[$field]) ? $body[$field] : null;
 }
 
 /**
@@ -71,6 +89,17 @@ function getJsonBody() {
 function apiError($message, $code = 400) {
     http_response_code($code);
     return json(['success' => false, 'error' => $message]);
+}
+
+/**
+ * Return standardized API success response
+ * @disregard P1010
+ */
+function apiSuccess($data = []) {
+    if (is_array($data) && !isset($data['success'])) {
+        $data['success'] = true;
+    }
+    return json($data);
 }
 
 // --- Endpoint Registration ---
@@ -184,40 +213,32 @@ function getEndpointsfpppluginwatcher() {
 
 // GET /api/plugin/fpp-plugin-watcher/version
 function fpppluginwatcherVersion() {
-    $result = array();
-    $result['version'] = WATCHERVERSION;
-    /** @disregard P1010 */
-    return json($result);
+    return apiSuccess(['version' => WATCHERVERSION]);
 }
 
 // GET /api/plugin/fpp-plugin-watcher/metrics/ping/raw
 function fpppluginWatcherPingRaw() {
-    /** @disregard P1010 */
-    return json(getPingMetrics(getHoursParam()));
+    return apiSuccess(getPingMetrics(getHoursParam()));
 }
 
 // GET /api/plugin/fpp-plugin-watcher/metrics/memory/free
 function fpppluginwatcherMemoryFree() {
-    /** @disregard P1010 */
-    return json(getMemoryFreeMetrics(getHoursParam()));
+    return apiSuccess(getMemoryFreeMetrics(getHoursParam()));
 }
 
 // GET /api/plugin/fpp-plugin-watcher/metrics/disk/free
 function fpppluginwatcherDiskFree() {
-    /** @disregard P1010 */
-    return json(getDiskFreeMetrics(getHoursParam()));
+    return apiSuccess(getDiskFreeMetrics(getHoursParam()));
 }
 
 // GET /api/plugin/fpp-plugin-watcher/metrics/cpu/average
 function fpppluginwatcherCPUAverage() {
-    /** @disregard P1010 */
-    return json(getCPUAverageMetrics(getHoursParam()));
+    return apiSuccess(getCPUAverageMetrics(getHoursParam()));
 }
 
 // GET /api/plugin/fpp-plugin-watcher/metrics/load/average
 function fpppluginwatcherLoadAverage() {
-    /** @disregard P1010 */
-    return json(getLoadAverageMetrics(getHoursParam()));
+    return apiSuccess(getLoadAverageMetrics(getHoursParam()));
 }
 
 // GET /api/plugin/fpp-plugin-watcher/metrics/interface/bandwidth
@@ -226,38 +247,26 @@ function fpppluginwatcherInterfaceBandwidth() {
     if (!preg_match('/^[a-zA-Z0-9\-\.]+$/', $interface)) {
         return apiError('Invalid interface name');
     }
-    /** @disregard P1010 */
-    return json(getInterfaceBandwidthMetrics($interface, getHoursParam()));
+    return apiSuccess(getInterfaceBandwidthMetrics($interface, getHoursParam()));
 }
 
 // GET /api/plugin/fpp-plugin-watcher/metrics/interface/list
 function fpppluginwatcherInterfaceList() {
     $interfaces = getNetworkInterfaces();
-    $result = [
-        'success' => true,
+    return apiSuccess([
         'count' => count($interfaces),
         'interfaces' => $interfaces
-    ];
-    /** @disregard P1010 */
-    return json($result);
+    ]);
 }
 
 // GET /api/plugin/fpp-plugin-watcher/metrics/ping/rollup
 function fpppluginwatcherPingRollup() {
-    /** @disregard P1010 */
-    return json(getPingMetricsRollup(getHoursParam()));
+    return apiSuccess(getPingMetricsRollup(getHoursParam()));
 }
 
 // GET /api/plugin/fpp-plugin-watcher/metrics/ping/rollup/tiers
-// Returns information about available rollup tiers
 function fpppluginwatcherPingRollupTiers() {
-    $tiers = getRollupTiersInfo();
-    $result = [
-        'success' => true,
-        'tiers' => $tiers
-    ];
-    /** @disregard P1010 */
-    return json($result);
+    return apiSuccess(['tiers' => getRollupTiersInfo()]);
 }
 
 // GET /api/plugin/fpp-plugin-watcher/metrics/ping/rollup/:tier
@@ -267,78 +276,58 @@ function fpppluginwatcherPingRollupTier() {
     $hoursBack = getHoursParam();
     $endTime = time();
     $startTime = $endTime - ($hoursBack * 3600);
-    /** @disregard P1010 */
-    return json(readRollupData($tier, $startTime, $endTime));
+    return apiSuccess(readRollupData($tier, $startTime, $endTime));
 }
 
 // GET /api/plugin/fpp-plugin-watcher/metrics/multisync/ping/raw
 function fpppluginWatcherMultiSyncPingRaw() {
     $hostname = isset($_GET['hostname']) ? $_GET['hostname'] : null;
-    /** @disregard P1010 */
-    return json(getRawMultiSyncPingMetrics(getHoursParam(), $hostname));
+    return apiSuccess(getRawMultiSyncPingMetrics(getHoursParam(), $hostname));
 }
 
 // GET /api/plugin/fpp-plugin-watcher/metrics/multisync/ping/rollup
 function fpppluginWatcherMultiSyncPingRollup() {
     $hostname = isset($_GET['hostname']) ? $_GET['hostname'] : null;
-    /** @disregard P1010 */
-    return json(getMultiSyncPingMetrics(getHoursParam(), $hostname));
+    return apiSuccess(getMultiSyncPingMetrics(getHoursParam(), $hostname));
 }
 
 // GET /api/plugin/fpp-plugin-watcher/metrics/multisync/ping/rollup/tiers
-// Returns information about available multi-sync rollup tiers
 function fpppluginWatcherMultiSyncPingRollupTiers() {
-    $tiers = getMultiSyncRollupTiersInfo();
-    $result = [
-        'success' => true,
-        'tiers' => $tiers
-    ];
-    /** @disregard P1010 */
-    return json($result);
+    return apiSuccess(['tiers' => getMultiSyncRollupTiersInfo()]);
 }
 
 // GET /api/plugin/fpp-plugin-watcher/metrics/thermal
 function fpppluginwatcherThermal() {
-    /** @disregard P1010 */
-    return json(getThermalMetrics(getHoursParam()));
+    return apiSuccess(getThermalMetrics(getHoursParam()));
 }
 
 // GET /api/plugin/fpp-plugin-watcher/metrics/thermal/zones
 function fpppluginwatcherThermalZones() {
     $zones = getThermalZones();
-    $result = [
-        'success' => true,
+    return apiSuccess([
         'count' => count($zones),
         'zones' => $zones
-    ];
-    /** @disregard P1010 */
-    return json($result);
+    ]);
 }
 
 // GET /api/plugin/fpp-plugin-watcher/metrics/wireless
 function fpppluginwatcherWireless() {
-    /** @disregard P1010 */
-    return json(getWirelessMetrics(getHoursParam()));
+    return apiSuccess(getWirelessMetrics(getHoursParam()));
 }
 
 // GET /api/plugin/fpp-plugin-watcher/metrics/wireless/interfaces
 function fpppluginwatcherWirelessInterfaces() {
     $interfaces = getWirelessInterfaces();
-    $result = [
-        'success' => true,
+    return apiSuccess([
         'count' => count($interfaces),
         'interfaces' => $interfaces
-    ];
-    /** @disregard P1010 */
-    return json($result);
+    ]);
 }
 
 // GET /api/plugin/fpp-plugin-watcher/metrics/all
 function fpppluginwatcherMetricsAll() {
     $hours = getHoursParam();
-    /** @disregard P1010 */
-    return json([
-        'success' => true,
+    return apiSuccess([
         'hours' => $hours,
         'cpu' => getCPUAverageMetrics($hours),
         'memory' => getMemoryFreeMetrics($hours),
@@ -351,91 +340,60 @@ function fpppluginwatcherMetricsAll() {
 }
 
 // GET /api/plugin/fpp-plugin-watcher/falcon/status
-// Returns status of all configured Falcon controllers (or single if host param provided)
 function fpppluginwatcherFalconStatus() {
     $config = readPluginConfig();
     $hostsString = isset($_GET['host']) ? $_GET['host'] : ($config['falconControllers'] ?? '');
 
     if (empty($hostsString)) {
-        /** @disregard P1010 */
-        return json([
-            'success' => true,
+        return apiSuccess([
             'controllers' => [],
             'message' => 'No Falcon controllers configured'
         ]);
     }
 
-    $result = FalconController::getMultiStatus($hostsString);
-    $result['success'] = true;
-
-    /** @disregard P1010 */
-    return json($result);
+    return apiSuccess(FalconController::getMultiStatus($hostsString));
 }
 
 // POST /api/plugin/fpp-plugin-watcher/falcon/config
-// Save Falcon controller configuration
 function fpppluginwatcherFalconConfigSave() {
     $input = json_decode(file_get_contents('php://input'), true);
 
     if (!isset($input['hosts'])) {
-        /** @disregard P1010 */
-        return json([
-            'success' => false,
-            'error' => 'Missing hosts parameter'
-        ]);
+        return apiError('Missing hosts parameter');
     }
 
     $hosts = trim($input['hosts']);
 
-    // Validate hosts
     if (!empty($hosts)) {
         $hostList = array_map('trim', explode(',', $hosts));
         foreach ($hostList as $host) {
             if (!FalconController::isValidHost($host)) {
-                /** @disregard P1010 */
-                return json([
-                    'success' => false,
-                    'error' => "Invalid host: $host"
-                ]);
+                return apiError("Invalid host: $host");
             }
         }
     }
 
-    // Save to config
     /** @disregard P1010 */
     WriteSettingToFile('falconControllers', $hosts, WATCHERPLUGINNAME);
 
-    /** @disregard P1010 */
-    return json([
-        'success' => true,
+    return apiSuccess([
         'message' => 'Configuration saved',
         'hosts' => $hosts
     ]);
 }
 
 // GET /api/plugin/fpp-plugin-watcher/falcon/config
-// Get Falcon controller configuration
 function fpppluginwatcherFalconConfigGet() {
     $config = readPluginConfig();
-
-    /** @disregard P1010 */
-    return json([
-        'success' => true,
-        'hosts' => $config['falconControllers'] ?? ''
-    ]);
+    return apiSuccess(['hosts' => $config['falconControllers'] ?? '']);
 }
 
 // POST /api/plugin/fpp-plugin-watcher/falcon/test
-// Enable or disable test mode on a Falcon controller
 function fpppluginwatcherFalconTest() {
     $input = json_decode(file_get_contents('php://input'), true);
 
     if (!isset($input['host'])) {
-        /** @disregard P1010 */
-        return json([
-            'success' => false,
-            'error' => 'Missing host parameter'
-        ]);
+        return apiError('Missing host parameter');
     }
 
     $host = trim($input['host']);
@@ -446,11 +404,7 @@ function fpppluginwatcherFalconTest() {
         $controller = new FalconController($host, 80, 5);
 
         if (!$controller->isReachable()) {
-            /** @disregard P1010 */
-            return json([
-                'success' => false,
-                'error' => 'Controller not reachable'
-            ]);
+            return apiError('Controller not reachable');
         }
 
         if ($enable) {
@@ -462,41 +416,26 @@ function fpppluginwatcherFalconTest() {
         }
 
         if ($result) {
-            /** @disregard P1010 */
-            return json([
-                'success' => true,
+            return apiSuccess([
                 'message' => "Test mode $action",
                 'host' => $host,
                 'testEnabled' => $enable,
                 'testMode' => $enable ? $testMode : null
             ]);
         } else {
-            /** @disregard P1010 */
-            return json([
-                'success' => false,
-                'error' => $controller->getLastError() ?: 'Failed to change test mode'
-            ]);
+            return apiError($controller->getLastError() ?: 'Failed to change test mode');
         }
     } catch (Exception $e) {
-        /** @disregard P1010 */
-        return json([
-            'success' => false,
-            'error' => $e->getMessage()
-        ]);
+        return apiError($e->getMessage());
     }
 }
 
 // POST /api/plugin/fpp-plugin-watcher/falcon/reboot
-// Reboot a Falcon controller
 function fpppluginwatcherFalconReboot() {
     $input = json_decode(file_get_contents('php://input'), true);
 
     if (!isset($input['host'])) {
-        /** @disregard P1010 */
-        return json([
-            'success' => false,
-            'error' => 'Missing host parameter'
-        ]);
+        return apiError('Missing host parameter');
     }
 
     $host = trim($input['host']);
@@ -505,57 +444,34 @@ function fpppluginwatcherFalconReboot() {
         $controller = new FalconController($host, 80, 5);
 
         if (!$controller->isReachable()) {
-            /** @disregard P1010 */
-            return json([
-                'success' => false,
-                'error' => 'Controller not reachable'
-            ]);
+            return apiError('Controller not reachable');
         }
 
         $result = $controller->reboot();
 
         if ($result) {
-            /** @disregard P1010 */
-            return json([
-                'success' => true,
+            return apiSuccess([
                 'message' => 'Reboot command sent',
                 'host' => $host
             ]);
         } else {
-            /** @disregard P1010 */
-            return json([
-                'success' => false,
-                'error' => $controller->getLastError() ?: 'Failed to send reboot command'
-            ]);
+            return apiError($controller->getLastError() ?: 'Failed to send reboot command');
         }
     } catch (Exception $e) {
-        /** @disregard P1010 */
-        return json([
-            'success' => false,
-            'error' => $e->getMessage()
-        ]);
+        return apiError($e->getMessage());
     }
 }
 
 // GET /api/plugin/fpp-plugin-watcher/falcon/discover
-// Discover Falcon controllers on a subnet
 function fpppluginwatcherFalconDiscover() {
     $subnet = isset($_GET['subnet']) ? trim($_GET['subnet']) : FalconController::autoDetectSubnet();
 
     if (empty($subnet)) {
-        /** @disregard P1010 */
-        return json([
-            'success' => false,
-            'error' => 'Could not determine subnet. Please provide subnet parameter (e.g., ?subnet=192.168.1)'
-        ]);
+        return apiError('Could not determine subnet. Please provide subnet parameter (e.g., ?subnet=192.168.1)');
     }
 
     if (!FalconController::isValidSubnet($subnet)) {
-        /** @disregard P1010 */
-        return json([
-            'success' => false,
-            'error' => 'Invalid subnet format. Expected format: 192.168.1'
-        ]);
+        return apiError('Invalid subnet format. Expected format: 192.168.1');
     }
 
     $startIp = max(1, min(254, isset($_GET['start']) ? intval($_GET['start']) : 1));
@@ -564,50 +480,37 @@ function fpppluginwatcherFalconDiscover() {
 
     try {
         $discovered = FalconController::discover($subnet, $startIp, $endIp, $timeout);
-        /** @disregard P1010 */
-        return json([
-            'success' => true,
+        return apiSuccess([
             'subnet' => $subnet,
             'range' => ['start' => $startIp, 'end' => $endIp],
             'count' => count($discovered),
             'controllers' => $discovered
         ]);
     } catch (Exception $e) {
-        /** @disregard P1010 */
-        return json([
-            'success' => false,
-            'error' => $e->getMessage()
-        ]);
+        return apiError($e->getMessage());
     }
 }
 
 // GET /api/plugin/fpp-plugin-watcher/remotes
-// Returns filtered, deduplicated list of remote systems (single source of truth)
 function fpppluginWatcherRemotes() {
-    /** @disregard P1010 */
-    return json(getMultiSyncRemoteSystems());
+    return apiSuccess(['remotes' => getMultiSyncRemoteSystems()]);
 }
 
 // GET /api/plugin/fpp-plugin-watcher/remote/bulk/status
-// Bulk fetch status data from all remote hosts in parallel
 function fpppluginWatcherRemoteBulkStatus() {
-    /** @disregard P1010 */
-    return json(getBulkRemoteStatus());
+    return apiSuccess(getBulkRemoteStatus());
 }
 
 // GET /api/plugin/fpp-plugin-watcher/remote/bulk/updates
-// Bulk fetch version and plugin update data from all remote hosts in parallel
 function fpppluginWatcherRemoteBulkUpdates() {
-    /** @disregard P1010 */
-    return json(getBulkRemoteUpdates());
+    return apiSuccess(getBulkRemoteUpdates());
 }
 
 // GET /api/plugin/fpp-plugin-watcher/remote/status?host=x
 function fpppluginWatcherRemoteStatus() {
     $host = getRequiredQueryParam('host');
     if (!$host) return apiError('Missing host parameter');
-    /** @disregard P1010 */
-    return json(getRemoteStatus($host));
+    return apiSuccess(getRemoteStatus($host));
 }
 
 // POST /api/plugin/fpp-plugin-watcher/remote/command
@@ -615,8 +518,7 @@ function fpppluginWatcherRemoteCommand() {
     $input = getJsonBody();
     if (!isset($input['host'])) return apiError('Missing host parameter');
     if (!isset($input['command'])) return apiError('Missing command parameter');
-    /** @disregard P1010 */
-    return json(sendRemoteCommand(
+    return apiSuccess(sendRemoteCommand(
         trim($input['host']),
         $input['command'],
         $input['args'] ?? [],
@@ -629,16 +531,14 @@ function fpppluginWatcherRemoteCommand() {
 function fpppluginWatcherRemoteRestart() {
     $input = getJsonBody();
     if (!isset($input['host'])) return apiError('Missing host parameter');
-    /** @disregard P1010 */
-    return json(restartRemoteFPPD(trim($input['host'])));
+    return apiSuccess(restartRemoteFPPD(trim($input['host'])));
 }
 
 // POST /api/plugin/fpp-plugin-watcher/remote/reboot
 function fpppluginWatcherRemoteReboot() {
     $input = getJsonBody();
     if (!isset($input['host'])) return apiError('Missing host parameter');
-    /** @disregard P1010 */
-    return json(rebootRemoteFPP(trim($input['host'])));
+    return apiSuccess(rebootRemoteFPP(trim($input['host'])));
 }
 
 // POST /api/plugin/fpp-plugin-watcher/remote/upgrade
@@ -646,37 +546,31 @@ function fpppluginWatcherRemoteUpgrade() {
     $input = getJsonBody();
     if (!isset($input['host'])) return apiError('Missing host parameter');
     $plugin = isset($input['plugin']) ? trim($input['plugin']) : null;
-    /** @disregard P1010 */
-    return json(upgradeRemotePlugin(trim($input['host']), $plugin));
+    return apiSuccess(upgradeRemotePlugin(trim($input['host']), $plugin));
 }
 
 // GET /api/plugin/fpp-plugin-watcher/remote/plugins?host=x
 function fpppluginWatcherRemotePlugins() {
     $host = getRequiredQueryParam('host');
     if (!$host) return apiError('Missing host parameter');
-    /** @disregard P1010 */
-    return json(getRemotePlugins($host));
+    return apiSuccess(getRemotePlugins($host));
 }
 
 // GET /api/plugin/fpp-plugin-watcher/remote/plugins/updates?host=x
 function fpppluginWatcherRemotePluginUpdates() {
     $host = getRequiredQueryParam('host');
     if (!$host) return apiError('Missing host parameter');
-    /** @disregard P1010 */
-    return json(checkRemotePluginUpdates($host));
+    return apiSuccess(checkRemotePluginUpdates($host));
 }
 
 // GET /api/plugin/fpp-plugin-watcher/remote/playback/sync
-// Batch fetch playback status from all multisync hosts (parallel with timeouts)
 function fpppluginWatcherRemotePlaybackSync() {
     $remoteSystems = getMultiSyncRemoteSystems();
     if (empty($remoteSystems)) {
-        /** @disregard P1010 */
-        return json(['success' => true, 'local' => null, 'remotes' => []]);
+        return apiSuccess(['local' => null, 'remotes' => []]);
     }
 
-    // Fetch local status
-    $localStatus = apiCall('GET', 'http://127.0.0.1/api/fppd/status', [], true, 2);
+    $localStatus = apiCall('GET', 'http://127.0.0.1/api/fppd/status', [], true, WATCHER_TIMEOUT_STATUS);
     $local = null;
     if ($localStatus !== false) {
         $local = [
@@ -689,37 +583,23 @@ function fpppluginWatcherRemotePlaybackSync() {
         ];
     }
 
-    // Parallel fetch from all remotes using curl_multi
     $mh = curl_multi_init();
     $handles = [];
-    $timeout = 2;
 
     foreach ($remoteSystems as $system) {
-        $ch = curl_init("http://{$system['address']}/api/fppd/status");
-        curl_setopt_array($ch, [
-            CURLOPT_RETURNTRANSFER => true,
-            CURLOPT_TIMEOUT => $timeout,
-            CURLOPT_CONNECTTIMEOUT => $timeout,
-            CURLOPT_HTTPHEADER => ['Accept: application/json']
-        ]);
+        $ch = createCurlHandle("http://{$system['address']}/api/fppd/status", WATCHER_TIMEOUT_STATUS);
         curl_multi_add_handle($mh, $ch);
         $handles[$system['address']] = ['handle' => $ch, 'hostname' => $system['hostname']];
     }
 
-    // Execute all requests in parallel
-    do {
-        $status = curl_multi_exec($mh, $active);
-        if ($active) curl_multi_select($mh);
-    } while ($active && $status === CURLM_OK);
+    executeCurlMulti($mh);
 
-    // Collect results
     $remotes = [];
     foreach ($handles as $address => $info) {
         $ch = $info['handle'];
         $response = curl_multi_getcontent($ch);
         $httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
-        curl_multi_remove_handle($mh, $ch);
-        curl_close($ch);
+        cleanupCurlHandle($mh, $ch);
 
         if ($httpCode === 200 && $response) {
             $data = json_decode($response, true);
@@ -736,7 +616,6 @@ function fpppluginWatcherRemotePlaybackSync() {
                 continue;
             }
         }
-        // Offline/failed
         $remotes[] = [
             'address' => $address,
             'hostname' => $info['hostname'],
@@ -749,51 +628,35 @@ function fpppluginWatcherRemotePlaybackSync() {
     }
     curl_multi_close($mh);
 
-    /** @disregard P1010 */
-    return json(['success' => true, 'local' => $local, 'remotes' => $remotes]);
+    return apiSuccess(['local' => $local, 'remotes' => $remotes]);
 }
 
 // GET /api/plugin/fpp-plugin-watcher/update/check
-// Check GitHub for latest plugin version
 function fpppluginWatcherUpdateCheck() {
-    /** @disregard P1010 */
-    return json(checkWatcherUpdate());
+    return apiSuccess(checkWatcherUpdate());
 }
 
 // GET /api/plugin/fpp-plugin-watcher/fpp/release
-// Check GitHub for latest FPP release and compare against current branch
 function fpppluginWatcherFPPRelease() {
     $currentBranch = isset($_GET['branch']) ? trim($_GET['branch']) : null;
 
-    // If no branch provided, try to get it from local system
     if (empty($currentBranch)) {
-        $systemInfo = apiCall('GET', 'http://127.0.0.1/api/system/info', [], true, 5);
+        $systemInfo = apiCall('GET', 'http://127.0.0.1/api/system/info', [], true, WATCHER_TIMEOUT_STANDARD);
         if ($systemInfo && isset($systemInfo['Branch'])) {
             $currentBranch = $systemInfo['Branch'];
         }
     }
 
     if (empty($currentBranch)) {
-        /** @disregard P1010 */
-        return json([
-            'success' => false,
-            'error' => 'Could not determine current FPP branch'
-        ]);
+        return apiError('Could not determine current FPP branch');
     }
 
-    $result = checkFPPReleaseUpgrade($currentBranch);
-    $result['success'] = true;
-
-    /** @disregard P1010 */
-    return json($result);
+    return apiSuccess(checkFPPReleaseUpgrade($currentBranch));
 }
 
 // GET /api/plugin/fpp-plugin-watcher/plugins/updates
-// Check for updates on locally installed plugins (for localhost card)
 function fpppluginWatcherLocalPluginUpdates() {
-    $result = checkRemotePluginUpdates('127.0.0.1');
-    /** @disregard P1010 */
-    return json($result);
+    return apiSuccess(checkRemotePluginUpdates('127.0.0.1'));
 }
 
 // POST /api/plugin/fpp-plugin-watcher/remote/fpp/upgrade
@@ -827,22 +690,17 @@ function fpppluginWatcherRemoteWatcherUpgrade() {
 }
 
 // GET /api/plugin/fpp-plugin-watcher/connectivity/state
-// Returns the current connectivity check reset state
 function fpppluginWatcherConnectivityState() {
     $state = readResetState();
 
     if ($state === null) {
-        /** @disregard P1010 */
-        return json([
-            'success' => true,
+        return apiSuccess([
             'hasResetAdapter' => false,
             'message' => 'No reset has occurred'
         ]);
     }
 
-    /** @disregard P1010 */
-    return json([
-        'success' => true,
+    return apiSuccess([
         'hasResetAdapter' => true,
         'resetTimestamp' => $state['resetTimestamp'] ?? null,
         'resetTime' => isset($state['resetTimestamp']) ? date('Y-m-d H:i:s', $state['resetTimestamp']) : null,
@@ -852,26 +710,17 @@ function fpppluginWatcherConnectivityState() {
 }
 
 // POST /api/plugin/fpp-plugin-watcher/connectivity/state/clear
-// Clears the reset state and restarts the connectivity daemon
 function fpppluginWatcherConnectivityStateClear() {
     $cleared = clearResetState();
 
     if (!$cleared) {
-        /** @disregard P1010 */
-        return json([
-            'success' => false,
-            'error' => 'Failed to clear reset state'
-        ]);
+        return apiError('Failed to clear reset state');
     }
 
     logMessage("Reset state cleared via API, restarting connectivity daemon");
     restartConnectivityDaemon();
 
-    /** @disregard P1010 */
-    return json([
-        'success' => true,
-        'message' => 'Reset state cleared and connectivity daemon restarted'
-    ]);
+    return apiSuccess(['message' => 'Reset state cleared and connectivity daemon restarted']);
 }
 
 // GET /api/plugin/fpp-plugin-watcher/remote/connectivity/state?host=x
@@ -879,10 +728,9 @@ function fpppluginWatcherRemoteConnectivityState() {
     $host = getRequiredQueryParam('host');
     if (!$host) return apiError('Missing host parameter');
 
-    $result = apiCall('GET', "http://{$host}/api/plugin/fpp-plugin-watcher/connectivity/state", [], true, 5);
+    $result = apiCall('GET', "http://{$host}/api/plugin/fpp-plugin-watcher/connectivity/state", [], true, WATCHER_TIMEOUT_STANDARD);
     if ($result === false) return apiError('Failed to fetch connectivity state from remote host');
-    /** @disregard P1010 */
-    return json($result);
+    return apiSuccess($result);
 }
 
 // POST /api/plugin/fpp-plugin-watcher/remote/connectivity/state/clear
@@ -891,10 +739,9 @@ function fpppluginWatcherRemoteConnectivityStateClear() {
     if (!isset($input['host'])) return apiError('Missing host parameter');
 
     $host = trim($input['host']);
-    $result = apiCall('POST', "http://{$host}/api/plugin/fpp-plugin-watcher/connectivity/state/clear", [], true, 10);
+    $result = apiCall('POST', "http://{$host}/api/plugin/fpp-plugin-watcher/connectivity/state/clear", [], true, WATCHER_TIMEOUT_LONG);
     if ($result === false) return apiError('Failed to clear connectivity state on remote host');
-    /** @disregard P1010 */
-    return json($result);
+    return apiSuccess($result);
 }
 
 // GET /api/plugin/fpp-plugin-watcher/remote/version?host=x
@@ -902,14 +749,11 @@ function fpppluginWatcherRemoteVersion() {
     $host = getRequiredQueryParam('host');
     if (!$host) return apiError('Missing host parameter');
 
-    $result = apiCall('GET', "http://{$host}/api/plugin/fpp-plugin-watcher/version", [], true, 5);
+    $result = apiCall('GET', "http://{$host}/api/plugin/fpp-plugin-watcher/version", [], true, WATCHER_TIMEOUT_STANDARD);
     if ($result === false) {
-        /** @disregard P1010 */
-        return json(['success' => false, 'error' => 'Failed to fetch version from remote host']);
+        return apiError('Failed to fetch version from remote host');
     }
-    $result['success'] = true;
-    /** @disregard P1010 */
-    return json($result);
+    return apiSuccess($result);
 }
 
 // GET /api/plugin/fpp-plugin-watcher/remote/sysStatus?host=x
@@ -917,13 +761,11 @@ function fpppluginWatcherRemoteSysStatus() {
     $host = getRequiredQueryParam('host');
     if (!$host) return apiError('Missing host parameter');
 
-    $result = apiCall('GET', "http://{$host}/api/system/status", [], true, 5);
+    $result = apiCall('GET', "http://{$host}/api/system/status", [], true, WATCHER_TIMEOUT_STANDARD);
     if ($result === false) {
-        /** @disregard P1010 */
-        return json(['success' => false, 'error' => 'Failed to fetch system status from remote host']);
+        return apiError('Failed to fetch system status from remote host');
     }
-    /** @disregard P1010 */
-    return json(['success' => true, 'data' => $result]);
+    return apiSuccess(['data' => $result]);
 }
 
 // GET /api/plugin/fpp-plugin-watcher/remote/sysInfo?host=x
@@ -931,13 +773,11 @@ function fpppluginWatcherRemoteSysInfo() {
     $host = getRequiredQueryParam('host');
     if (!$host) return apiError('Missing host parameter');
 
-    $result = apiCall('GET', "http://{$host}/api/system/info", [], true, 5);
+    $result = apiCall('GET', "http://{$host}/api/system/info", [], true, WATCHER_TIMEOUT_STANDARD);
     if ($result === false) {
-        /** @disregard P1010 */
-        return json(['success' => false, 'error' => 'Failed to fetch system info from remote host']);
+        return apiError('Failed to fetch system info from remote host');
     }
-    /** @disregard P1010 */
-    return json(['success' => true, 'data' => $result]);
+    return apiSuccess(['data' => $result]);
 }
 
 // GET /api/plugin/fpp-plugin-watcher/remote/metrics/all?host=x&hours=Y
@@ -946,13 +786,11 @@ function fpppluginWatcherRemoteMetricsAll() {
     if (!$host) return apiError('Missing host parameter');
 
     $hours = getHoursParam();
-    $result = apiCall('GET', "http://{$host}/api/plugin/fpp-plugin-watcher/metrics/all?hours={$hours}", [], true, 10);
+    $result = apiCall('GET', "http://{$host}/api/plugin/fpp-plugin-watcher/metrics/all?hours={$hours}", [], true, WATCHER_TIMEOUT_LONG);
     if ($result === false) {
-        /** @disregard P1010 */
-        return json(['success' => false, 'error' => 'Failed to fetch metrics from remote host']);
+        return apiError('Failed to fetch metrics from remote host');
     }
-    /** @disregard P1010 */
-    return json($result);
+    return apiSuccess($result);
 }
 
 // GET /api/plugin/fpp-plugin-watcher/remote/fppd/status?host=x
@@ -960,43 +798,34 @@ function fpppluginWatcherRemoteFppdStatus() {
     $host = getRequiredQueryParam('host');
     if (!$host) return apiError('Missing host parameter');
 
-    $result = apiCall('GET', "http://{$host}/api/fppd/status", [], true, 5);
+    $result = apiCall('GET', "http://{$host}/api/fppd/status", [], true, WATCHER_TIMEOUT_STANDARD);
     if ($result === false) {
-        /** @disregard P1010 */
-        return json(['success' => false, 'error' => 'Failed to fetch fppd status from remote host']);
+        return apiError('Failed to fetch fppd status from remote host');
     }
-    /** @disregard P1010 */
-    return json(['success' => true, 'data' => $result]);
+    return apiSuccess(['data' => $result]);
 }
 
 // GET /api/plugin/fpp-plugin-watcher/outputs/discrepancies
-// Compare local universe outputs with remote systems
 function fpppluginWatcherOutputDiscrepancies() {
-    /** @disregard P1010 */
-    return json(getOutputDiscrepancies());
+    return apiSuccess(getOutputDiscrepancies());
 }
 
 // GET /api/plugin/fpp-plugin-watcher/mqtt/events
 function fpppluginWatcherMqttEvents() {
     $hostname = isset($_GET['hostname']) ? trim($_GET['hostname']) : null;
     $eventType = isset($_GET['type']) ? trim($_GET['type']) : null;
-    /** @disregard P1010 */
-    return json(getMqttEvents(getHoursParam(), $hostname ?: null, $eventType ?: null));
+    return apiSuccess(getMqttEvents(getHoursParam(), $hostname ?: null, $eventType ?: null));
 }
 
 // GET /api/plugin/fpp-plugin-watcher/mqtt/stats
 function fpppluginWatcherMqttStats() {
-    /** @disregard P1010 */
-    return json(getMqttEventStats(getHoursParam()));
+    return apiSuccess(getMqttEventStats(getHoursParam()));
 }
 
 // GET /api/plugin/fpp-plugin-watcher/mqtt/hosts
-// Returns list of unique hostnames from MQTT events
 function fpppluginWatcherMqttHosts() {
     $hosts = getMqttHostsList();
-    /** @disregard P1010 */
-    return json([
-        'success' => true,
+    return apiSuccess([
         'count' => count($hosts),
         'hosts' => $hosts
     ]);
@@ -1016,37 +845,20 @@ function fpppluginWatcherPingCheck() {
             continue;
         }
 
-        // Single ping with 1 second timeout
-        $output = [];
-        $returnCode = 0;
-        exec("ping -c 1 -W 1 " . escapeshellarg($ip) . " 2>&1", $output, $returnCode);
+        $pingResult = pingHost($ip, null, 1);
 
         $results[$ip] = [
-            'reachable' => ($returnCode === 0),
-            'latency' => null
+            'reachable' => $pingResult['success'],
+            'latency' => $pingResult['latency']
         ];
-
-        // Extract latency if successful
-        if ($returnCode === 0) {
-            foreach ($output as $line) {
-                if (preg_match('/time=([0-9.]+)\s*ms/', $line, $matches)) {
-                    $results[$ip]['latency'] = floatval($matches[1]);
-                    break;
-                }
-            }
-        }
     }
 
-    /** @disregard P1010 */
-    return json(['success' => true, 'results' => $results]);
+    return apiSuccess(['results' => $results]);
 }
 
 // GET /api/plugin/fpp-plugin-watcher/multisync/comparison
-// Compare player sync state with all remote systems
 function fpppluginWatcherMultiSyncComparison() {
-    $result = getSyncComparison();
-    /** @disregard P1010 */
-    return json($result);
+    return apiSuccess(getSyncComparison());
 }
 
 // GET /api/plugin/fpp-plugin-watcher/multisync/comparison/host?address=x.x.x.x
@@ -1054,49 +866,36 @@ function fpppluginWatcherMultiSyncComparisonHost() {
     $address = getRequiredQueryParam('address');
     if (!$address) return apiError('Missing address parameter');
     if (!filter_var($address, FILTER_VALIDATE_IP)) return apiError('Invalid IP address');
-    /** @disregard P1010 */
-    return json(getSyncComparisonForHost($address));
+    return apiSuccess(getSyncComparisonForHost($address));
 }
 
 // GET /api/plugin/fpp-plugin-watcher/time
-// Returns current Unix timestamp in milliseconds for clock sync measurement
 function fpppluginWatcherTime() {
-    /** @disregard P1010 */
-    return json([
-        'success' => true,
+    return apiSuccess([
         'time_ms' => round(microtime(true) * 1000),
         'time_s' => time()
     ]);
 }
 
 // GET /api/plugin/fpp-plugin-watcher/multisync/clock-drift
-// Measures system clock drift between player and all remote systems
 function fpppluginWatcherMultiSyncClockDrift() {
-    /** @disregard P1010 */
-    return json(measureClockDrift());
+    return apiSuccess(measureClockDrift());
 }
 
 // GET /api/plugin/fpp-plugin-watcher/multisync/full-status
-// Returns combined watcher plugin metrics AND FPP status in single call
-// Reduces remote polling overhead by combining two API calls into one
 function fpppluginWatcherMultiSyncFullStatus() {
-    /** @disregard P1010 */
-    return json(getFullSyncStatus());
+    return apiSuccess(getFullSyncStatus());
 }
 
 // GET /api/plugin/fpp-plugin-watcher/metrics/network-quality/current
-// Returns current network quality status for all remotes
 function fpppluginWatcherNetworkQualityCurrent() {
-    $result = getNetworkQualityStatus();
-    /** @disregard P1010 */
-    return json($result);
+    return apiSuccess(getNetworkQualityStatus());
 }
 
 // GET /api/plugin/fpp-plugin-watcher/metrics/network-quality/history?hours=X&hostname=Y
 function fpppluginWatcherNetworkQualityHistory() {
     $hostname = isset($_GET['hostname']) ? trim($_GET['hostname']) : null;
-    /** @disregard P1010 */
-    return json(getNetworkQualityHistory(getHoursParam(6), $hostname ?: null));
+    return apiSuccess(getNetworkQualityHistory(getHoursParam(6), $hostname ?: null));
 }
 
 // GET /api/plugin/fpp-plugin-watcher/metrics/network-quality/host?address=X
@@ -1105,23 +904,19 @@ function fpppluginWatcherNetworkQualityHost() {
     if (!$address) return apiError('Missing address parameter');
 
     $allStatus = getNetworkQualityStatus();
-    if (!$allStatus['success']) {
-        /** @disregard P1010 */
-        return json($allStatus);
+    if (isset($allStatus['success']) && !$allStatus['success']) {
+        return apiSuccess($allStatus);
     }
 
-    // Find the host by address
     $hostData = null;
-    foreach ($allStatus['hosts'] as $host) {
+    foreach (($allStatus['hosts'] ?? []) as $host) {
         if (($host['address'] ?? '') === $address) {
             $hostData = $host;
             break;
         }
     }
 
-    /** @disregard P1010 */
-    return json([
-        'success' => true,
+    return apiSuccess([
         'host' => $hostData,
         'message' => $hostData === null ? 'No data found for this host' : null,
         'timestamp' => time()
@@ -1129,121 +924,76 @@ function fpppluginWatcherNetworkQualityHost() {
 }
 
 // POST /api/plugin/fpp-plugin-watcher/metrics/network-quality/collect
-// Manually trigger network quality collection
 function fpppluginWatcherNetworkQualityCollect() {
-    $result = collectNetworkQualityMetrics();
-    /** @disregard P1010 */
-    return json($result);
+    return apiSuccess(collectNetworkQualityMetrics());
 }
 
 // GET /api/plugin/fpp-plugin-watcher/data/stats
-// Get statistics about stored data files
 function fpppluginWatcherDataStats() {
-    $stats = getDataDirectoryStats();
-    /** @disregard P1010 */
-    return json([
-        'success' => true,
-        'categories' => $stats
-    ]);
+    return apiSuccess(['categories' => getDataDirectoryStats()]);
 }
 
 // GET /api/plugin/fpp-plugin-watcher/data/:category/:filename/tail
-// Get the last N lines of a file
 function fpppluginWatcherDataTail() {
     $category = params('category');
     $filename = params('filename');
     $lines = isset($_GET['lines']) ? max(1, min(1000, intval($_GET['lines']))) : 100;
 
     if (empty($category) || empty($filename)) {
-        /** @disregard P1010 */
-        return json(['success' => false, 'error' => 'Category and filename required']);
+        return apiError('Category and filename required');
     }
 
-    $result = tailDataFile($category, $filename, $lines);
-    /** @disregard P1010 */
-    return json($result);
+    return apiSuccess(tailDataFile($category, $filename, $lines));
 }
 
 // DELETE /api/plugin/fpp-plugin-watcher/data/:category
-// Clear all data files in a specific category
-// URL: /api/plugin/fpp-plugin-watcher/data/{category}
 function fpppluginWatcherDataClear() {
-    // Use limonade's params() function to get route parameters
     $category = params('category');
 
     if (empty($category)) {
-        /** @disregard P1010 */
-        return json([
-            'success' => false,
-            'error' => 'Category parameter is required'
-        ]);
+        return apiError('Category parameter is required');
     }
 
-    $result = clearDataCategory($category);
-    /** @disregard P1010 */
-    return json($result);
+    return apiSuccess(clearDataCategory($category));
 }
 
 // DELETE /api/plugin/fpp-plugin-watcher/data/:category/:filename
-// Delete a specific file within a category
-// URL: /api/plugin/fpp-plugin-watcher/data/{category}/{filename}
 function fpppluginWatcherDataClearFile() {
-    // Use limonade's params() function to get route parameters
     $category = params('category');
     $filename = params('filename');
 
     if (empty($category) || empty($filename)) {
-        /** @disregard P1010 */
-        return json([
-            'success' => false,
-            'error' => 'Category and filename parameters are required'
-        ]);
+        return apiError('Category and filename parameters are required');
     }
 
-    $result = clearDataFile($category, $filename);
-    /** @disregard P1010 */
-    return json($result);
+    return apiSuccess(clearDataFile($category, $filename));
 }
 
 // GET /api/plugin/fpp-plugin-watcher/config/collectd
-// Read the collectd configuration file
 function fpppluginWatcherCollectdConfigGet() {
     $configPath = WATCHERPLUGINDIR . '/config/collectd.conf';
 
     if (!file_exists($configPath)) {
-        /** @disregard P1010 */
-        return json([
-            'success' => false,
-            'error' => 'Configuration file not found'
-        ]);
+        return apiError('Configuration file not found', 404);
     }
 
     $content = file_get_contents($configPath);
     if ($content === false) {
-        /** @disregard P1010 */
-        return json([
-            'success' => false,
-            'error' => 'Failed to read configuration file'
-        ]);
+        return apiError('Failed to read configuration file', 500);
     }
 
-    /** @disregard P1010 */
-    return json([
-        'success' => true,
+    return apiSuccess([
         'content' => $content,
         'path' => $configPath
     ]);
 }
 
 // GET /api/plugin/fpp-plugin-watcher/config/watcher
-// Read the watcher plugin configuration file
 function fpppluginWatcherConfigGet() {
     $configPath = WATCHERCONFIGFILELOCATION;
 
     if (!file_exists($configPath)) {
-        /** @disregard P1010 */
-        return json([
-            'success' => true,
+        return apiSuccess([
             'content' => '',
             'path' => $configPath,
             'message' => 'Configuration file does not exist yet'
@@ -1252,56 +1002,35 @@ function fpppluginWatcherConfigGet() {
 
     $content = file_get_contents($configPath);
     if ($content === false) {
-        /** @disregard P1010 */
-        return json([
-            'success' => false,
-            'error' => 'Failed to read configuration file'
-        ]);
+        return apiError('Failed to read configuration file', 500);
     }
 
-    /** @disregard P1010 */
-    return json([
-        'success' => true,
+    return apiSuccess([
         'content' => $content,
         'path' => $configPath
     ]);
 }
 
 // POST /api/plugin/fpp-plugin-watcher/config/watcher
-// Save the watcher plugin configuration file
 function fpppluginWatcherConfigSave() {
     $input = getJsonBody();
 
     if (!isset($input['content'])) {
-        /** @disregard P1010 */
-        return json([
-            'success' => false,
-            'error' => 'Missing content parameter'
-        ]);
+        return apiError('Missing content parameter');
     }
 
     $configPath = WATCHERCONFIGFILELOCATION;
     $content = $input['content'];
 
-    // Write the file
     $result = file_put_contents($configPath, $content);
     if ($result === false) {
-        /** @disregard P1010 */
-        return json([
-            'success' => false,
-            'error' => 'Failed to write configuration file'
-        ]);
+        return apiError('Failed to write configuration file', 500);
     }
 
-    // Ensure proper ownership
     ensureFppOwnership($configPath);
-
-    // Log the change
     logMessage("Watcher configuration updated via API");
 
-    /** @disregard P1010 */
-    return json([
-        'success' => true,
+    return apiSuccess([
         'message' => 'Configuration saved successfully. Some changes may require FPP restart.',
         'bytesWritten' => $result
     ]);

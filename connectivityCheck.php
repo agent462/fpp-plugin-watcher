@@ -62,35 +62,21 @@ function checkConnectivity($testHosts, $networkAdapter) {
     $metricsBuffer = []; // Collect metrics for batch write
 
     foreach ($testHosts as $host) {
-        $output = [];
-        $returnVar = 0;
-        exec("ping -I " . escapeshellarg($networkAdapter) . " -c 1 -W 1 " . escapeshellarg($host) . " 2>&1", $output, $returnVar);
-        if ($returnVar === 0) {
-            // Successfully pinged, extract statistics
+        $pingResult = pingHost($host, $networkAdapter, 1);
+
+        if ($pingResult['success']) {
             $lastPingStats['host'] = $host;
-            $latency = null;
+            $lastPingStats['latency'] = $pingResult['latency'];
 
-            // Extract time from output (typically "time=XX.XX ms")
-            foreach ($output as $line) {
-                // Look for latency in format: time=X.XXX ms
-                if (preg_match('/time=([0-9.]+)\s*ms/', $line, $matches)) {
-                    $latency = floatval($matches[1]);
-                    $lastPingStats['latency'] = $latency;
-                    break;
-                }
-            }
-
-            // Buffer metrics for batch write
             $metricsBuffer[] = [
                 'timestamp' => $checkTimestamp,
                 'host' => $host,
-                'latency' => $latency,
+                'latency' => $pingResult['latency'],
                 'status' => 'success'
             ];
 
             $anySuccess = true;
         } else {
-            // Buffer failed ping attempt
             $metricsBuffer[] = [
                 'timestamp' => $checkTimestamp,
                 'host' => $host,

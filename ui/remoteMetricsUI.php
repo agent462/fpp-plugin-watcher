@@ -94,29 +94,14 @@ let systemMetrics = {};
 let useFahrenheit = false;
 
 const getSelectedHours = () => document.getElementById('timeRange').value;
-const toFahrenheit = c => c * 9/5 + 32;
-const getTempUnit = () => useFahrenheit ? '°F' : '°C';
 const convertTemp = c => useFahrenheit ? toFahrenheit(c) : c;
-
-async function loadTemperaturePreference() {
-    const cached = localStorage.getItem('temperatureInF');
-    if (cached !== null) {
-        useFahrenheit = cached === 'true';
-    } else {
-        try {
-            const { value } = await fetchJson('/api/settings/temperatureInF');
-            useFahrenheit = value === '1' || value === 1;
-            localStorage.setItem('temperatureInF', useFahrenheit);
-        } catch { useFahrenheit = false; }
-    }
-}
 
 const metricConfig = {
     cpu: { getValue: m => m.cpu?.current, getClass: v => v > 80 ? 'danger' : v > 60 ? 'warning' : '', format: v => v.toFixed(1) + '%', chartKey: 'cpu_usage' },
     memory: { getValue: m => m.memory?.current, getClass: v => v < 100 ? 'danger' : v < 250 ? 'warning' : '', format: v => v.toFixed(0) + ' MB', chartKey: 'free_mb' },
     disk: { getValue: m => m.disk?.current, getClass: v => v < 1 ? 'danger' : v < 2 ? 'warning' : '', format: v => v.toFixed(1) + ' GB', chartKey: 'free_gb' },
     load: { getValue: m => m.load?.shortterm, getClass: () => '', format: v => v.toFixed(2), chartKey: null },
-    temp: { getValue: m => m.temperature?.current, getClass: v => v > 80 ? 'danger' : v > 70 ? 'warning' : '', format: v => convertTemp(v).toFixed(1) + getTempUnit(), chartKey: 'temperature' },
+    temp: { getValue: m => m.temperature?.current, getClass: v => v > 80 ? 'danger' : v > 70 ? 'warning' : '', format: v => convertTemp(v).toFixed(1) + getTempUnit(useFahrenheit), chartKey: 'temperature' },
     wireless: { getValue: m => m.wireless?.signal, getClass: v => v < -80 ? 'danger' : v < -70 ? 'warning' : '', format: v => v.toFixed(0) + ' dBm', chartKey: 'signal_dbm' },
     ping: { getValue: m => m.ping?.current, getClass: v => v > 100 ? 'danger' : v > 50 ? 'warning' : '', format: v => v.toFixed(1) + ' ms', chartKey: 'avg_latency' }
 };
@@ -267,7 +252,7 @@ function renderMiniChart(canvasId, data, label, colorKey, valueKey) {
     const isTemp = valueKey === 'temperature';
     const chartData = data.map(e => ({ x: e.timestamp * 1000, y: isTemp ? convertTemp(e[valueKey]) : e[valueKey] })).filter(d => d.y !== null);
     const color = CHART_COLORS[colorKey] || CHART_COLORS.purple;
-    const formatters = { cpu_usage: v => v.toFixed(1)+'%', free_mb: v => v.toFixed(0)+' MB', temperature: v => v.toFixed(1)+getTempUnit(), signal_dbm: v => v.toFixed(0)+' dBm', avg_latency: v => v.toFixed(1)+' ms' };
+    const formatters = { cpu_usage: v => v.toFixed(1)+'%', free_mb: v => v.toFixed(0)+' MB', temperature: v => v.toFixed(1)+getTempUnit(useFahrenheit), signal_dbm: v => v.toFixed(0)+' dBm', avg_latency: v => v.toFixed(1)+' ms' };
     const formatValue = formatters[valueKey] || (v => v.toFixed(2));
 
     if (charts[canvasId]) {
@@ -328,7 +313,7 @@ async function refreshAllSystems() {
     const btn = document.querySelector('.refreshButton i');
     if (btn) btn.style.animation = 'spin 1s linear infinite';
 
-    await loadTemperaturePreference();
+    useFahrenheit = await loadTemperaturePreference();
 
     const container = document.getElementById('systemsContainer');
     const systems = window.remoteSystems || [];
@@ -364,7 +349,7 @@ async function refreshAllSystems() {
                     [['cpu', 'red', 'cpu_usage'], ['memory', 'purple', 'free_mb'], ['temp', 'orange', 'temperature'], ['wireless', 'teal', 'signal_dbm'], ['ping', 'indigo', 'avg_latency']]
                         .forEach(([key, color, field]) => {
                             const data = key === 'cpu' ? metrics.cpu?.data : key === 'memory' ? metrics.memory?.data : key === 'temp' ? metrics.temperature?.data : key === 'wireless' ? metrics.wireless?.data : metrics.ping?.data;
-                            const label = key === 'cpu' ? 'CPU %' : key === 'memory' ? 'Memory MB' : key === 'temp' ? 'Temp ' + getTempUnit() : key === 'wireless' ? 'Signal dBm' : 'Latency ms';
+                            const label = key === 'cpu' ? 'CPU %' : key === 'memory' ? 'Memory MB' : key === 'temp' ? 'Temp ' + getTempUnit(useFahrenheit) : key === 'wireless' ? 'Signal dBm' : 'Latency ms';
                             if (data) renderMiniChart(`${key === 'temp' ? 'temp' : key}Chart-${index}`, data, label, color, field);
                         });
                 }

@@ -8,33 +8,13 @@
 include_once __DIR__ . '/../core/watcherCommon.php';
 
 /**
- * Get status from a remote FPP instance
+ * Extract common status fields from fppd status response
  *
- * @param string $host The remote host
- * @return array Result with success status and data
+ * @param array $fppStatus Raw fppd status response
+ * @return array Normalized status fields
  */
-function getRemoteStatus($host) {
-    if (!validateHost($host)) {
-        return [
-            'success' => false,
-            'error' => 'Invalid host format'
-        ];
-    }
-
-    // Fetch fppd status (includes platform, branch, mode_name, status_name, restartFlag, rebootFlag)
-    $statusUrl = "http://{$host}/api/fppd/status";
-    $fppStatus = apiCall('GET', $statusUrl, [], true, 5);
-
-    if ($fppStatus === false) {
-        return [
-            'success' => false,
-            'error' => 'Failed to connect to remote host',
-            'host' => $host
-        ];
-    }
-
-    // Extract status fields
-    $status = [
+function extractRemoteStatusFields($fppStatus) {
+    return [
         'platform' => $fppStatus['platform'] ?? '--',
         'branch' => $fppStatus['branch'] ?? '--',
         'mode_name' => $fppStatus['mode_name'] ?? '--',
@@ -42,6 +22,99 @@ function getRemoteStatus($host) {
         'rebootFlag' => $fppStatus['rebootFlag'] ?? 0,
         'restartFlag' => $fppStatus['restartFlag'] ?? 0
     ];
+}
+
+/**
+ * Check if a plugin has an available update
+ *
+ * @param array $pluginInfo Plugin info from FPP API
+ * @param string $repoName Repository name of the plugin
+ * @param string|null $latestWatcherVersion Latest Watcher version from GitHub (for Watcher comparison)
+ * @return array|null Update info array if update available, null otherwise
+ */
+function checkPluginForUpdate($pluginInfo, $repoName, $latestWatcherVersion = null) {
+    $hasUpdate = false;
+    $installedVersion = $pluginInfo['version'] ?? 'unknown';
+    $pluginName = $pluginInfo['name'] ?? $repoName;
+
+    if (!empty($pluginInfo['updatesAvailable'])) {
+        $hasUpdate = true;
+    }
+
+    if ($repoName === WATCHERPLUGINNAME && $latestWatcherVersion && $installedVersion !== 'unknown') {
+        if (version_compare($latestWatcherVersion, $installedVersion, '>')) {
+            $hasUpdate = true;
+        }
+    }
+
+    if (!$hasUpdate) {
+        return null;
+    }
+
+    $updateInfo = [
+        'repoName' => $repoName,
+        'name' => $pluginName,
+        'installedVersion' => $installedVersion,
+        'updatesAvailable' => true
+    ];
+
+    if ($repoName === WATCHERPLUGINNAME && $latestWatcherVersion) {
+        $updateInfo['latestVersion'] = $latestWatcherVersion;
+    }
+
+    return $updateInfo;
+}
+
+/**
+ * Call a remote FPP API endpoint with host validation
+ *
+ * @param string $host The remote host (IP or hostname)
+ * @param string $method HTTP method (GET, POST, PUT, DELETE)
+ * @param string $endpoint API endpoint path (e.g., '/api/fppd/status')
+ * @param mixed $data Request data (array or JSON string)
+ * @param int $timeout Request timeout in seconds
+ * @return array Result with 'success', 'data' or 'error', and 'host'
+ */
+function callRemoteApi($host, $method, $endpoint, $data = [], $timeout = WATCHER_TIMEOUT_LONG) {
+    if (!validateHost($host)) {
+        return [
+            'success' => false,
+            'error' => 'Invalid host format',
+            'host' => $host
+        ];
+    }
+
+    $url = "http://{$host}{$endpoint}";
+    $result = apiCall($method, $url, $data, true, $timeout);
+
+    if ($result === false) {
+        return [
+            'success' => false,
+            'error' => 'Failed to connect to remote host',
+            'host' => $host
+        ];
+    }
+
+    return [
+        'success' => true,
+        'data' => $result,
+        'host' => $host
+    ];
+}
+
+/**
+ * Get status from a remote FPP instance
+ *
+ * @param string $host The remote host
+ * @return array Result with success status and data
+ */
+function getRemoteStatus($host) {
+    $result = callRemoteApi($host, 'GET', '/api/fppd/status', [], 5);
+    if (!$result['success']) {
+        return $result;
+    }
+    $fppStatus = $result['data'];
+    $status = extractRemoteStatusFields($fppStatus);
 
     // Derive test mode from status_name
     $testMode = ['enabled' => ($fppStatus['status_name'] ?? '') === 'testing' ? 1 : 0];
@@ -65,14 +138,6 @@ function getRemoteStatus($host) {
  * @return array Result with success status
  */
 function sendRemoteCommand($host, $command, $args = [], $multisyncCommand = false, $multisyncHosts = '') {
-    if (!validateHost($host)) {
-        return [
-            'success' => false,
-            'error' => 'Invalid host format'
-        ];
-    }
-
-    // Build command payload as JSON string
     $commandData = json_encode([
         'command' => $command,
         'multisyncCommand' => $multisyncCommand,
@@ -80,21 +145,16 @@ function sendRemoteCommand($host, $command, $args = [], $multisyncCommand = fals
         'args' => $args
     ]);
 
-    $commandUrl = "http://{$host}/api/command";
-    $result = apiCall('POST', $commandUrl, $commandData, true, 10);
-
-    if ($result === false) {
-        return [
-            'success' => false,
-            'error' => 'Failed to send command to remote host',
-            'host' => $host
-        ];
+    $result = callRemoteApi($host, 'POST', '/api/command', $commandData, 10);
+    if (!$result['success']) {
+        $result['error'] = 'Failed to send command to remote host';
+        return $result;
     }
 
     return [
         'success' => true,
         'host' => $host,
-        'result' => $result
+        'result' => $result['data']
     ];
 }
 
@@ -107,15 +167,10 @@ function sendRemoteCommand($host, $command, $args = [], $multisyncCommand = fals
  * @return array Result with success status
  */
 function sendSimpleRemoteAction($host, $endpoint, $message) {
-    if (!validateHost($host)) {
-        return [
-            'success' => false,
-            'error' => 'Invalid host format'
-        ];
+    $result = callRemoteApi($host, 'GET', $endpoint, [], 10);
+    if (!$result['success']) {
+        return $result;
     }
-
-    $url = "http://{$host}{$endpoint}";
-    apiCall('GET', $url, [], true, 10);
 
     return [
         'success' => true,
@@ -156,13 +211,6 @@ function upgradeRemotePlugin($host, $plugin = null) {
         $plugin = WATCHERPLUGINNAME;
     }
 
-    if (!validateHost($host)) {
-        return [
-            'success' => false,
-            'error' => 'Invalid host format'
-        ];
-    }
-
     // Validate plugin name format (alphanumeric, dash, underscore)
     if (!preg_match('/^[a-zA-Z0-9\-_]+$/', $plugin)) {
         return [
@@ -171,16 +219,11 @@ function upgradeRemotePlugin($host, $plugin = null) {
         ];
     }
 
-    $upgradeUrl = "http://{$host}/api/plugin/{$plugin}/upgrade";
-    $result = apiCall('POST', $upgradeUrl, [], true, 120);
-
-    if ($result === false) {
-        return [
-            'success' => false,
-            'error' => 'Failed to trigger plugin upgrade on remote host',
-            'host' => $host,
-            'plugin' => $plugin
-        ];
+    $result = callRemoteApi($host, 'POST', "/api/plugin/{$plugin}/upgrade", [], 120);
+    if (!$result['success']) {
+        $result['error'] = 'Failed to trigger plugin upgrade on remote host';
+        $result['plugin'] = $plugin;
+        return $result;
     }
 
     return [
@@ -188,7 +231,7 @@ function upgradeRemotePlugin($host, $plugin = null) {
         'host' => $host,
         'plugin' => $plugin,
         'message' => 'Plugin upgrade initiated on remote host',
-        'result' => $result
+        'result' => $result['data']
     ];
 }
 
@@ -199,28 +242,16 @@ function upgradeRemotePlugin($host, $plugin = null) {
  * @return array Result with success status and plugins list
  */
 function getRemotePlugins($host) {
-    if (!validateHost($host)) {
-        return [
-            'success' => false,
-            'error' => 'Invalid host format'
-        ];
-    }
-
-    $pluginsUrl = "http://{$host}/api/plugin";
-    $plugins = apiCall('GET', $pluginsUrl, [], true, 10);
-
-    if ($plugins === false) {
-        return [
-            'success' => false,
-            'error' => 'Failed to fetch plugins from remote host',
-            'host' => $host
-        ];
+    $result = callRemoteApi($host, 'GET', '/api/plugin', [], 10);
+    if (!$result['success']) {
+        $result['error'] = 'Failed to fetch plugins from remote host';
+        return $result;
     }
 
     return [
         'success' => true,
         'host' => $host,
-        'plugins' => $plugins
+        'plugins' => $result['data']
     ];
 }
 
@@ -258,37 +289,12 @@ function checkRemotePluginUpdates($host) {
 
         // Get full plugin info from /api/plugin/:repoName
         $pluginInfoUrl = "http://{$host}/api/plugin/{$repoName}";
-        $pluginInfo = apiCall('GET', $pluginInfoUrl, [], true, 5);
+        $pluginInfo = apiCall('GET', $pluginInfoUrl, [], true, WATCHER_TIMEOUT_STANDARD);
 
         if (!$pluginInfo || !is_array($pluginInfo)) continue;
 
-        $hasUpdate = false;
-        $installedVersion = $pluginInfo['version'] ?? 'unknown';
-        $pluginName = $pluginInfo['name'] ?? $repoName;
-
-        // Check FPP's built-in update flag
-        if (isset($pluginInfo['updatesAvailable']) && $pluginInfo['updatesAvailable']) {
-            $hasUpdate = true;
-        }
-
-        // For Watcher plugin, also compare against GitHub version
-        if ($repoName === WATCHERPLUGINNAME && $latestWatcherVersion && $installedVersion !== 'unknown') {
-            if (version_compare($latestWatcherVersion, $installedVersion, '>')) {
-                $hasUpdate = true;
-            }
-        }
-
-        if ($hasUpdate) {
-            $updateInfo = [
-                'repoName' => $repoName,
-                'name' => $pluginName,
-                'installedVersion' => $installedVersion,
-                'updatesAvailable' => true
-            ];
-            // Include latest version for Watcher plugin
-            if ($repoName === WATCHERPLUGINNAME && $latestWatcherVersion) {
-                $updateInfo['latestVersion'] = $latestWatcherVersion;
-            }
+        $updateInfo = checkPluginForUpdate($pluginInfo, $repoName, $latestWatcherVersion);
+        if ($updateInfo) {
             $updatesAvailable[] = $updateInfo;
         }
     }
@@ -516,7 +522,7 @@ function getOutputDiscrepancies() {
     // Check 1: Output configuration issues
     // =========================================================================
     if ($checkOutputs) {
-        $outputsData = apiCall('GET', 'http://127.0.0.1/api/channel/output/universeOutputs', [], true, 5);
+        $outputsData = apiCall('GET', 'http://127.0.0.1/api/channel/output/universeOutputs', [], true, WATCHER_TIMEOUT_STANDARD);
 
         if ($outputsData && isset($outputsData['channelOutputs'])) {
             // Build map of active outputs per remote IP
@@ -569,7 +575,7 @@ function getOutputDiscrepancies() {
     // Check 2: Missing sequences on remote systems
     // =========================================================================
     if ($checkSequences) {
-        $localSequences = apiCall('GET', 'http://127.0.0.1/api/sequence', [], true, 5);
+        $localSequences = apiCall('GET', 'http://127.0.0.1/api/sequence', [], true, WATCHER_TIMEOUT_STANDARD);
 
         if ($localSequences && is_array($localSequences) && count($localSequences) > 0 && count($remoteSystems) > 0) {
             // Build set of local sequence filenames
@@ -584,33 +590,22 @@ function getOutputDiscrepancies() {
             // Fetch sequences from remotes in parallel using curl_multi
             $mh = curl_multi_init();
             $handles = [];
-            $timeout = 3;
 
             foreach ($remoteSystems as $system) {
-                $ch = curl_init("http://{$system['address']}/api/sequence");
-                curl_setopt_array($ch, [
-                    CURLOPT_RETURNTRANSFER => true,
-                    CURLOPT_TIMEOUT => $timeout,
-                    CURLOPT_CONNECTTIMEOUT => $timeout,
-                    CURLOPT_HTTPHEADER => ['Accept: application/json']
-                ]);
+                $ch = createCurlHandle("http://{$system['address']}/api/sequence", WATCHER_TIMEOUT_STATUS);
                 curl_multi_add_handle($mh, $ch);
                 $handles[$system['address']] = ['handle' => $ch, 'hostname' => $system['hostname']];
             }
 
             // Execute all requests in parallel
-            do {
-                $status = curl_multi_exec($mh, $active);
-                if ($active) curl_multi_select($mh);
-            } while ($active && $status === CURLM_OK);
+            executeCurlMulti($mh);
 
             // Collect results and check for missing sequences
             foreach ($handles as $address => $info) {
                 $ch = $info['handle'];
                 $response = curl_multi_getcontent($ch);
                 $httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
-                curl_multi_remove_handle($mh, $ch);
-                curl_close($ch);
+                cleanupCurlHandle($mh, $ch);
 
                 if ($httpCode !== 200 || !$response) {
                     continue; // Skip offline/unreachable remotes
@@ -680,7 +675,6 @@ function getBulkRemoteStatus() {
         return ['success' => true, 'hosts' => []];
     }
 
-    $timeout = 5;
     $mh = curl_multi_init();
     $handles = [];
 
@@ -696,13 +690,7 @@ function getBulkRemoteStatus() {
         ];
 
         foreach ($endpoints as $key => $url) {
-            $ch = curl_init($url);
-            curl_setopt_array($ch, [
-                CURLOPT_RETURNTRANSFER => true,
-                CURLOPT_TIMEOUT => $timeout,
-                CURLOPT_CONNECTTIMEOUT => $timeout,
-                CURLOPT_HTTPHEADER => ['Accept: application/json']
-            ]);
+            $ch = createCurlHandle($url, WATCHER_TIMEOUT_STANDARD);
             curl_multi_add_handle($mh, $ch);
             $handles[] = [
                 'handle' => $ch,
@@ -714,10 +702,7 @@ function getBulkRemoteStatus() {
     }
 
     // Execute all requests in parallel
-    do {
-        $status = curl_multi_exec($mh, $active);
-        if ($active) curl_multi_select($mh);
-    } while ($active && $status === CURLM_OK);
+    executeCurlMulti($mh);
 
     // Collect results grouped by host
     $hostData = [];
@@ -728,8 +713,7 @@ function getBulkRemoteStatus() {
 
         $response = curl_multi_getcontent($ch);
         $httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
-        curl_multi_remove_handle($mh, $ch);
-        curl_close($ch);
+        cleanupCurlHandle($mh, $ch);
 
         // Initialize host entry if needed
         if (!isset($hostData[$address])) {
@@ -749,14 +733,7 @@ function getBulkRemoteStatus() {
             if ($data) {
                 switch ($endpoint) {
                     case 'fppd':
-                        $hostData[$address]['status'] = [
-                            'platform' => $data['platform'] ?? '--',
-                            'branch' => $data['branch'] ?? '--',
-                            'mode_name' => $data['mode_name'] ?? '--',
-                            'status_name' => $data['status_name'] ?? 'idle',
-                            'rebootFlag' => $data['rebootFlag'] ?? 0,
-                            'restartFlag' => $data['restartFlag'] ?? 0
-                        ];
+                        $hostData[$address]['status'] = extractRemoteStatusFields($data);
                         $hostData[$address]['testMode'] = [
                             'enabled' => ($data['status_name'] ?? '') === 'testing' ? 1 : 0
                         ];
@@ -800,7 +777,6 @@ function getBulkRemoteUpdates() {
     // Get latest Watcher version from GitHub once for all comparisons
     $latestWatcherVersion = getLatestWatcherVersion();
 
-    $timeout = 5;
     $mh = curl_multi_init();
     $handles = [];
 
@@ -815,13 +791,7 @@ function getBulkRemoteUpdates() {
         ];
 
         foreach ($endpoints as $key => $url) {
-            $ch = curl_init($url);
-            curl_setopt_array($ch, [
-                CURLOPT_RETURNTRANSFER => true,
-                CURLOPT_TIMEOUT => $timeout,
-                CURLOPT_CONNECTTIMEOUT => $timeout,
-                CURLOPT_HTTPHEADER => ['Accept: application/json']
-            ]);
+            $ch = createCurlHandle($url, WATCHER_TIMEOUT_STANDARD);
             curl_multi_add_handle($mh, $ch);
             $handles[] = [
                 'handle' => $ch,
@@ -833,10 +803,7 @@ function getBulkRemoteUpdates() {
     }
 
     // Execute all requests in parallel
-    do {
-        $status = curl_multi_exec($mh, $active);
-        if ($active) curl_multi_select($mh);
-    } while ($active && $status === CURLM_OK);
+    executeCurlMulti($mh);
 
     // Collect results grouped by host
     $hostData = [];
@@ -849,8 +816,7 @@ function getBulkRemoteUpdates() {
 
         $response = curl_multi_getcontent($ch);
         $httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
-        curl_multi_remove_handle($mh, $ch);
-        curl_close($ch);
+        cleanupCurlHandle($mh, $ch);
 
         // Initialize host entry if needed
         if (!isset($hostData[$address])) {
@@ -932,32 +898,8 @@ function getBulkRemoteUpdates() {
             if ($httpCode === 200 && $response) {
                 $pluginInfo = json_decode($response, true);
                 if ($pluginInfo && is_array($pluginInfo)) {
-                    $hasUpdate = false;
-                    $installedVersion = $pluginInfo['version'] ?? 'unknown';
-                    $pluginName = $pluginInfo['name'] ?? $repoName;
-
-                    // Check FPP's built-in update flag
-                    if (!empty($pluginInfo['updatesAvailable'])) {
-                        $hasUpdate = true;
-                    }
-
-                    // For Watcher plugin, also compare against GitHub version
-                    if ($repoName === WATCHERPLUGINNAME && $latestWatcherVersion && $installedVersion !== 'unknown') {
-                        if (version_compare($latestWatcherVersion, $installedVersion, '>')) {
-                            $hasUpdate = true;
-                        }
-                    }
-
-                    if ($hasUpdate) {
-                        $updateInfo = [
-                            'repoName' => $repoName,
-                            'name' => $pluginName,
-                            'installedVersion' => $installedVersion,
-                            'updatesAvailable' => true
-                        ];
-                        if ($repoName === WATCHERPLUGINNAME && $latestWatcherVersion) {
-                            $updateInfo['latestVersion'] = $latestWatcherVersion;
-                        }
+                    $updateInfo = checkPluginForUpdate($pluginInfo, $repoName, $latestWatcherVersion);
+                    if ($updateInfo) {
                         $hostData[$address]['updates'][] = $updateInfo;
                     }
                 }

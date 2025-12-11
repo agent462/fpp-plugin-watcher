@@ -27,7 +27,7 @@ define('TIME_OFFSET_CRITICAL', 1.0);       // seconds
  * @param int $timeout Request timeout in seconds
  * @return array|null Metrics data or null on failure
  */
-function fetchRemoteSyncMetrics($address, $timeout = 3) {
+function fetchRemoteSyncMetrics($address, $timeout = WATCHER_TIMEOUT_STANDARD) {
     $url = "http://{$address}/api/plugin-apis/fpp-plugin-watcher/multisync/status";
     return fetchJsonUrl($url, $timeout);
 }
@@ -39,7 +39,7 @@ function fetchRemoteSyncMetrics($address, $timeout = 3) {
  * @param int $timeout Request timeout in seconds
  * @return array|null Status data or null on failure
  */
-function fetchRemoteFppStatus($address, $timeout = 2) {
+function fetchRemoteFppStatus($address, $timeout = WATCHER_TIMEOUT_STATUS) {
     $url = "http://{$address}/api/fppd/status";
     return fetchJsonUrl($url, $timeout);
 }
@@ -52,7 +52,7 @@ function fetchRemoteFppStatus($address, $timeout = 2) {
  * @param int $timeout Request timeout per host
  * @return array Array of results keyed by address
  */
-function collectRemoteSyncMetrics($remoteSystems, $timeout = 3) {
+function collectRemoteSyncMetrics($remoteSystems, $timeout = WATCHER_TIMEOUT_STANDARD) {
     if (empty($remoteSystems)) {
         return [];
     }
@@ -66,13 +66,7 @@ function collectRemoteSyncMetrics($remoteSystems, $timeout = 3) {
         $hostname = $system['hostname'];
 
         // Try the combined endpoint first (available on systems with watcher plugin)
-        $ch = curl_init("http://{$address}/api/plugin/fpp-plugin-watcher/multisync/full-status");
-        curl_setopt_array($ch, [
-            CURLOPT_RETURNTRANSFER => true,
-            CURLOPT_TIMEOUT => $timeout,
-            CURLOPT_CONNECTTIMEOUT => $timeout,
-            CURLOPT_HTTPHEADER => ['Accept: application/json']
-        ]);
+        $ch = createCurlHandle("http://{$address}/api/plugin/fpp-plugin-watcher/multisync/full-status", $timeout);
         curl_multi_add_handle($mh, $ch);
         $handles[$address] = [
             'handle' => $ch,
@@ -82,12 +76,7 @@ function collectRemoteSyncMetrics($remoteSystems, $timeout = 3) {
     }
 
     // Execute all requests in parallel
-    do {
-        $status = curl_multi_exec($mh, $active);
-        if ($active) {
-            curl_multi_select($mh);
-        }
-    } while ($active && $status === CURLM_OK);
+    executeCurlMulti($mh);
 
     // Collect results
     $combinedResults = [];
@@ -98,8 +87,7 @@ function collectRemoteSyncMetrics($remoteSystems, $timeout = 3) {
         $response = curl_multi_getcontent($ch);
         $httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
         $responseTime = curl_getinfo($ch, CURLINFO_TOTAL_TIME);
-        curl_multi_remove_handle($mh, $ch);
-        curl_close($ch);
+        cleanupCurlHandle($mh, $ch);
 
         $combinedResults[$address] = [
             'httpCode' => $httpCode,
@@ -380,7 +368,7 @@ function getSyncComparison() {
 
     // Get local/player metrics
     $localMetrics = getMultiSyncStatus();
-    $localFppStatus = apiCall('GET', 'http://127.0.0.1/api/fppd/status', [], true, 2);
+    $localFppStatus = apiCall('GET', 'http://127.0.0.1/api/fppd/status', [], true, WATCHER_TIMEOUT_STATUS);
 
     $player = [
         'hostname' => $localFppStatus['host_name'] ?? 'Local',
@@ -400,7 +388,7 @@ function getSyncComparison() {
     $remoteSystems = getMultiSyncRemoteSystems();
 
     // Collect metrics from all remotes in parallel
-    $remoteResults = collectRemoteSyncMetrics($remoteSystems, 3);
+    $remoteResults = collectRemoteSyncMetrics($remoteSystems);
 
     // Compare player to each remote and collect issues
     $allIssues = [];
@@ -479,7 +467,7 @@ function getSyncComparison() {
 function getSyncComparisonForHost($address) {
     // Get local/player metrics
     $localMetrics = getMultiSyncStatus();
-    $localFppStatus = apiCall('GET', 'http://127.0.0.1/api/fppd/status', [], true, 2);
+    $localFppStatus = apiCall('GET', 'http://127.0.0.1/api/fppd/status', [], true, WATCHER_TIMEOUT_STATUS);
 
     $player = [
         'hostname' => $localFppStatus['host_name'] ?? 'Local',
@@ -490,8 +478,8 @@ function getSyncComparisonForHost($address) {
     ];
 
     // Fetch remote metrics
-    $remoteMetrics = fetchRemoteSyncMetrics($address, 3);
-    $remoteFppStatus = fetchRemoteFppStatus($address, 2);
+    $remoteMetrics = fetchRemoteSyncMetrics($address);
+    $remoteFppStatus = fetchRemoteFppStatus($address);
 
     $remote = [
         'address' => $address,

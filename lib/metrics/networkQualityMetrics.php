@@ -19,18 +19,8 @@ define("WATCHERNETWORKQUALITYROLLUPSTATEFILE", WATCHERNETWORKQUALITYDIR . "/roll
 // Alias for backward compatibility with existing code
 define("WATCHERNETWORKQUALITYTIERS", WATCHER_ROLLUP_TIERS);
 
-// Quality thresholds - use shared constants from rollupBase.php
-define('LATENCY_GOOD_MS', WATCHER_LATENCY_THRESHOLDS['good']);
-define('LATENCY_FAIR_MS', WATCHER_LATENCY_THRESHOLDS['fair']);
-define('LATENCY_POOR_MS', WATCHER_LATENCY_THRESHOLDS['poor']);
-
-define('JITTER_GOOD_MS', WATCHER_JITTER_THRESHOLDS['good']);
-define('JITTER_FAIR_MS', WATCHER_JITTER_THRESHOLDS['fair']);
-define('JITTER_POOR_MS', WATCHER_JITTER_THRESHOLDS['poor']);
-
-define('PACKET_LOSS_GOOD_PCT', WATCHER_PACKET_LOSS_THRESHOLDS['good']);
-define('PACKET_LOSS_FAIR_PCT', WATCHER_PACKET_LOSS_THRESHOLDS['fair']);
-define('PACKET_LOSS_POOR_PCT', WATCHER_PACKET_LOSS_THRESHOLDS['poor']);
+// Quality thresholds are defined in rollupBase.php:
+// WATCHER_LATENCY_THRESHOLDS, WATCHER_JITTER_THRESHOLDS, WATCHER_PACKET_LOSS_THRESHOLDS
 
 // Retention period for raw metrics (25 hours)
 define("WATCHERNETWORKQUALITYRETENTIONSECONDS", 25 * 60 * 60);
@@ -103,21 +93,6 @@ function calculateJitterRFC3550($hostname, $latency, &$state) {
     return calculateJitterRFC3550Generic($hostname, $latency, $state);
 }
 
-/**
- * Get quality rating based on metric value and thresholds
- * Delegates to shared function in rollupBase.php
- */
-function getQualityRating($value, $good, $fair, $poor) {
-    return getQualityRatingGeneric($value, $good, $fair, $poor);
-}
-
-/**
- * Get overall quality rating from individual ratings
- * Delegates to shared function in rollupBase.php
- */
-function getOverallQualityRating($latencyRating, $jitterRating, $packetLossRating) {
-    return getOverallQualityRatingGeneric($latencyRating, $jitterRating, $packetLossRating);
-}
 
 // Expected sync packet rate during playback (packets per second)
 // FPP sends sync packets at ~40Hz (25ms interval) during sequence playback
@@ -195,10 +170,10 @@ function collectNetworkQualityMetrics() {
 
         // Add quality ratings
         if ($latency !== null) {
-            $metricEntry['latencyQuality'] = getQualityRating($latency, LATENCY_GOOD_MS, LATENCY_FAIR_MS, LATENCY_POOR_MS);
+            $metricEntry['latencyQuality'] = getQualityRatingGeneric($latency, WATCHER_LATENCY_THRESHOLDS['good'], WATCHER_LATENCY_THRESHOLDS['fair'], WATCHER_LATENCY_THRESHOLDS['poor']);
         }
         if ($jitter !== null) {
-            $metricEntry['jitterQuality'] = getQualityRating($jitter, JITTER_GOOD_MS, JITTER_FAIR_MS, JITTER_POOR_MS);
+            $metricEntry['jitterQuality'] = getQualityRatingGeneric($jitter, WATCHER_JITTER_THRESHOLDS['good'], WATCHER_JITTER_THRESHOLDS['fair'], WATCHER_JITTER_THRESHOLDS['poor']);
         }
 
         $metrics[] = $metricEntry;
@@ -340,11 +315,11 @@ function aggregateNetworkQualityMetrics($metrics) {
             $p95Index = (int)ceil($count * 0.95) - 1;
             $hostResult['latency_p95'] = round($sortedLatencies[max(0, $p95Index)], 1);
 
-            $hostResult['latency_quality'] = getQualityRating(
+            $hostResult['latency_quality'] = getQualityRatingGeneric(
                 $hostResult['latency_avg'],
-                LATENCY_GOOD_MS,
-                LATENCY_FAIR_MS,
-                LATENCY_POOR_MS
+                WATCHER_LATENCY_THRESHOLDS['good'],
+                WATCHER_LATENCY_THRESHOLDS['fair'],
+                WATCHER_LATENCY_THRESHOLDS['poor']
             );
 
             // Calculate jitter from time-ordered latencies (not sorted)
@@ -363,11 +338,11 @@ function aggregateNetworkQualityMetrics($metrics) {
             }
 
             if ($hostResult['jitter_avg'] !== null) {
-                $hostResult['jitter_quality'] = getQualityRating(
+                $hostResult['jitter_quality'] = getQualityRatingGeneric(
                     $hostResult['jitter_avg'],
-                    JITTER_GOOD_MS,
-                    JITTER_FAIR_MS,
-                    JITTER_POOR_MS
+                    WATCHER_JITTER_THRESHOLDS['good'],
+                    WATCHER_JITTER_THRESHOLDS['fair'],
+                    WATCHER_JITTER_THRESHOLDS['poor']
                 );
             } else {
                 $hostResult['jitter_quality'] = null;
@@ -382,11 +357,11 @@ function aggregateNetworkQualityMetrics($metrics) {
             if (!empty($data['jitters'])) {
                 $hostResult['jitter_avg'] = round(array_sum($data['jitters']) / count($data['jitters']), 2);
                 $hostResult['jitter_max'] = round(max($data['jitters']), 2);
-                $hostResult['jitter_quality'] = getQualityRating(
+                $hostResult['jitter_quality'] = getQualityRatingGeneric(
                     $hostResult['jitter_avg'],
-                    JITTER_GOOD_MS,
-                    JITTER_FAIR_MS,
-                    JITTER_POOR_MS
+                    WATCHER_JITTER_THRESHOLDS['good'],
+                    WATCHER_JITTER_THRESHOLDS['fair'],
+                    WATCHER_JITTER_THRESHOLDS['poor']
                 );
             } else {
                 $hostResult['jitter_avg'] = null;
@@ -457,18 +432,18 @@ function aggregateNetworkQualityMetrics($metrics) {
                     $hostResult['packet_loss_pct'] = 100.0;
                 }
 
-                $hostResult['packet_loss_quality'] = getQualityRating(
+                $hostResult['packet_loss_quality'] = getQualityRatingGeneric(
                     $hostResult['packet_loss_pct'],
-                    PACKET_LOSS_GOOD_PCT,
-                    PACKET_LOSS_FAIR_PCT,
-                    PACKET_LOSS_POOR_PCT
+                    WATCHER_PACKET_LOSS_THRESHOLDS['good'],
+                    WATCHER_PACKET_LOSS_THRESHOLDS['fair'],
+                    WATCHER_PACKET_LOSS_THRESHOLDS['poor']
                 );
             }
         }
         // If not enough playing samples, leave packet_loss as null (not enough data)
 
         // Overall quality
-        $hostResult['overall_quality'] = getOverallQualityRating(
+        $hostResult['overall_quality'] = getOverallQualityRatingGeneric(
             $hostResult['latency_quality'] ?? 'good',
             $hostResult['jitter_quality'] ?? 'good',
             $hostResult['packet_loss_quality'] ?? 'good'

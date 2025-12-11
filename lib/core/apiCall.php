@@ -72,4 +72,38 @@ function apiCall($method, $uri, $data = [], $returnResponse = false, $timeout = 
         return false;
     }
 }
+
+/**
+ * Create a curl handle configured for use with curl_multi
+ */
+function createCurlHandle($url, $timeout = WATCHER_TIMEOUT_STANDARD, $headers = null) {
+    $ch = curl_init($url);
+    curl_setopt_array($ch, [
+        CURLOPT_RETURNTRANSFER => true,
+        CURLOPT_TIMEOUT => $timeout,
+        CURLOPT_CONNECTTIMEOUT => $timeout,
+        CURLOPT_HTTPHEADER => $headers ?? ['Accept: application/json']
+    ]);
+    return $ch;
+}
+
+/**
+ * Execute a curl_multi handle and wait for all requests to complete
+ */
+function executeCurlMulti($mh) {
+    do {
+        $status = curl_multi_exec($mh, $active);
+        if ($active) {
+            curl_multi_select($mh);
+        }
+    } while ($active && $status === CURLM_OK);
+}
+
+/**
+ * Clean up a curl handle from a multi handle
+ */
+function cleanupCurlHandle($mh, $ch) {
+    curl_multi_remove_handle($mh, $ch);
+    curl_close($ch);
+}
 ?>

@@ -19,23 +19,7 @@ renderCommonJS();
     </div>
 
     <div id="metricsContent">
-        <div class="chartControls" style="margin-bottom: 1.5rem;">
-            <div class="controlGroup">
-                <label for="timeRange">Time Range:</label>
-                <select id="timeRange" onchange="updateAllCharts()">
-                    <option value="1">Last 1 Hour</option>
-                    <option value="6">Last 6 Hours</option>
-                    <option value="12" selected>Last 12 Hours</option>
-                    <option value="24">Last 24 Hours</option>
-                    <option value="48">Last 2 Days</option>
-                    <option value="72">Last 3 Days</option>
-                    <option value="168">Last 7 Days</option>
-                    <option value="336">Last 2 Weeks</option>
-                    <option value="672">Last 4 Weeks</option>
-                    <option value="1344">Last 8 Weeks</option>
-                </select>
-            </div>
-        </div>
+        <?php renderTimeRangeSelector('timeRange', 'updateAllCharts()'); ?>
 
         <!-- CPU Usage Chart -->
         <div class="chartCard" id="cpuCard">
@@ -115,26 +99,9 @@ const getSelectedHours = () => document.getElementById('timeRange').value;
 const getDefaultAdapter = () => window.config?.defaultAdapter || 'default';
 const getSelectedInterface = () => document.getElementById('interfaceSelect')?.value || getDefaultAdapter();
 
-// Temperature helpers
-const formatTemp = c => useFahrenheit ? `${(c * 9/5 + 32).toFixed(1)}°F` : `${c.toFixed(1)}°C`;
-const getTempStatus = c => c < 40 ? { text: 'Cool', color: '#38ef7d', icon: '❄️' }
-    : c < 60 ? { text: 'Normal', color: '#28a745', icon: '✅' }
-    : c < 80 ? { text: 'Warm', color: '#ffc107', icon: '⚠️' }
-    : { text: 'Hot', color: '#f5576c', icon: '🔥' };
-
-// System status display
 async function loadSystemStatus() {
     try {
-        const cached = localStorage.getItem('temperatureInF');
-        if (cached !== null) {
-            useFahrenheit = cached === 'true';
-        } else {
-            try {
-                const { value } = await fetchJson('/api/settings/temperatureInF');
-                useFahrenheit = value === '1' || value === 1;
-                localStorage.setItem('temperatureInF', useFahrenheit);
-            } catch { useFahrenheit = false; }
-        }
+        useFahrenheit = await loadTemperaturePreference();
         const status = await fetchJson('/api/system/status');
         updateTemperatureStatus(status);
         updateDiskStatus(status);
@@ -151,7 +118,7 @@ function updateTemperatureStatus(status) {
         const st = getTempStatus(temp);
         const pct = Math.min(temp, 100);
         const label = sensor.label.replace(':', '').trim();
-        const display = formatTemp(temp);
+        const display = formatTemp(temp, useFahrenheit);
         return `<div${i < sensors.length - 1 ? ' style="margin-bottom: 1.5rem;"' : ''}>
             <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.5rem;">
                 <div style="display: flex; align-items: center; gap: 0.5rem;">
@@ -163,7 +130,7 @@ function updateTemperatureStatus(status) {
                 <div style="width: ${pct}%; height: 100%; background: ${st.color}; display: flex; align-items: center; justify-content: center; color: white; font-size: 0.875rem; font-weight: 500;">${display}</div>
             </div>
             <div style="display: flex; justify-content: space-between; margin-top: 0.5rem; font-size: 0.75rem; color: #6c757d;">
-                <span>${formatTemp(0)}</span><span>Status: ${st.icon} ${st.text}</span><span>${formatTemp(100)}</span>
+                <span>${formatTemp(0, useFahrenheit)}</span><span>Status: ${st.icon} ${st.text}</span><span>${formatTemp(100, useFahrenheit)}</span>
             </div>
         </div>`;
     }).join('');
@@ -237,9 +204,8 @@ const METRIC_DEFS = [
         prepare: p => {
             if (!p?.success || !p.data?.length || !p.zones?.length) return { hidden: true };
             const colorKeys = ['coral', 'blue', 'yellow', 'teal', 'indigo', 'orange', 'green', 'pink'];
-            const toF = c => c * 9/5 + 32;
-            const unit = useFahrenheit ? '°F' : '°C';
-            const convertData = (response, key) => mapChartData(response, key).map(d => ({ x: d.x, y: useFahrenheit ? toF(d.y) : d.y }));
+            const unit = getTempUnit(useFahrenheit);
+            const convertData = (response, key) => mapChartData(response, key).map(d => ({ x: d.x, y: useFahrenheit ? toFahrenheit(d.y) : d.y }));
             return { datasets: p.zones.map((z, i) => createDataset(z, convertData(p, z), colorKeys[i % colorKeys.length], { fill: false })),
                 opts: { yLabel: `Temperature (${unit})`, yTickFormatter: v => v.toFixed(0) + unit, tooltipLabel: c => c.dataset.label + ': ' + c.parsed.y.toFixed(1) + unit } }; } },
     { key: 'wireless', canvasId: 'wirelessChart', cardId: 'wirelessCard', loadingId: 'wirelessLoading',

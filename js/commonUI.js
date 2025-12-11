@@ -13,8 +13,17 @@
 
     // =============================================================================
     // HTML Escaping
+    // HTML Escaping Convention:
+    // - JavaScript: Use escapeHtml() for all dynamic content in innerHTML
+    // - PHP: Use h() or htmlspecialchars() in lib/ui/common.php
     // =============================================================================
 
+    /**
+     * HTML escape helper - prevents XSS by escaping special characters
+     * Mirrors h() in lib/ui/common.php for naming consistency
+     * @param {string|null|undefined} text - Text to escape
+     * @returns {string} - Escaped text safe for innerHTML
+     */
     window.escapeHtml = function(text) {
         if (text === null || text === undefined) return '';
         const map = { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#039;' };
@@ -348,6 +357,45 @@
         if (h > 0) return `${h}h ${m}m ${s}s`;
         if (m > 0) return `${m}m ${s}s`;
         return `${s}s`;
+    };
+
+    // =============================================================================
+    // Temperature Helpers
+    // =============================================================================
+
+    window.toFahrenheit = function(celsius) {
+        return celsius * 9/5 + 32;
+    };
+
+    window.getTempUnit = function(useFahrenheit) {
+        return useFahrenheit ? '°F' : '°C';
+    };
+
+    window.formatTemp = function(celsius, useFahrenheit) {
+        const value = useFahrenheit ? window.toFahrenheit(celsius) : celsius;
+        return value.toFixed(1) + window.getTempUnit(useFahrenheit);
+    };
+
+    window.getTempStatus = function(celsius) {
+        if (celsius < 40) return { text: 'Cool', color: '#38ef7d', icon: '❄️' };
+        if (celsius < 60) return { text: 'Normal', color: '#28a745', icon: '✅' };
+        if (celsius < 80) return { text: 'Warm', color: '#ffc107', icon: '⚠️' };
+        return { text: 'Hot', color: '#f5576c', icon: '🔥' };
+    };
+
+    window.loadTemperaturePreference = async function() {
+        const cached = localStorage.getItem('temperatureInF');
+        if (cached !== null) {
+            return cached === 'true';
+        }
+        try {
+            const { value } = await fetchJson('/api/settings/temperatureInF');
+            const useFahrenheit = value === '1' || value === 1;
+            localStorage.setItem('temperatureInF', useFahrenheit);
+            return useFahrenheit;
+        } catch {
+            return false;
+        }
     };
 
 })();

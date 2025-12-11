@@ -8,30 +8,6 @@
 
 include_once __DIR__ . "/rollupBase.php";
 
-// Define rollup tiers (resolution => retention period)
-define("WATCHERPINGROLLUPTIERS", [
-    '1min' => [
-        'interval' => 60,           // 1 minute in seconds
-        'retention' => 21600,       // Keep 6 hours (360 data points)
-        'label' => '1-minute averages'
-    ],
-    '5min' => [
-        'interval' => 300,          // 5 minutes in seconds
-        'retention' => 172800,      // Keep 48 hours (576 data points)
-        'label' => '5-minute averages'
-    ],
-    '30min' => [
-        'interval' => 1800,         // 30 minutes in seconds
-        'retention' => 1209600,     // Keep 14 days (672 data points)
-        'label' => '30-minute averages'
-    ],
-    '2hour' => [
-        'interval' => 7200,         // 2 hours in seconds
-        'retention' => 7776000,     // Keep 90 days (1080 data points)
-        'label' => '2-hour averages'
-    ]
-]);
-
 // Define rollup file paths (using centralized data directory)
 define("WATCHERPINGROLLUPDIR", WATCHERPINGDIR);
 define("WATCHERPINGROLLUPSTATEFILE", WATCHERPINGDIR . "/rollup-state.json");
@@ -47,7 +23,7 @@ function getPingRollupFilePath($tier) {
  * Get or initialize rollup state
  */
 function getRollupState() {
-    return getRollupStateGeneric(WATCHERPINGROLLUPSTATEFILE, WATCHERPINGROLLUPTIERS);
+    return getRollupStateGeneric(WATCHERPINGROLLUPSTATEFILE, WATCHER_ROLLUP_TIERS);
 }
 
 /**
@@ -150,7 +126,7 @@ function processRollupTier($tier, $tierConfig) {
     processRollupTierGeneric(
         $tier,
         $tierConfig,
-        WATCHERPINGROLLUPTIERS,
+        WATCHER_ROLLUP_TIERS,
         WATCHERPINGROLLUPSTATEFILE,
         WATCHERPINGMETRICSFILE,
         'getPingRollupFilePath',
@@ -176,7 +152,7 @@ function rotateRollupFile($rollupFile, $retentionSeconds) {
  * Process all rollup tiers
  */
 function processAllRollups() {
-    foreach (WATCHERPINGROLLUPTIERS as $tier => $config) {
+    foreach (WATCHER_ROLLUP_TIERS as $tier => $config) {
         try {
             processRollupTier($tier, $config);
         } catch (Exception $e) {
@@ -190,7 +166,7 @@ function processAllRollups() {
  */
 function readRollupData($tier, $startTime = null, $endTime = null) {
     $rollupFile = getPingRollupFilePath($tier);
-    return readRollupDataGeneric($rollupFile, $tier, WATCHERPINGROLLUPTIERS, $startTime, $endTime);
+    return readRollupDataGeneric($rollupFile, $tier, WATCHER_ROLLUP_TIERS, $startTime, $endTime);
 }
 
 /**
@@ -208,7 +184,7 @@ function getPingMetricsRollup($hoursBack = 24) {
     $startTime = $endTime - ($hoursBack * 3600);
 
     $tier = getBestRollupTier($hoursBack);
-    $tierConfig = WATCHERPINGROLLUPTIERS[$tier];
+    $tierConfig = WATCHER_ROLLUP_TIERS[$tier];
 
     $result = readRollupData($tier, $startTime, $endTime);
 
@@ -227,7 +203,7 @@ function getPingMetricsRollup($hoursBack = 24) {
  * Get available rollup tiers information
  */
 function getRollupTiersInfo() {
-    return getTiersInfoGeneric(WATCHERPINGROLLUPTIERS, 'getPingRollupFilePath');
+    return getTiersInfoGeneric(WATCHER_ROLLUP_TIERS, 'getPingRollupFilePath');
 }
 
 ?>

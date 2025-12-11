@@ -1,5 +1,11 @@
 <?php
 include_once "/opt/fpp/www/common.php";
+
+// API timeout constants (in seconds) - defined before apiCall.php include
+define("WATCHER_TIMEOUT_STATUS", 2);    // Quick status checks (fppd/status, playback sync)
+define("WATCHER_TIMEOUT_STANDARD", 5);  // Standard API requests (info, version, plugins)
+define("WATCHER_TIMEOUT_LONG", 10);     // Longer operations (metrics/all, state changes)
+
 include_once __DIR__ . "/apiCall.php";
 
 global $settings;
@@ -243,11 +249,9 @@ function detectGatewayForInterface($interface) {
     }
 
     // Confirm the gateway is reachable before suggesting it
-    $pingOutput = [];
-    $returnVar = 0;
-    exec("ping -I " . escapeshellarg($interface) . " -c 1 -W 1 " . escapeshellarg($gateway) . " 2>&1", $pingOutput, $returnVar);
+    $pingResult = pingHost($gateway, $interface, 1);
 
-    if ($returnVar !== 0) {
+    if (!$pingResult['success']) {
         logMessage("Gateway detection: Found gateway '$gateway' for interface '$interface' but ping failed");
         return null;
     }
@@ -352,6 +356,44 @@ function validateHost($host) {
 }
 
 /**
+ * Ping a host and return result with latency
+ *
+ * @param string $address IP address or hostname to ping
+ * @param string|null $interface Network interface to use (null for system default)
+ * @param int $timeout Timeout in seconds (default: 1)
+ * @return array ['success' => bool, 'latency' => float|null, 'output' => array]
+ */
+function pingHost($address, $interface = null, $timeout = 1) {
+    $output = [];
+    $returnVar = 0;
+
+    $cmd = 'ping';
+    if ($interface !== null && !empty($interface)) {
+        $cmd .= ' -I ' . escapeshellarg($interface);
+    }
+    $cmd .= ' -c 1 -W ' . intval($timeout) . ' ' . escapeshellarg($address) . ' 2>&1';
+
+    exec($cmd, $output, $returnVar);
+
+    $result = [
+        'success' => ($returnVar === 0),
+        'latency' => null,
+        'output' => $output
+    ];
+
+    if ($returnVar === 0) {
+        foreach ($output as $line) {
+            if (preg_match('/time=([0-9.]+)\s*ms/', $line, $matches)) {
+                $result['latency'] = floatval($matches[1]);
+                break;
+            }
+        }
+    }
+
+    return $result;
+}
+
+/**
  * Sort an array by timestamp field (ascending)
  *
  * @param array &$array Array to sort in place
@@ -366,14 +408,17 @@ function sortByTimestamp(&$array, $field = 'timestamp') {
 /**
  * Read a JSON-lines log file with optional filtering
  * Uses file locking for safe concurrent access.
+ * When sinceTimestamp is provided, uses regex pre-filtering to skip old entries
+ * without expensive JSON parsing (performance optimization).
  *
  * @param string $file Path to the file
  * @param int $sinceTimestamp Only return entries newer than this (default: 0)
  * @param callable|null $filterFn Optional filter function(entry) => bool
  * @param bool $sort Whether to sort results by timestamp (default: true)
+ * @param string $timestampField Field name containing timestamp (default: 'timestamp')
  * @return array Array of parsed entries
  */
-function readJsonLinesFile($file, $sinceTimestamp = 0, $filterFn = null, $sort = true) {
+function readJsonLinesFile($file, $sinceTimestamp = 0, $filterFn = null, $sort = true, $timestampField = 'timestamp') {
     if (!file_exists($file)) {
         return [];
     }
@@ -385,18 +430,29 @@ function readJsonLinesFile($file, $sinceTimestamp = 0, $filterFn = null, $sort =
         return [];
     }
 
+    // Build regex pattern for timestamp extraction (avoids json_decode on old entries)
+    $tsPattern = '/"' . preg_quote($timestampField, '/') . '"\s*:\s*(\d+)/';
+
     if (flock($fp, LOCK_SH)) {
         while (($line = fgets($fp)) !== false) {
-            // Parse log format: [timestamp] {json}
+            // When filtering by timestamp, extract it via regex first to skip old entries
+            // without the overhead of json_decode
+            if ($sinceTimestamp > 0) {
+                if (!preg_match($tsPattern, $line, $tsMatch)) {
+                    continue;
+                }
+                $entryTimestamp = (int)$tsMatch[1];
+                if ($entryTimestamp <= $sinceTimestamp) {
+                    continue;
+                }
+            }
+
+            // Parse log format: [datetime] {json}
             if (preg_match('/\[.*?\]\s+(.+)$/', $line, $matches)) {
                 $jsonData = trim($matches[1]);
                 $entry = json_decode($jsonData, true);
 
-                if ($entry && isset($entry['timestamp'])) {
-                    // Skip old entries
-                    if ($entry['timestamp'] <= $sinceTimestamp) {
-                        continue;
-                    }
+                if ($entry && isset($entry[$timestampField])) {
                     // Apply custom filter if provided
                     if ($filterFn !== null && !$filterFn($entry)) {
                         continue;
@@ -411,7 +467,7 @@ function readJsonLinesFile($file, $sinceTimestamp = 0, $filterFn = null, $sort =
     fclose($fp);
 
     if ($sort && !empty($entries)) {
-        sortByTimestamp($entries);
+        sortByTimestamp($entries, $timestampField);
     }
 
     return $entries;

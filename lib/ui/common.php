@@ -3,7 +3,22 @@
  * Watcher Plugin - Common UI PHP Functions
  *
  * Shared utilities for UI pages to reduce duplication.
+ *
+ * HTML Escaping Convention:
+ * - PHP: Use h() or htmlspecialchars() for all dynamic content in HTML output
+ * - JavaScript: Use escapeHtml() from commonUI.js for all dynamic content in innerHTML
  */
+
+/**
+ * HTML escape helper - shorthand for htmlspecialchars with consistent flags
+ * Mirrors escapeHtml() in commonUI.js for naming consistency
+ * @param string|null $text - Text to escape
+ * @return string - Escaped text safe for HTML output
+ */
+function h($text) {
+    if ($text === null) return '';
+    return htmlspecialchars($text, ENT_QUOTES | ENT_HTML5, 'UTF-8');
+}
 
 /**
  * Render standard CSS includes for dashboard pages
@@ -137,6 +152,7 @@ function renderTimeRangeSelector($id, $onchange, $label = 'Time Range:', $option
             '168' => 'Last 7 Days',
             '336' => 'Last 2 Weeks',
             '720' => 'Last 30 Days',
+            '1440' => 'Last 60 Days',
             '2160' => 'Last 90 Days'
         ];
     }
