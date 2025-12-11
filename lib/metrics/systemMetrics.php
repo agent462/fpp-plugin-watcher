@@ -253,13 +253,23 @@ function getBatchedCollectdMetrics($rrdSources, $consolidationFunction = 'AVERAG
 }
 
 /**
- * Fetch free memory metrics from collectd
+ * Fetch memory metrics from collectd (free, buffered, cached)
+ * Uses batched RRD fetch for efficiency (single exec instead of 3)
  *
  * @param int $hoursBack Number of hours to fetch (default: 24)
- * @return array Result with formatted memory data
+ * @return array Result with formatted memory data including buffer cache
  */
 function getMemoryFreeMetrics($hoursBack = 24) {
-    $result = getCollectdMetrics('memory', 'memory-free', 'AVERAGE', $hoursBack);
+    $basePath = "/var/lib/collectd/rrd/" . COLLECTD_HOSTNAME . "/memory";
+
+    // Fetch free, buffered, and cached in one command
+    $rrdSources = [
+        ['name' => 'free', 'file' => "{$basePath}/memory-free.rrd", 'ds' => 'value'],
+        ['name' => 'buffered', 'file' => "{$basePath}/memory-buffered.rrd", 'ds' => 'value'],
+        ['name' => 'cached', 'file' => "{$basePath}/memory-cached.rrd", 'ds' => 'value'],
+    ];
+
+    $result = getBatchedCollectdMetrics($rrdSources, 'AVERAGE', $hoursBack);
 
     if (!$result['success']) {
         return $result;
@@ -268,12 +278,28 @@ function getMemoryFreeMetrics($hoursBack = 24) {
     // Convert bytes to megabytes for easier reading
     $formattedData = [];
     foreach ($result['data'] as $entry) {
+        $freeMb = isset($entry['free']) && $entry['free'] !== null
+            ? round($entry['free'] / (1024 * 1024), 2)
+            : null;
+        $bufferedMb = isset($entry['buffered']) && $entry['buffered'] !== null
+            ? round($entry['buffered'] / (1024 * 1024), 2)
+            : null;
+        $cachedMb = isset($entry['cached']) && $entry['cached'] !== null
+            ? round($entry['cached'] / (1024 * 1024), 2)
+            : null;
+
+        // Buffer cache = buffered + cached (reclaimable memory used for file caching)
+        $bufferCacheMb = null;
+        if ($bufferedMb !== null || $cachedMb !== null) {
+            $bufferCacheMb = round(($bufferedMb ?? 0) + ($cachedMb ?? 0), 2);
+        }
+
         $formattedData[] = [
             'timestamp' => $entry['timestamp'],
-            'free_mb' => isset($entry['value']) && $entry['value'] !== null
-                ? round($entry['value'] / (1024 * 1024), 2)
-                : null,
-            'free_bytes' => $entry['value'] ?? null
+            'free_mb' => $freeMb,
+            'buffer_cache_mb' => $bufferCacheMb,
+            'buffered_mb' => $bufferedMb,
+            'cached_mb' => $cachedMb,
         ];
     }
 

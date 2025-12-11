@@ -3795,3 +3795,28 @@
         grid-template-columns: 1fr;
     }
 }
+
+/* ==========================================================================
+   Info Tooltips
+   ========================================================================== */
+
+/**
+ * Info tooltip icon (uses browser native tooltip via title attribute)
+ * Placed next to chart titles or labels to provide additional context
+ */
+.infoTooltip {
+    display: inline-flex;
+    align-items: center;
+    margin-left: 0.5rem;
+    color: #6c757d;
+    cursor: help;
+    font-size: 0.9rem;
+}
+
+.infoTooltip:hover {
+    color: #007bff;
+}
+
+.infoTooltip i {
+    font-size: 0.875rem;
+}

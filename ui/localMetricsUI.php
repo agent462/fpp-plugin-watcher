@@ -39,14 +39,17 @@ renderCommonJS();
         <div class="statsBar">
             <div class="statItem"><div class="statLabel">Current Free Memory</div><div class="statValue" id="currentMemory">-- MB</div></div>
             <div class="statItem"><div class="statLabel">Average (24h)</div><div class="statValue" id="avgMemory">-- MB</div></div>
-            <div class="statItem"><div class="statLabel">Minimum (24h)</div><div class="statValue" id="minMemory">-- MB</div></div>
-            <div class="statItem"><div class="statLabel">Maximum (24h)</div><div class="statValue" id="maxMemory">-- MB</div></div>
+            <div class="statItem"><div class="statLabel">Current Buffer Cache</div><div class="statValue" id="currentBufferCache">-- MB</div></div>
+            <div class="statItem"><div class="statLabel">Avg Buffer Cache</div><div class="statValue" id="avgBufferCache">-- MB</div></div>
         </div>
 
         <!-- Memory Chart -->
         <div class="chartCard" id="memoryCard">
             <div class="chartLoading" id="memoryLoading"><i class="fas fa-spinner fa-spin"></i><p>Loading memory data...</p></div>
-            <div class="chartTitle"><span><i class="fas fa-memory"></i> Free Memory</span></div>
+            <div class="chartTitle">
+                <span><i class="fas fa-memory"></i> Memory Usage</span>
+                <span class="infoTooltip" title="Buffer Cache is memory used by Linux to cache frequently accessed files (like sequences). This memory is automatically released when applications need it, so high buffer cache usage is good - it means your system is efficiently caching data for faster access."><i class="fas fa-info-circle"></i></span>
+            </div>
             <canvas id="memoryChart" style="max-height: 400px;"></canvas>
         </div>
 
@@ -166,14 +169,18 @@ const METRIC_DEFS = [
         url: h => `/api/plugin/fpp-plugin-watcher/metrics/memory/free?hours=${h}`,
         prepare: p => {
             if (!p?.success || !p.data?.length) return null;
-            const vals = p.data.filter(d => d.free_mb !== null).map(d => d.free_mb);
-            if (!vals.length) return null;
-            document.getElementById('currentMemory').textContent = vals.at(-1).toFixed(1) + ' MB';
-            document.getElementById('avgMemory').textContent = (vals.reduce((a, b) => a + b) / vals.length).toFixed(1) + ' MB';
-            document.getElementById('minMemory').textContent = Math.min(...vals).toFixed(1) + ' MB';
-            document.getElementById('maxMemory').textContent = Math.max(...vals).toFixed(1) + ' MB';
-            return { datasets: [createDataset('Free Memory (MB)', mapChartData(p, 'free_mb'), 'purple')],
-                opts: { yLabel: 'Free Memory (MB)', yTickFormatter: v => v.toFixed(0) + ' MB', tooltipLabel: c => 'Free Memory: ' + c.parsed.y.toFixed(2) + ' MB' } };
+            const freeVals = p.data.filter(d => d.free_mb !== null).map(d => d.free_mb);
+            const cacheVals = p.data.filter(d => d.buffer_cache_mb !== null).map(d => d.buffer_cache_mb);
+            if (!freeVals.length) return null;
+            document.getElementById('currentMemory').textContent = freeVals.at(-1).toFixed(1) + ' MB';
+            document.getElementById('avgMemory').textContent = (freeVals.reduce((a, b) => a + b) / freeVals.length).toFixed(1) + ' MB';
+            if (cacheVals.length) {
+                document.getElementById('currentBufferCache').textContent = cacheVals.at(-1).toFixed(1) + ' MB';
+                document.getElementById('avgBufferCache').textContent = (cacheVals.reduce((a, b) => a + b) / cacheVals.length).toFixed(1) + ' MB';
+            }
+            const datasets = [createDataset('Free Memory', mapChartData(p, 'free_mb'), 'purple')];
+            if (cacheVals.length) datasets.push(createDataset('Buffer Cache', mapChartData(p, 'buffer_cache_mb'), 'teal', { fill: false }));
+            return { datasets, opts: { yLabel: 'Memory (MB)', yTickFormatter: v => v.toFixed(0) + ' MB', tooltipLabel: c => c.dataset.label + ': ' + c.parsed.y.toFixed(1) + ' MB' } };
         } },
     { key: 'cpu', canvasId: 'cpuChart', loadingId: 'cpuLoading',
         url: h => `/api/plugin/fpp-plugin-watcher/metrics/cpu/average?hours=${h}`,

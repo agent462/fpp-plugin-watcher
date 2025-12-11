@@ -99,6 +99,7 @@ const convertTemp = c => useFahrenheit ? toFahrenheit(c) : c;
 const metricConfig = {
     cpu: { getValue: m => m.cpu?.current, getClass: v => v > 80 ? 'danger' : v > 60 ? 'warning' : '', format: v => v.toFixed(1) + '%', chartKey: 'cpu_usage' },
     memory: { getValue: m => m.memory?.current, getClass: v => v < 100 ? 'danger' : v < 250 ? 'warning' : '', format: v => v.toFixed(0) + ' MB', chartKey: 'free_mb' },
+    bufferCache: { getValue: m => m.bufferCache?.current, getClass: () => '', format: v => v.toFixed(0) + ' MB', chartKey: 'buffer_cache_mb' },
     disk: { getValue: m => m.disk?.current, getClass: v => v < 1 ? 'danger' : v < 2 ? 'warning' : '', format: v => v.toFixed(1) + ' GB', chartKey: 'free_gb' },
     load: { getValue: m => m.load?.shortterm, getClass: () => '', format: v => v.toFixed(2), chartKey: null },
     temp: { getValue: m => m.temperature?.current, getClass: v => v > 80 ? 'danger' : v > 70 ? 'warning' : '', format: v => convertTemp(v).toFixed(1) + getTempUnit(useFahrenheit), chartKey: 'temperature' },
@@ -122,7 +123,7 @@ function processMetricData(data, valueKey) {
 async function fetchSystemMetrics(system) {
     const { address, hostname, model, type, version } = system;
     const hours = getSelectedHours();
-    const result = { hostname, address, model: model || type || 'Unknown', version: version || '', watcherVersion: null, online: false, noWatcher: false, error: null, cpu: null, memory: null, disk: null, load: null, temperature: null, wireless: null, ping: null };
+    const result = { hostname, address, model: model || type || 'Unknown', version: version || '', watcherVersion: null, online: false, noWatcher: false, error: null, cpu: null, memory: null, bufferCache: null, disk: null, load: null, temperature: null, wireless: null, ping: null };
 
     try {
         const [allData, versionData] = await Promise.all([
@@ -136,6 +137,7 @@ async function fetchSystemMetrics(system) {
 
         result.cpu = processMetricData(allData.cpu, 'cpu_usage');
         result.memory = processMetricData(allData.memory, 'free_mb');
+        result.bufferCache = processMetricData(allData.memory, 'buffer_cache_mb');
         result.disk = processMetricData(allData.disk, 'free_gb');
 
         if (allData.load?.success && allData.load.data?.length) {
@@ -226,7 +228,12 @@ function renderSystemCard(m, index) {
     }
 
     const watcherInfo = m.watcherVersion ? ` | Watcher ${escapeHtml(m.watcherVersion)}` : '';
-    const metrics = ['cpu', 'memory', 'disk', 'load'].map(k => { const d = getMetricDisplay(m, k); return `<div class="metricItem" data-metric="${k}"><div class="metricLabel">${k === 'cpu' ? 'CPU Usage' : k === 'memory' ? 'Free Memory' : k === 'disk' ? 'Free Disk' : 'Load (1min)'}</div><div class="metricValue ${d.class}">${d.value}</div></div>`; }).join('');
+    const metricLabels = { cpu: 'CPU Usage', memory: 'Free Memory', bufferCache: 'Buffer Cache', disk: 'Free Disk', load: 'Load (1min)' };
+    const metrics = ['cpu', 'memory', 'bufferCache', 'disk', 'load'].filter(k => k !== 'bufferCache' || m.bufferCache).map(k => {
+        const d = getMetricDisplay(m, k);
+        const tooltip = k === 'bufferCache' ? ' title="Memory used by Linux to cache frequently accessed files. This memory is automatically released when needed - high usage is good!"' : '';
+        return `<div class="metricItem" data-metric="${k}"${tooltip}><div class="metricLabel">${metricLabels[k]}${k === 'bufferCache' ? ' <i class="fas fa-info-circle" style="font-size:0.65rem;color:#6c757d;cursor:help;"></i>' : ''}</div><div class="metricValue ${d.class}">${d.value}</div></div>`;
+    }).join('');
     const optMetrics = [['temp', 'Temperature', m.temperature], ['wireless', 'WiFi Signal', m.wireless], ['ping', 'Ping Latency', m.ping]].filter(([,,v]) => v).map(([k, l]) => { const d = getMetricDisplay(m, k); return `<div class="metricItem" data-metric="${k}"><div class="metricLabel">${l}</div><div class="metricValue ${d.class}">${d.value}</div></div>`; }).join('');
 
     const chartWrappers = [
