@@ -92,7 +92,7 @@ function saveEfuseHardwareCache($result) {
 
 /**
  * Detect cape-based eFuse support by reading FPP config files
- * Checks cape-info.json and string config files for eFuse pin definitions
+ * Checks cape-info.json "provides" array and string config files for eFuse pin definitions
  *
  * @return array Detection result
  */
@@ -112,8 +112,37 @@ function detectCapeEfuse() {
         $capeInfo = @json_decode(file_get_contents($capeInfoFile), true);
     }
 
-    // Step 2: Get the subType from channel output config
+    // Step 2: Check if cape explicitly provides currentMonitoring
+    // This is the most reliable indicator - cape declares its capabilities
+    $providesCurrentMonitoring = false;
+    if ($capeInfo && isset($capeInfo['provides']) && is_array($capeInfo['provides'])) {
+        $providesCurrentMonitoring = in_array('currentMonitoring', $capeInfo['provides']);
+    }
+
+    // Step 3: Get the subType from channel output config
     $channelOutputInfo = getChannelOutputConfig();
+
+    // If cape provides currentMonitoring but we have no channel config, still report support
+    if ($providesCurrentMonitoring && !$channelOutputInfo) {
+        $capeName = $capeInfo['name'] ?? $capeInfo['id'] ?? 'Unknown Cape';
+        // Count actual eFuse-capable ports from fppd/ports
+        $portCount = countEfusePortsFromFppd();
+        if ($portCount === 0) {
+            $portCount = 16; // Default for current monitoring capes
+        }
+        $result['supported'] = true;
+        $result['type'] = 'cape';
+        $result['ports'] = $portCount;
+        $result['details'] = [
+            'cape' => $capeName,
+            'subType' => $capeInfo['id'] ?? '',
+            'outputType' => 'unknown',
+            'hasCurrentMonitor' => true,
+            'method' => 'cape_provides'
+        ];
+        return $result;
+    }
+
     if (!$channelOutputInfo) {
         return $result;
     }
@@ -122,17 +151,39 @@ function detectCapeEfuse() {
     $outputType = $channelOutputInfo['type'] ?? '';
     $configuredPorts = $channelOutputInfo['outputCount'] ?? 0;
 
+    // If cape provides currentMonitoring, we're done - count eFuse ports from fppd/ports
+    if ($providesCurrentMonitoring) {
+        $capeName = $capeInfo['name'] ?? $subType;
+        // Count actual eFuse-capable ports from fppd/ports (ports with 'ma' field)
+        $portCount = countEfusePortsFromFppd();
+        if ($portCount === 0) {
+            $portCount = 16; // Default for current monitoring capes
+        }
+
+        $result['supported'] = true;
+        $result['type'] = 'cape';
+        $result['ports'] = $portCount;
+        $result['details'] = [
+            'cape' => $capeName,
+            'subType' => $subType,
+            'outputType' => $outputType,
+            'hasCurrentMonitor' => true,
+            'method' => 'cape_provides'
+        ];
+        return $result;
+    }
+
+    // Fallback: Check string config for eFuse pins (for capes without "provides" field)
     if (empty($subType)) {
         return $result;
     }
 
-    // Step 3: Load the string config for this subType
     $stringConfig = loadStringConfig($subType);
     if (!$stringConfig) {
         return $result;
     }
 
-    // Step 4: Check if any outputs have eFuse pins or current monitors
+    // Check if any outputs have eFuse pins or current monitors
     $outputs = $stringConfig['outputs'] ?? [];
     $portsWithEfuse = 0;
     $hasCurrentMonitor = false;
@@ -206,7 +257,8 @@ function getChannelOutputConfig() {
             $type = $output['type'] ?? '';
 
             // Look for string output types that might have eFuse
-            if (in_array($type, ['BBB48String', 'BBBSerial', 'RPIWS281X', 'DPIPixels', 'spixels'])) {
+            // BBShiftString = K16-Max, PB2, etc. with shift register outputs
+            if (in_array($type, ['BBB48String', 'BBBSerial', 'BBShiftString', 'RPIWS281X', 'DPIPixels', 'spixels'])) {
                 return [
                     'type' => $type,
                     'subType' => $output['subType'] ?? '',
@@ -389,6 +441,34 @@ function readEfuseData() {
     // For reading actual current values, we use fppd/ports as it's the only
     // reliable source of real-time current data from FPP's OutputMonitor
     return readEfuseFromFppdPorts();
+}
+
+/**
+ * Count eFuse-capable ports from fppd/ports endpoint
+ * Ports with 'ma' field are eFuse-capable
+ *
+ * @return int Number of eFuse-capable ports
+ */
+function countEfusePortsFromFppd() {
+    $portsData = @file_get_contents('http://127.0.0.1/api/fppd/ports');
+    if ($portsData === false) {
+        return 0;
+    }
+
+    $portsList = @json_decode($portsData, true);
+    if (!is_array($portsList)) {
+        return 0;
+    }
+
+    $count = 0;
+    foreach ($portsList as $port) {
+        // Ports with 'ma' field are eFuse-capable (excludes smart receiver ports)
+        if (isset($port['ma']) && !isset($port['smartReceivers'])) {
+            $count++;
+        }
+    }
+
+    return $count;
 }
 
 /**
