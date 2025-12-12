@@ -255,30 +255,63 @@ function getEfusePortHistory($portName, $hoursBack = 24) {
     if ($hoursBack <= 6) {
         $data = readEfuseRawMetrics($hoursBack, $portName);
         $source = 'raw';
+        $interval = 5; // Raw data is 5-second intervals
     } else {
         $result = readEfuseRollup($hoursBack, $portName);
         $data = $result['data'] ?? [];
         $source = 'rollup';
+        $interval = 60; // Rollup data is 1-minute intervals
     }
 
-    // Extract port-specific data
-    $history = [];
+    // Build indexed lookup by timestamp
+    $dataByTimestamp = [];
     foreach ($data as $entry) {
-        $portData = $entry['ports'][$portName] ?? null;
+        $ts = $entry['timestamp'];
+        $dataByTimestamp[$ts] = $entry['ports'][$portName] ?? null;
+    }
+
+    // Determine time range
+    $endTime = time();
+    $startTime = $endTime - ($hoursBack * 3600);
+
+    // Align to interval boundaries
+    $startTime = intval(floor($startTime / $interval) * $interval);
+    $endTime = intval(floor($endTime / $interval) * $interval);
+
+    // Generate complete time series with gaps filled as zero
+    $history = [];
+    for ($ts = $startTime; $ts <= $endTime; $ts += $interval) {
+        $portData = $dataByTimestamp[$ts] ?? null;
+
         if ($portData !== null) {
             if (is_array($portData)) {
                 // Rollup data
                 $history[] = [
-                    'timestamp' => $entry['timestamp'],
-                    'avg' => $portData['avg'],
-                    'min' => $portData['min'],
-                    'max' => $portData['max']
+                    'timestamp' => $ts,
+                    'avg' => $portData['avg'] ?? 0,
+                    'min' => $portData['min'] ?? 0,
+                    'max' => $portData['max'] ?? 0
                 ];
             } else {
                 // Raw data
                 $history[] = [
-                    'timestamp' => $entry['timestamp'],
+                    'timestamp' => $ts,
                     'value' => $portData
+                ];
+            }
+        } else {
+            // No data - fill with zero
+            if ($source === 'rollup') {
+                $history[] = [
+                    'timestamp' => $ts,
+                    'avg' => 0,
+                    'min' => 0,
+                    'max' => 0
+                ];
+            } else {
+                $history[] = [
+                    'timestamp' => $ts,
+                    'value' => 0
                 ];
             }
         }
@@ -322,41 +355,61 @@ function getEfuseHeatmapData($hoursBack = 24) {
     $outputConfig = getEfuseOutputConfig();
     $portNames = array_keys($outputConfig['ports']);
 
-    // Build time series for each port
-    $timeSeries = [];
-    $timestamps = [];
-
+    // Build indexed lookup of data by timestamp
+    $dataByTimestamp = [];
     foreach ($rollupData as $entry) {
         $ts = $entry['timestamp'];
-        $timestamps[] = $ts;
-
-        foreach ($portNames as $portName) {
-            if (!isset($timeSeries[$portName])) {
-                $timeSeries[$portName] = [];
-            }
-
-            $portData = $entry['ports'][$portName] ?? null;
-            if ($portData !== null) {
-                $timeSeries[$portName][] = [
-                    'timestamp' => $ts,
-                    'value' => $portData['avg'] ?? 0,
-                    'min' => $portData['min'] ?? 0,
-                    'max' => $portData['max'] ?? 0
-                ];
-            }
-        }
+        $dataByTimestamp[$ts] = $entry['ports'] ?? [];
     }
 
-    // Calculate peak values for each port
+    // Determine time range and interval (1 minute = 60 seconds)
+    $interval = 60;
+    $endTime = time();
+    $startTime = $endTime - ($hoursBack * 3600);
+
+    // Align to interval boundaries
+    $startTime = intval(floor($startTime / $interval) * $interval);
+    $endTime = intval(floor($endTime / $interval) * $interval);
+
+    // Generate all expected timestamps
+    $allTimestamps = [];
+    for ($ts = $startTime; $ts <= $endTime; $ts += $interval) {
+        $allTimestamps[] = $ts;
+    }
+
+    // Build time series for each port, filling gaps with zeros
+    $timeSeries = [];
     $peaks = [];
-    foreach ($timeSeries as $portName => $data) {
-        $maxValue = 0;
-        foreach ($data as $point) {
-            if ($point['max'] > $maxValue) {
-                $maxValue = $point['max'];
+
+    foreach ($portNames as $portName) {
+        $timeSeries[$portName] = [];
+        $peaks[$portName] = 0;
+
+        foreach ($allTimestamps as $ts) {
+            $portData = $dataByTimestamp[$ts][$portName] ?? null;
+
+            if ($portData !== null) {
+                $value = $portData['avg'] ?? 0;
+                $min = $portData['min'] ?? 0;
+                $max = $portData['max'] ?? 0;
+
+                if ($max > $peaks[$portName]) {
+                    $peaks[$portName] = $max;
+                }
+            } else {
+                // No data for this timestamp - fill with zero
+                $value = 0;
+                $min = 0;
+                $max = 0;
             }
+
+            $timeSeries[$portName][] = [
+                'timestamp' => $ts,
+                'value' => $value,
+                'min' => $min,
+                'max' => $max
+            ];
         }
-        $peaks[$portName] = $maxValue;
     }
 
     return [
@@ -368,7 +421,7 @@ function getEfuseHeatmapData($hoursBack = 24) {
         'outputConfig' => $outputConfig['ports'],
         'timeSeries' => $timeSeries,
         'peaks' => $peaks,
-        'timestamps' => array_unique($timestamps),
+        'timestamps' => $allTimestamps,
         'period' => $result['period'] ?? null
     ];
 }

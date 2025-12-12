@@ -187,6 +187,13 @@
     box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
 }
 
+.efusePort.selected {
+    outline: 3px solid #3498db;
+    outline-offset: 2px;
+    transform: translateY(-2px);
+    box-shadow: 0 4px 12px rgba(52, 152, 219, 0.4);
+}
+
 .efusePort.warning {
     animation: pulse-warning 2s infinite;
 }
@@ -256,6 +263,21 @@
         #dc3545 83%,
         #c82333 100%
     );
+}
+
+/* Grid Hint */
+.efuseGridHint {
+    text-align: center;
+    font-size: 0.8rem;
+    color: #6c757d;
+    margin-top: 0.75rem;
+    padding-top: 0.75rem;
+    border-top: 1px solid #e9ecef;
+}
+
+.efuseGridHint i {
+    margin-right: 0.5rem;
+    color: #3498db;
 }
 
 /* Port Detail Panel */
@@ -478,4 +500,112 @@
     .efuseGrid {
         grid-template-columns: repeat(2, 1fr) !important;
     }
+}
+
+/* Expected Help Icon */
+.expectedHelp {
+    cursor: pointer;
+    color: #3498db;
+    font-size: 0.75rem;
+    margin-left: 0.25rem;
+    vertical-align: middle;
+}
+
+.expectedHelp:hover {
+    color: #2980b9;
+}
+
+/* Help Modal */
+.helpModal {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: rgba(0, 0, 0, 0.5);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 1000;
+}
+
+.helpModalContent {
+    background: #fff;
+    border-radius: 8px;
+    max-width: 500px;
+    width: 90%;
+    max-height: 90vh;
+    overflow-y: auto;
+    box-shadow: 0 4px 20px rgba(0, 0, 0, 0.3);
+}
+
+.helpModalHeader {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 1rem 1.5rem;
+    border-bottom: 1px solid #e9ecef;
+}
+
+.helpModalHeader h4 {
+    margin: 0;
+    color: #212529;
+    font-size: 1.1rem;
+}
+
+.helpModalHeader h4 i {
+    color: #3498db;
+    margin-right: 0.5rem;
+}
+
+.helpModalBody {
+    padding: 1.5rem;
+}
+
+.helpModalBody p {
+    margin: 0 0 1rem 0;
+    color: #495057;
+    line-height: 1.5;
+}
+
+.helpModalBody ul {
+    margin: 0 0 1rem 0;
+    padding-left: 1.5rem;
+    color: #495057;
+}
+
+.helpModalBody li {
+    margin-bottom: 0.25rem;
+}
+
+.helpTable {
+    width: 100%;
+    border-collapse: collapse;
+    margin-bottom: 1rem;
+    font-size: 0.9rem;
+}
+
+.helpTable th,
+.helpTable td {
+    padding: 0.5rem 0.75rem;
+    text-align: left;
+    border: 1px solid #e9ecef;
+}
+
+.helpTable th {
+    background: #f8f9fa;
+    font-weight: 600;
+    color: #495057;
+}
+
+.helpTable td {
+    color: #212529;
+}
+
+.helpNote {
+    background: #e7f3ff;
+    border-left: 3px solid #3498db;
+    padding: 0.75rem 1rem;
+    border-radius: 0 4px 4px 0;
+    font-size: 0.9rem;
 }

@@ -81,7 +81,7 @@ if [ "$EFUSE_ENABLED" = "true" ] || [ "$EFUSE_ENABLED" = "1" ] || [ "$EFUSE_ENAB
     EFUSE_SUPPORTED=$(/usr/bin/php -r "include '$PLUGIN_DIR/lib/controllers/efuseHardware.php'; echo detectEfuseHardware()['supported'] ? 'true' : 'false';")
     if [ "$EFUSE_SUPPORTED" = "true" ]; then
         echo "Watcher: eFuse Monitor is enabled, starting collector..."
-        /usr/bin/php /home/fpp/media/plugins/fpp-plugin-watcher/scripts/efuseCollector.php &
+        /usr/bin/php /home/fpp/media/plugins/fpp-plugin-watcher/efuseCollector.php &
     else
         echo "Watcher: eFuse Monitor is enabled but no compatible hardware detected"
     fi

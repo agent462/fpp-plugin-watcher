@@ -27,7 +27,19 @@ let refreshInterval = null;
  * Initialize the eFuse monitor
  */
 function initEfuseMonitor() {
-    loadCurrentData();
+    loadCurrentData().then(() => {
+        // Auto-select Port 1 (or first available port) after data loads
+        const portNames = Object.keys(currentPortData);
+        if (portNames.length > 0) {
+            // Prefer Port 1 if available, otherwise use first port
+            const defaultPort = currentPortData['Port 1'] ? 'Port 1' : portNames.sort((a, b) => {
+                const numA = parseInt(a.replace(/\D/g, '')) || 0;
+                const numB = parseInt(b.replace(/\D/g, '')) || 0;
+                return numA - numB;
+            })[0];
+            showPortDetail(defaultPort);
+        }
+    });
     loadHeatmapData();
 
     // Auto-refresh every 10 seconds
@@ -58,6 +70,7 @@ function getEfuseColor(mA) {
  */
 function formatCurrent(mA, showUnit = true) {
     if (mA === null || mA === undefined) return '--';
+    if (mA === 0) return showUnit ? '0 mA' : '0';
     if (mA >= 1000) {
         return (mA / 1000).toFixed(2) + (showUnit ? ' A' : '');
     }
@@ -213,12 +226,13 @@ function updatePortGrid(ports) {
         const color = getEfuseColor(current);
         const status = portData.status || 'normal';
         const percent = Math.min(100, (current / MAX_CURRENT_MA) * 100);
+        const isSelected = selectedPort === portName ? 'selected' : '';
 
         html += `
-            <div class="efusePort ${status}" onclick="showPortDetail('${escapeHtml(portName)}')"
-                 style="background: ${color};" title="${escapeHtml(portName)}: ${formatCurrent(current)}">
+            <div class="efusePort ${status} ${isSelected}" onclick="showPortDetail('${escapeHtml(portName)}')"
+                 style="background: ${color};" title="Click to view ${escapeHtml(portName)} details">
                 <div class="portName">${escapeHtml(portName.replace('Port', 'P'))}</div>
-                <div class="portValue">${current > 0 ? formatCurrent(current, false) : '--'}</div>
+                <div class="portValue">${formatCurrent(current, false)}</div>
                 <div class="portBar">
                     <div class="portBarFill" style="width: ${percent}%;"></div>
                 </div>
@@ -234,6 +248,9 @@ function updatePortGrid(ports) {
  */
 async function showPortDetail(portName) {
     selectedPort = portName;
+
+    // Update grid to show selected state
+    updatePortGrid(currentPortData);
 
     const panel = document.getElementById('portDetailPanel');
     if (!panel) return;
@@ -348,20 +365,15 @@ function updatePortHistoryChart(data) {
     const ctx = canvas.getContext('2d');
     const history = data.history || [];
 
-    // Prepare data points
+    // Prepare data points - treat null/undefined as 0
     const chartData = history.map(h => ({
         x: new Date(h.timestamp * 1000),
-        y: h.avg || h.value || 0
-    }));
-
-    const minData = history.map(h => ({
-        x: new Date(h.timestamp * 1000),
-        y: h.min || h.value || 0
+        y: h.avg ?? h.value ?? 0
     }));
 
     const maxData = history.map(h => ({
         x: new Date(h.timestamp * 1000),
-        y: h.max || h.value || 0
+        y: h.max ?? h.value ?? 0
     }));
 
     // Destroy existing chart
@@ -379,7 +391,7 @@ function updatePortHistoryChart(data) {
                     borderColor: '#4e9f3d',
                     backgroundColor: 'rgba(78, 159, 61, 0.1)',
                     fill: true,
-                    tension: 0.3,
+                    tension: 0,
                     pointRadius: 0
                 },
                 {
@@ -388,7 +400,7 @@ function updatePortHistoryChart(data) {
                     borderColor: '#dc3545',
                     borderDash: [5, 5],
                     fill: false,
-                    tension: 0.3,
+                    tension: 0,
                     pointRadius: 0
                 }
             ]
@@ -462,12 +474,12 @@ function updateHistoryChart(data) {
             label: portName,
             data: series.map(p => ({
                 x: new Date(p.timestamp * 1000),
-                y: p.value || 0
+                y: p.value ?? 0
             })),
             borderColor: color,
             backgroundColor: color + '20',
             fill: false,
-            tension: 0.3,
+            tension: 0,
             pointRadius: 0
         };
     });
@@ -579,6 +591,23 @@ function escapeHtml(text) {
     const div = document.createElement('div');
     div.textContent = text;
     return div.innerHTML;
+}
+
+/**
+ * Show expected current help modal
+ */
+function showExpectedHelp(event) {
+    if (event) event.stopPropagation();
+    const modal = document.getElementById('expectedHelpModal');
+    if (modal) modal.style.display = 'flex';
+}
+
+/**
+ * Hide expected current help modal
+ */
+function hideExpectedHelp(event) {
+    const modal = document.getElementById('expectedHelpModal');
+    if (modal) modal.style.display = 'none';
 }
 
 // Cleanup on page unload

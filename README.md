@@ -8,7 +8,7 @@ A monitoring and control plugin for Falcon Player (FPP) that provides network co
 - Raspberry Pi 3, 4, 5
 - BeagleBone Black (BBB)
 - PocketBeagle 2 (PB2)
-- PocketBeagle (PB) - To be tested
+- PocketBeagle (PB)
 
 **Performance Note**: BBB and PB are single-core devices with limited memory. While this plugin is optimized for low CPU and memory usage, be mindful of overall system performance when running multiple intensive plugins or FPP features. The System Monitor Dashboard makes it easy to track resource usage in real-time.
 

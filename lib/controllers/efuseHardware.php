@@ -450,25 +450,55 @@ function readEfuseData() {
  * @return int Number of eFuse-capable ports
  */
 function countEfusePortsFromFppd() {
+    $portNames = getEfuseCapablePortNames();
+    return count($portNames);
+}
+
+/**
+ * Get list of port names that have eFuse/current monitoring capability
+ * Based on fppd/ports response - only ports with 'ma' field or smart receivers with A-F data
+ *
+ * @return array List of port names (e.g., ['Port 1', 'Port 2', ...])
+ */
+function getEfuseCapablePortNames() {
     $portsData = @file_get_contents('http://127.0.0.1/api/fppd/ports');
     if ($portsData === false) {
-        return 0;
+        return [];
     }
 
     $portsList = @json_decode($portsData, true);
     if (!is_array($portsList)) {
-        return 0;
+        return [];
     }
 
-    $count = 0;
+    $capablePorts = [];
     foreach ($portsList as $port) {
-        // Ports with 'ma' field are eFuse-capable (excludes smart receiver ports)
-        if (isset($port['ma']) && !isset($port['smartReceivers'])) {
-            $count++;
+        $name = $port['name'] ?? '';
+        if (empty($name)) {
+            continue;
+        }
+
+        // Check for smart receiver ports - only include if they have actual A-F data
+        if (isset($port['smartReceivers']) && $port['smartReceivers']) {
+            $hasSubportData = false;
+            foreach (['A', 'B', 'C', 'D', 'E', 'F'] as $sub) {
+                if (isset($port[$sub]) && isset($port[$sub]['ma'])) {
+                    $hasSubportData = true;
+                    break;
+                }
+            }
+            if ($hasSubportData) {
+                $capablePorts[] = $name;
+            }
+        } else {
+            // Standard port - include if it has 'ma' field (current monitoring)
+            if (isset($port['ma'])) {
+                $capablePorts[] = $name;
+            }
         }
     }
 
-    return $count;
+    return $capablePorts;
 }
 
 /**

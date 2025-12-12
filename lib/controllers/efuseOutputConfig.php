@@ -36,6 +36,7 @@ define('EFUSE_OUTPUT_CONFIG_CACHE_TTL', 60); // 1 minute
 
 /**
  * Get FPP channel output configuration for all ports
+ * Only returns ports that have actual eFuse/current monitoring capability
  *
  * @param bool $forceRefresh Force cache refresh
  * @return array Port configuration with output details
@@ -56,6 +57,9 @@ function getEfuseOutputConfig($forceRefresh = false) {
         'timestamp' => time()
     ];
 
+    // Get list of ports that have actual eFuse/current monitoring
+    $efuseCapablePorts = getEfuseCapablePortNames();
+
     // Get pixel string outputs
     $pixelOutputs = apiCall('GET', 'http://127.0.0.1/api/channel/output/co-pixelStrings', [], true, 5);
 
@@ -66,7 +70,12 @@ function getEfuseOutputConfig($forceRefresh = false) {
 
             foreach ($outputs as $portIndex => $portConfig) {
                 $portNumber = ($portConfig['portNumber'] ?? $portIndex) + 1;
-                $portName = 'Port' . $portNumber;
+                $portName = 'Port ' . $portNumber;  // Match fppd/ports format: "Port 1"
+
+                // Skip if this port doesn't have eFuse/current monitoring capability
+                if (!empty($efuseCapablePorts) && !in_array($portName, $efuseCapablePorts)) {
+                    continue;
+                }
 
                 // Get virtual strings for this port (each can have different settings)
                 $virtualStrings = $portConfig['virtualStrings'] ?? [];
@@ -114,23 +123,28 @@ function getEfuseOutputConfig($forceRefresh = false) {
         }
     }
 
-    // Also check for BBB-specific outputs
-    $allOutputs = apiCall('GET', 'http://127.0.0.1/api/channel/output', [], true, 5);
+    // Also check for BBB-specific outputs (co-bbbStrings is the correct endpoint for BBB/PB devices)
+    $bbbOutputs = apiCall('GET', 'http://127.0.0.1/api/channel/output/co-bbbStrings', [], true, 5);
 
-    if ($allOutputs && isset($allOutputs['channelOutputs'])) {
-        foreach ($allOutputs['channelOutputs'] as $output) {
+    if ($bbbOutputs && isset($bbbOutputs['channelOutputs'])) {
+        foreach ($bbbOutputs['channelOutputs'] as $output) {
             $type = $output['type'] ?? '';
 
-            // Handle BBB48String and similar
-            if (stripos($type, 'BBB') !== false || stripos($type, 'PB') !== false) {
+            // Handle BBB48String, BBShiftString (K16-Max, PB2, etc.) and similar
+            if (stripos($type, 'BB') !== false || stripos($type, 'PB') !== false || stripos($type, 'Shift') !== false) {
                 $outputs = $output['outputs'] ?? [];
 
                 foreach ($outputs as $portIndex => $portConfig) {
                     $portNumber = intval($portConfig['portNumber'] ?? $portIndex) + 1;
-                    $portName = 'Port' . $portNumber;
+                    $portName = 'Port ' . $portNumber;  // Match fppd/ports format: "Port 1"
 
                     // Skip if already processed
                     if (isset($result['ports'][$portName])) {
+                        continue;
+                    }
+
+                    // Skip if this port doesn't have eFuse/current monitoring capability
+                    if (!empty($efuseCapablePorts) && !in_array($portName, $efuseCapablePorts)) {
                         continue;
                     }
 
@@ -172,9 +186,9 @@ function getEfuseOutputConfig($forceRefresh = false) {
         }
     }
 
-    // Sort ports by number
+    // Sort ports by number (handle "Port 1" format with space)
     uksort($result['ports'], function($a, $b) {
-        return intval(substr($a, 4)) - intval(substr($b, 4));
+        return intval(substr($a, 5)) - intval(substr($b, 5));
     });
 
     $_efuseOutputConfigCache = $result;
@@ -197,8 +211,8 @@ function estimatePortCurrent($pixelCount, $protocol = 'ws2811') {
     // Maximum theoretical current (all pixels full white)
     $maxCurrent = $pixelCount * $perPixel;
 
-    // Typical show usage is about 10-20% of max (most shows don't run all white)
-    $typicalCurrent = intval($maxCurrent * 0.15);
+    // Typical show usage is about 10% of max (most shows don't run all white)
+    $typicalCurrent = intval($maxCurrent * 0.10);
 
     return [
         'typical' => $typicalCurrent,

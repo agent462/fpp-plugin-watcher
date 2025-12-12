@@ -100,7 +100,10 @@ renderCommonJS();
         <div class="efuseColorScale">
             <span class="scaleLabel">0A</span>
             <div class="scaleGradient"></div>
-            <span class="scaleLabel">6A</span>
+            <span class="scaleLabel">6A (per port max)</span>
+        </div>
+        <div class="efuseGridHint">
+            <i class="fas fa-hand-pointer"></i> Click a port to view detailed history and configuration
         </div>
     </div>
 
@@ -125,7 +128,7 @@ renderCommonJS();
                     <div class="detailStatValue" id="portDetailAvg">-- mA</div>
                 </div>
                 <div class="detailStatItem">
-                    <div class="detailStatLabel">Expected</div>
+                    <div class="detailStatLabel">Expected <i class="fas fa-question-circle expectedHelp" onclick="showExpectedHelp(event)" title="How is this calculated?"></i></div>
                     <div class="detailStatValue" id="portDetailExpected">-- mA</div>
                 </div>
             </div>
@@ -155,6 +158,41 @@ renderCommonJS();
     <button class="refreshButton" onclick="refreshData()" title="Refresh Data">
         <i class="fas fa-sync-alt"></i>
     </button>
+
+    <!-- Expected Amperage Help Modal -->
+    <div id="expectedHelpModal" class="helpModal" style="display: none;" onclick="hideExpectedHelp(event)">
+        <div class="helpModalContent" onclick="event.stopPropagation()">
+            <div class="helpModalHeader">
+                <h4><i class="fas fa-question-circle"></i> Expected Current Calculation</h4>
+                <button class="closeBtn" onclick="hideExpectedHelp()"><i class="fas fa-times"></i></button>
+            </div>
+            <div class="helpModalBody">
+                <p>Expected current is estimated based on the number of pixels configured for each port:</p>
+
+                <table class="helpTable">
+                    <thead>
+                        <tr><th>Protocol</th><th>Per-Pixel Current</th></tr>
+                    </thead>
+                    <tbody>
+                        <tr><td>WS2811 / WS2812 / SK6812</td><td>60mA (20mA × 3 colors)</td></tr>
+                        <tr><td>APA102</td><td>60mA</td></tr>
+                        <tr><td>TM1814 (RGBW)</td><td>80mA (20mA × 4 colors)</td></tr>
+                    </tbody>
+                </table>
+
+                <p class="helpNote"><strong>Formula:</strong> Pixels × Per-Pixel mA × 10% = Expected Current</p>
+
+                <p>The 10% factor accounts for typical show usage, since pixels rarely run at full white. Actual current varies based on:</p>
+                <ul>
+                    <li>Sequence brightness and colors</li>
+                    <li>Effects being displayed</li>
+                    <li>Global brightness settings</li>
+                </ul>
+
+                <p class="helpNote"><strong>Tip:</strong> If actual current significantly exceeds expected, check for shorts or misconfigured pixel counts.</p>
+            </div>
+        </div>
+    </div>
 </div>
 
 <script>
