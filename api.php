@@ -29,6 +29,7 @@ include_once WATCHERPLUGINDIR . '/lib/metrics/systemMetrics.php';
 include_once WATCHERPLUGINDIR . '/lib/metrics/pingMetrics.php';
 include_once WATCHERPLUGINDIR . '/lib/metrics/multiSyncPingMetrics.php';
 include_once WATCHERPLUGINDIR . '/lib/metrics/networkQualityMetrics.php';
+include_once WATCHERPLUGINDIR . '/lib/metrics/efuseMetrics.php';
 
 // Multi-sync
 include_once WATCHERPLUGINDIR . '/lib/multisync/syncStatus.php';
@@ -136,6 +137,14 @@ function getEndpointsfpppluginwatcher() {
         ['method' => 'GET', 'endpoint' => 'metrics/network-quality/history', 'callback' => 'fpppluginWatcherNetworkQualityHistory'],
         ['method' => 'GET', 'endpoint' => 'metrics/network-quality/host', 'callback' => 'fpppluginWatcherNetworkQualityHost'],
         ['method' => 'POST', 'endpoint' => 'metrics/network-quality/collect', 'callback' => 'fpppluginWatcherNetworkQualityCollect'],
+
+        // eFuse current monitoring
+        ['method' => 'GET', 'endpoint' => 'efuse/supported', 'callback' => 'fpppluginWatcherEfuseSupported'],
+        ['method' => 'GET', 'endpoint' => 'efuse/current', 'callback' => 'fpppluginWatcherEfuseCurrent'],
+        ['method' => 'GET', 'endpoint' => 'efuse/history', 'callback' => 'fpppluginWatcherEfuseHistory'],
+        ['method' => 'GET', 'endpoint' => 'efuse/heatmap', 'callback' => 'fpppluginWatcherEfuseHeatmap'],
+        ['method' => 'GET', 'endpoint' => 'efuse/config', 'callback' => 'fpppluginWatcherEfuseConfig'],
+        ['method' => 'GET', 'endpoint' => 'efuse/outputs', 'callback' => 'fpppluginWatcherEfuseOutputs'],
 
         // Falcon controller
         ['method' => 'GET', 'endpoint' => 'falcon/status', 'callback' => 'fpppluginWatcherFalconStatus'],
@@ -1060,4 +1069,67 @@ function fpppluginWatcherConfigSave() {
         'message' => 'Configuration saved successfully. Some changes may require FPP restart.',
         'bytesWritten' => $result
     ]);
+}
+
+// --- eFuse Monitoring Endpoints ---
+
+// GET /api/plugin/fpp-plugin-watcher/efuse/supported
+function fpppluginWatcherEfuseSupported() {
+    $hardware = detectEfuseHardware();
+    return apiSuccess([
+        'supported' => $hardware['supported'],
+        'type' => $hardware['type'],
+        'ports' => $hardware['ports'],
+        'details' => $hardware['details']
+    ]);
+}
+
+// GET /api/plugin/fpp-plugin-watcher/efuse/current
+function fpppluginWatcherEfuseCurrent() {
+    $hardware = detectEfuseHardware();
+    if (!$hardware['supported']) {
+        return apiError('No compatible eFuse hardware detected', 404);
+    }
+
+    return apiSuccess(getEfuseCurrentStatus());
+}
+
+// GET /api/plugin/fpp-plugin-watcher/efuse/history?port=Port1&hours=24
+function fpppluginWatcherEfuseHistory() {
+    $hardware = detectEfuseHardware();
+    if (!$hardware['supported']) {
+        return apiError('No compatible eFuse hardware detected', 404);
+    }
+
+    $port = getRequiredQueryParam('port');
+    if (!$port) {
+        return apiError('Missing port parameter');
+    }
+
+    return apiSuccess(getEfusePortHistory($port, getHoursParam()));
+}
+
+// GET /api/plugin/fpp-plugin-watcher/efuse/heatmap?hours=24
+function fpppluginWatcherEfuseHeatmap() {
+    $hardware = detectEfuseHardware();
+    if (!$hardware['supported']) {
+        return apiError('No compatible eFuse hardware detected', 404);
+    }
+
+    return apiSuccess(getEfuseHeatmapData(getHoursParam()));
+}
+
+// GET /api/plugin/fpp-plugin-watcher/efuse/config
+function fpppluginWatcherEfuseConfig() {
+    return apiSuccess(getEfuseHardwareSummary());
+}
+
+// GET /api/plugin/fpp-plugin-watcher/efuse/outputs
+function fpppluginWatcherEfuseOutputs() {
+    $hardware = detectEfuseHardware();
+    if (!$hardware['supported']) {
+        return apiError('No compatible eFuse hardware detected', 404);
+    }
+
+    return apiSuccess(getEfuseOutputConfig());
 }

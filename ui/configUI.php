@@ -9,6 +9,7 @@
 include_once "/opt/fpp/www/common.php";
 include_once __DIR__ . "/../lib/core/watcherCommon.php";
 include_once __DIR__ . "/../lib/core/config.php";
+include_once __DIR__ . "/../lib/controllers/efuseHardware.php";
 
 $statusMessage = '';
 $statusType = '';
@@ -33,6 +34,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['save_settings'])) {
     $mqttRetentionDays = intval($_POST['mqttRetentionDays'] ?? 60);
     $issueCheckOutputs = isset($_POST['issueCheckOutputs']) ? 'true' : 'false';
     $issueCheckSequences = isset($_POST['issueCheckSequences']) ? 'true' : 'false';
+    $efuseMonitorEnabled = isset($_POST['efuseMonitorEnabled']) ? 'true' : 'false';
 
     // If 'default' is selected, auto-detect and save the actual interface
     if ($networkAdapter === 'default') {
@@ -89,7 +91,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['save_settings'])) {
             'mqttMonitorEnabled' => $mqttMonitorEnabled,
             'mqttRetentionDays' => $mqttRetentionDays,
             'issueCheckOutputs' => $issueCheckOutputs,
-            'issueCheckSequences' => $issueCheckSequences
+            'issueCheckSequences' => $issueCheckSequences,
+            'efuseMonitorEnabled' => $efuseMonitorEnabled
         ];
 
         foreach ($settingsToSave as $settingName => $settingValue) {
@@ -145,6 +148,9 @@ $gatewayInputValue = ($gatewaySuggestion && !$gatewayAlreadyConfigured) ? $gatew
 
 // Detect if this FPP instance is in player mode (for multisync metrics feature)
 $isPlayerMode = isPlayerMode();
+
+// Detect eFuse hardware
+$efuseHardware = detectEfuseHardware();
 
 // Check for connectivity reset state
 $resetState = readResetState();
@@ -446,6 +452,30 @@ if ($isPlayerMode) {
                     </div>
                 </div>
             </div>
+
+            <?php if ($efuseHardware['supported']): ?>
+            <!-- eFuse Current Monitor Panel -->
+            <div class="settingsPanel">
+                <div class="panelHeader" onclick="watcherTogglePanel(this)">
+                    <div class="panelTitle">
+                        <label class="toggleSwitch toggleSwitch--sm" onclick="event.stopPropagation()">
+                            <input type="checkbox" id="efuseMonitorEnabled" name="efuseMonitorEnabled" value="1"
+                                <?php echo (!empty($config['efuseMonitorEnabled'])) ? 'checked' : ''; ?>>
+                            <span class="toggleSlider toggleSlider--green"></span>
+                        </label>
+                        <i class="fas fa-bolt"></i>
+                        eFuse Current Monitor
+                    </div>
+                    <i class="fas fa-chevron-down panelToggle"></i>
+                </div>
+                <div class="panelBody">
+                    <div class="panelDesc">
+                        Track per-port current draw with heatmap visualization. Detected hardware: <?php echo htmlspecialchars(getEfuseHardwareSummary()['typeLabel'] ?? 'Unknown'); ?>
+                        (<?php echo $efuseHardware['ports']; ?> ports). View trends in the eFuse Monitor dashboard.
+                    </div>
+                </div>
+            </div>
+            <?php endif; ?>
 
             <!-- Form Actions -->
             <div class="formActions">

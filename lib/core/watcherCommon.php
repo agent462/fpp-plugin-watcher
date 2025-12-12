@@ -27,6 +27,7 @@ define("WATCHERMULTISYNCPINGDIR", WATCHERDATADIR."/multisync-ping");
 define("WATCHERNETWORKQUALITYDIR", WATCHERDATADIR."/network-quality");
 define("WATCHERMQTTDIR", WATCHERDATADIR."/mqtt");
 define("WATCHERCONNECTIVITYDIR", WATCHERDATADIR."/connectivity");
+define("WATCHEREFUSEDIR", WATCHERDATADIR."/efuse");
 
 // Data file paths (now in plugin-data subdirectories)
 define("WATCHERPINGMETRICSFILE", WATCHERPINGDIR."/raw.log");
@@ -34,6 +35,12 @@ define("WATCHERMULTISYNCPINGMETRICSFILE", WATCHERMULTISYNCPINGDIR."/raw.log");
 define("WATCHERRESETSTATEFILE", WATCHERCONNECTIVITYDIR."/reset-state.json");
 define("WATCHERMQTTEVENTSFILE", WATCHERMQTTDIR."/events.log");
 define("WATCHERMIGRATIONMARKER", WATCHERDATADIR."/.migration-complete");
+
+// eFuse metrics file paths
+define("WATCHEREFUSERAWFILE", WATCHEREFUSEDIR."/raw.log");
+define("WATCHEREFUSEROLLUPFILE", WATCHEREFUSEDIR."/1min.log");
+define("WATCHEREFUSEROLLUPSTATEFILE", WATCHEREFUSEDIR."/rollup-state.json");
+define("WATCHEREFUSECONFIGFILE", WATCHEREFUSEDIR."/config.json");
 define("WATCHERDEFAULTSETTINGS",
     array(
         'connectivityCheckEnabled' => false,
@@ -51,7 +58,8 @@ define("WATCHERDEFAULTSETTINGS",
         'mqttMonitorEnabled' => false,
         'mqttRetentionDays' => 60,
         'issueCheckOutputs' => true,
-        'issueCheckSequences' => true)
+        'issueCheckSequences' => true,
+        'efuseMonitorEnabled' => false)
         );
 
 // Settings that require FPP restart when changed
@@ -73,7 +81,8 @@ define("WATCHERSETTINGSRESTARTREQUIRED",
         'mqttMonitorEnabled' => true,         // MQTT subscriber started/stopped
         'mqttRetentionDays' => false,         // Cleanup schedule, no restart needed
         'issueCheckOutputs' => false,         // UI feature only
-        'issueCheckSequences' => false        // UI feature only
+        'issueCheckSequences' => false,       // UI feature only
+        'efuseMonitorEnabled' => true         // Daemon started/stopped in postStart.sh
     ));
 
 // Ensure plugin-created files are owned by the FPP user/group for web access
@@ -583,7 +592,8 @@ function ensureDataDirectories() {
         WATCHERMULTISYNCPINGDIR,
         WATCHERNETWORKQUALITYDIR,
         WATCHERMQTTDIR,
-        WATCHERCONNECTIVITYDIR
+        WATCHERCONNECTIVITYDIR,
+        WATCHEREFUSEDIR
     ];
 
     foreach ($dirs as $dir) {
@@ -635,6 +645,12 @@ function getDataCategories() {
             'showFiles' => false,
             'recursive' => true,
             'warning' => 'Collectd uses fixed-size RRD files. Deleting these files will not free storage space unless collectd is disabled first.'
+        ],
+        'efuse' => [
+            'name' => 'eFuse Metrics',
+            'dir' => WATCHEREFUSEDIR,
+            'description' => 'eFuse current monitoring history and rollups',
+            'playerOnly' => false
         ]
     ];
 }

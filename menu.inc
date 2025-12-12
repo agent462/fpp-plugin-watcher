@@ -13,6 +13,7 @@
 
 # Check config for conditional menu entries
 include_once __DIR__ . '/lib/core/config.php';
+include_once __DIR__ . '/lib/controllers/efuseHardware.php';
 $watcherConfig = readPluginConfig();
 $showLocalMetricsMenu = !empty($watcherConfig['collectdEnabled']);
 $showConnectivityMenu = !empty($watcherConfig['connectivityCheckEnabled']);
@@ -21,6 +22,8 @@ $showMultiSyncPingMenu = !empty($watcherConfig['multiSyncPingEnabled']);
 $showFalconMonitorMenu = !empty($watcherConfig['falconMonitorEnabled']);
 $showControlUIMenu = !empty($watcherConfig['controlUIEnabled']);
 $showEventsMenu = !empty($watcherConfig['mqttMonitorEnabled']);
+$efuseHardwareInfo = detectEfuseHardware();
+$showEfuseMenu = $efuseHardwareInfo['supported'] && !empty($watcherConfig['efuseMonitorEnabled']);
 
 $menuEntries = Array(
 	Array(
@@ -65,6 +68,19 @@ if ($showFalconMonitorMenu) {
 			'text' => '<i class="fa-solid fa-feather-pointed"></i> Watcher - Falcon Monitor',
 			'type' => 'status',
 			'page' => 'ui/falconMonitorUI.php',
+			'wrap' => 1
+		)
+	]);
+}
+
+// Add eFuse Monitor menu entry only if hardware detected and enabled
+if ($showEfuseMenu) {
+	$helpIndex = count($menuEntries) - 1;
+	array_splice($menuEntries, $helpIndex, 0, [
+		Array(
+			'text' => '<i class="fa-solid fa-bolt"></i> Watcher - eFuse Monitor',
+			'type' => 'status',
+			'page' => 'ui/efuseMonitorUI.php',
 			'wrap' => 1
 		)
 	]);

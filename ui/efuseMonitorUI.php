@@ -1,0 +1,167 @@
+<?php
+include_once __DIR__ . '/../lib/core/config.php';
+include_once __DIR__ . '/../lib/core/watcherCommon.php';
+include_once __DIR__ . '/../lib/ui/common.php';
+include_once __DIR__ . '/../lib/controllers/efuseHardware.php';
+
+$config = readPluginConfig();
+$hardware = detectEfuseHardware();
+
+renderCSSIncludes(true);
+renderCommonJS();
+?>
+<link rel="stylesheet" href="/plugin.php?plugin=fpp-plugin-watcher&file=css/efuseHeatmap.css&nopage=1">
+<script src="/plugin.php?plugin=fpp-plugin-watcher&file=js/efuseHeatmap.js&nopage=1"></script>
+
+<script>
+    window.efuseConfig = {
+        supported: <?php echo json_encode($hardware['supported']); ?>,
+        type: <?php echo json_encode($hardware['type']); ?>,
+        ports: <?php echo json_encode($hardware['ports']); ?>,
+        typeLabel: <?php echo json_encode($hardware['details']['method'] ?? 'unknown'); ?>
+    };
+</script>
+
+<div class="efuseContainer">
+    <div class="efuseHeader">
+        <h2>
+            <i class="fas fa-bolt"></i> eFuse Current Monitor
+        </h2>
+        <span id="lastUpdate" class="lastUpdate"></span>
+    </div>
+
+    <?php if (!$hardware['supported']): ?>
+    <div class="efuseNotSupported">
+        <i class="fas fa-exclamation-triangle"></i>
+        <h3>No Compatible Hardware Detected</h3>
+        <p>eFuse current monitoring requires compatible hardware such as:</p>
+        <ul>
+            <li>BeagleBone capes with eFuse (PB16, etc.)</li>
+            <li>I2C ADC for current sensing (ADS7828)</li>
+            <li>Falcon smart receivers with current monitoring</li>
+        </ul>
+    </div>
+    <?php else: ?>
+
+    <!-- Hardware Info Bar -->
+    <div class="efuseHardwareInfo">
+        <div class="hardwareItem">
+            <span class="hardwareLabel">Hardware:</span>
+            <span class="hardwareValue" id="hardwareType"><?php echo htmlspecialchars(getEfuseHardwareSummary()['typeLabel'] ?? 'Unknown'); ?></span>
+        </div>
+        <div class="hardwareItem">
+            <span class="hardwareLabel">Ports:</span>
+            <span class="hardwareValue" id="portCount"><?php echo $hardware['ports']; ?></span>
+        </div>
+        <div class="hardwareItem">
+            <span class="hardwareLabel">Method:</span>
+            <span class="hardwareValue" id="readMethod"><?php echo htmlspecialchars(getEfuseHardwareSummary()['methodLabel'] ?? 'Unknown'); ?></span>
+        </div>
+        <div class="hardwareItem">
+            <span class="hardwareLabel">Total Current:</span>
+            <span class="hardwareValue" id="totalCurrent">-- A</span>
+        </div>
+    </div>
+
+    <!-- Stats Bar -->
+    <div class="efuseStatsBar">
+        <div class="statItem">
+            <div class="statLabel">Active Ports</div>
+            <div class="statValue" id="activePorts">--</div>
+        </div>
+        <div class="statItem">
+            <div class="statLabel">Peak (24h)</div>
+            <div class="statValue" id="peakCurrent">-- A</div>
+        </div>
+        <div class="statItem">
+            <div class="statLabel">Average (24h)</div>
+            <div class="statValue" id="avgCurrent">-- A</div>
+        </div>
+    </div>
+
+    <!-- Port Grid Heatmap -->
+    <div class="efuseGridCard">
+        <div class="efuseGridTitle">
+            <span><i class="fas fa-th"></i> Port Current Heatmap</span>
+            <div class="efuseControls">
+                <select id="timeRange" onchange="refreshData()">
+                    <option value="1">Last 1 Hour</option>
+                    <option value="6">Last 6 Hours</option>
+                    <option value="12">Last 12 Hours</option>
+                    <option value="24" selected>Last 24 Hours</option>
+                </select>
+            </div>
+        </div>
+        <div class="efuseGridLoading" id="gridLoading">
+            <i class="fas fa-spinner fa-spin"></i>
+            <p>Loading port data...</p>
+        </div>
+        <div id="efuseGrid" class="efuseGrid"></div>
+        <div class="efuseColorScale">
+            <span class="scaleLabel">0A</span>
+            <div class="scaleGradient"></div>
+            <span class="scaleLabel">6A</span>
+        </div>
+    </div>
+
+    <!-- Port Detail Panel (shown on port click) -->
+    <div id="portDetailPanel" class="portDetailPanel" style="display: none;">
+        <div class="portDetailHeader">
+            <h3><i class="fas fa-plug"></i> <span id="portDetailName">Port 1</span></h3>
+            <button class="closeBtn" onclick="closePortDetail()"><i class="fas fa-times"></i></button>
+        </div>
+        <div class="portDetailContent">
+            <div class="portDetailStats">
+                <div class="detailStatItem">
+                    <div class="detailStatLabel">Current</div>
+                    <div class="detailStatValue" id="portDetailCurrent">-- mA</div>
+                </div>
+                <div class="detailStatItem">
+                    <div class="detailStatLabel">Peak (24h)</div>
+                    <div class="detailStatValue" id="portDetailPeak">-- mA</div>
+                </div>
+                <div class="detailStatItem">
+                    <div class="detailStatLabel">Average</div>
+                    <div class="detailStatValue" id="portDetailAvg">-- mA</div>
+                </div>
+                <div class="detailStatItem">
+                    <div class="detailStatLabel">Expected</div>
+                    <div class="detailStatValue" id="portDetailExpected">-- mA</div>
+                </div>
+            </div>
+            <div class="portOutputConfig" id="portOutputConfig">
+                <!-- Output config loaded dynamically -->
+            </div>
+            <div class="portDetailChart">
+                <canvas id="portHistoryChart"></canvas>
+            </div>
+        </div>
+    </div>
+
+    <!-- History Chart -->
+    <div class="efuseChartCard">
+        <div class="efuseChartTitle">
+            <span><i class="fas fa-chart-area"></i> Current History</span>
+        </div>
+        <div class="chartLoading" id="chartLoading">
+            <i class="fas fa-spinner fa-spin"></i>
+            <p>Loading history data...</p>
+        </div>
+        <canvas id="efuseHistoryChart" style="max-height: 400px;"></canvas>
+    </div>
+
+    <?php endif; ?>
+
+    <button class="refreshButton" onclick="refreshData()" title="Refresh Data">
+        <i class="fas fa-sync-alt"></i>
+    </button>
+</div>
+
+<script>
+<?php if ($hardware['supported']): ?>
+// Initialize on page load
+document.addEventListener('DOMContentLoaded', function() {
+    initEfuseMonitor();
+});
+<?php endif; ?>
+</script>

@@ -9,7 +9,7 @@ DATA_DIR="/home/fpp/media/plugin-data/fpp-plugin-watcher"
 
 # Create data directories for metrics storage
 echo "Watcher: Ensuring data directories exist..."
-mkdir -p "$DATA_DIR/ping" "$DATA_DIR/multisync-ping" "$DATA_DIR/network-quality" "$DATA_DIR/mqtt" "$DATA_DIR/connectivity"
+mkdir -p "$DATA_DIR/ping" "$DATA_DIR/multisync-ping" "$DATA_DIR/network-quality" "$DATA_DIR/mqtt" "$DATA_DIR/connectivity" "$DATA_DIR/efuse"
 chown -R fpp:fpp "$DATA_DIR"
 
 # Run one-time data migration (script checks marker file internally)
@@ -72,4 +72,19 @@ if [ "$MQTT_ENABLED" = "true" ] || [ "$MQTT_ENABLED" = "1" ] || [ "$MQTT_ENABLED
     /usr/bin/php /home/fpp/media/plugins/fpp-plugin-watcher/mqttSubscriber.php &
 else
     echo "Watcher: MQTT Monitor is disabled"
+fi
+
+# Start eFuse Collector if enabled and hardware supported
+EFUSE_ENABLED=$(grep -E "^efuseMonitorEnabled" "$CONFIG_FILE" | cut -d'=' -f2 | tr -d ' \t\r\n"')
+if [ "$EFUSE_ENABLED" = "true" ] || [ "$EFUSE_ENABLED" = "1" ] || [ "$EFUSE_ENABLED" = "yes" ]; then
+    # Check for hardware support
+    EFUSE_SUPPORTED=$(/usr/bin/php -r "include '$PLUGIN_DIR/lib/controllers/efuseHardware.php'; echo detectEfuseHardware()['supported'] ? 'true' : 'false';")
+    if [ "$EFUSE_SUPPORTED" = "true" ]; then
+        echo "Watcher: eFuse Monitor is enabled, starting collector..."
+        /usr/bin/php /home/fpp/media/plugins/fpp-plugin-watcher/scripts/efuseCollector.php &
+    else
+        echo "Watcher: eFuse Monitor is enabled but no compatible hardware detected"
+    fi
+else
+    echo "Watcher: eFuse Monitor is disabled"
 fi

@@ -1,0 +1,481 @@
+/**
+ * eFuse Heatmap Styles
+ */
+
+/* Container */
+.efuseContainer {
+    padding: 1rem;
+    max-width: 1400px;
+    margin: 0 auto;
+}
+
+/* Header */
+.efuseHeader {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 1.5rem;
+}
+
+.efuseHeader h2 {
+    margin: 0;
+    color: #212529;
+    font-size: 1.5rem;
+}
+
+.efuseHeader h2 i {
+    color: #ffc107;
+    margin-right: 0.5rem;
+}
+
+.lastUpdate {
+    font-size: 0.875rem;
+    color: #6c757d;
+}
+
+/* Not Supported Message */
+.efuseNotSupported {
+    background: #f8f9fa;
+    border: 1px solid #e9ecef;
+    border-radius: 8px;
+    padding: 2rem;
+    text-align: center;
+    color: #6c757d;
+}
+
+.efuseNotSupported i {
+    font-size: 3rem;
+    color: #ffc107;
+    margin-bottom: 1rem;
+}
+
+.efuseNotSupported h3 {
+    margin: 0 0 1rem 0;
+    color: #495057;
+}
+
+.efuseNotSupported ul {
+    text-align: left;
+    display: inline-block;
+    margin: 1rem 0 0 0;
+    padding-left: 1.5rem;
+}
+
+/* Hardware Info Bar */
+.efuseHardwareInfo {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 1.5rem;
+    background: #f8f9fa;
+    border: 1px solid #e9ecef;
+    border-radius: 8px;
+    padding: 1rem 1.5rem;
+    margin-bottom: 1rem;
+}
+
+.hardwareItem {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+}
+
+.hardwareLabel {
+    color: #6c757d;
+    font-size: 0.875rem;
+}
+
+.hardwareValue {
+    font-weight: 600;
+    color: #212529;
+}
+
+/* Stats Bar */
+.efuseStatsBar {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+    gap: 1rem;
+    margin-bottom: 1.5rem;
+}
+
+.efuseStatsBar .statItem {
+    background: #fff;
+    border: 1px solid #e9ecef;
+    border-radius: 8px;
+    padding: 1rem;
+    text-align: center;
+}
+
+.efuseStatsBar .statLabel {
+    font-size: 0.75rem;
+    color: #6c757d;
+    text-transform: uppercase;
+    margin-bottom: 0.5rem;
+}
+
+.efuseStatsBar .statValue {
+    font-size: 1.5rem;
+    font-weight: 600;
+    color: #212529;
+}
+
+/* Grid Card */
+.efuseGridCard {
+    background: #fff;
+    border: 1px solid #e9ecef;
+    border-radius: 8px;
+    padding: 1.5rem;
+    margin-bottom: 1.5rem;
+}
+
+.efuseGridTitle {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 1rem;
+    font-weight: 600;
+    color: #495057;
+}
+
+.efuseGridTitle i {
+    margin-right: 0.5rem;
+    color: #6c757d;
+}
+
+.efuseControls select {
+    padding: 0.375rem 0.75rem;
+    border: 1px solid #ced4da;
+    border-radius: 4px;
+    font-size: 0.875rem;
+}
+
+.efuseGridLoading {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    padding: 2rem;
+    color: #6c757d;
+}
+
+.efuseGridLoading i {
+    font-size: 2rem;
+    margin-bottom: 1rem;
+}
+
+/* Port Grid */
+.efuseGrid {
+    display: grid;
+    gap: 0.75rem;
+    margin-bottom: 1rem;
+}
+
+.efusePort {
+    background: #1a1a2e;
+    border-radius: 6px;
+    padding: 0.75rem;
+    text-align: center;
+    cursor: pointer;
+    transition: transform 0.2s, box-shadow 0.2s;
+    min-height: 80px;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+}
+
+.efusePort:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
+}
+
+.efusePort.warning {
+    animation: pulse-warning 2s infinite;
+}
+
+.efusePort.critical {
+    animation: pulse-critical 1s infinite;
+}
+
+@keyframes pulse-warning {
+    0%, 100% { box-shadow: 0 0 0 0 rgba(255, 193, 7, 0.4); }
+    50% { box-shadow: 0 0 0 8px rgba(255, 193, 7, 0); }
+}
+
+@keyframes pulse-critical {
+    0%, 100% { box-shadow: 0 0 0 0 rgba(220, 53, 69, 0.6); }
+    50% { box-shadow: 0 0 0 8px rgba(220, 53, 69, 0); }
+}
+
+.portName {
+    font-size: 0.75rem;
+    font-weight: 600;
+    color: rgba(255, 255, 255, 0.7);
+    margin-bottom: 0.25rem;
+}
+
+.portValue {
+    font-size: 1rem;
+    font-weight: 700;
+    color: #fff;
+    margin-bottom: 0.25rem;
+}
+
+.portBar {
+    height: 4px;
+    background: rgba(255, 255, 255, 0.2);
+    border-radius: 2px;
+    overflow: hidden;
+}
+
+.portBarFill {
+    height: 100%;
+    background: rgba(255, 255, 255, 0.8);
+    border-radius: 2px;
+    transition: width 0.3s ease;
+}
+
+/* Color Scale */
+.efuseColorScale {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    font-size: 0.75rem;
+    color: #6c757d;
+}
+
+.scaleGradient {
+    flex: 1;
+    height: 12px;
+    border-radius: 6px;
+    background: linear-gradient(to right,
+        #1a1a2e 0%,
+        #16213e 8%,
+        #1e5128 17%,
+        #4e9f3d 33%,
+        #ffc107 50%,
+        #fd7e14 67%,
+        #dc3545 83%,
+        #c82333 100%
+    );
+}
+
+/* Port Detail Panel */
+.portDetailPanel {
+    background: #fff;
+    border: 1px solid #e9ecef;
+    border-radius: 8px;
+    padding: 1.5rem;
+    margin-bottom: 1.5rem;
+}
+
+.portDetailHeader {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 1rem;
+    padding-bottom: 1rem;
+    border-bottom: 1px solid #e9ecef;
+}
+
+.portDetailHeader h3 {
+    margin: 0;
+    color: #212529;
+}
+
+.portDetailHeader i {
+    color: #6c757d;
+    margin-right: 0.5rem;
+}
+
+.closeBtn {
+    background: none;
+    border: none;
+    font-size: 1.25rem;
+    color: #6c757d;
+    cursor: pointer;
+    padding: 0.25rem 0.5rem;
+}
+
+.closeBtn:hover {
+    color: #dc3545;
+}
+
+.portDetailStats {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+    gap: 1rem;
+    margin-bottom: 1.5rem;
+}
+
+.detailStatItem {
+    text-align: center;
+    padding: 0.75rem;
+    background: #f8f9fa;
+    border-radius: 6px;
+}
+
+.detailStatLabel {
+    font-size: 0.75rem;
+    color: #6c757d;
+    text-transform: uppercase;
+    margin-bottom: 0.25rem;
+}
+
+.detailStatValue {
+    font-size: 1.25rem;
+    font-weight: 600;
+    color: #212529;
+}
+
+/* Output Config */
+.portOutputConfig {
+    background: #f8f9fa;
+    border-radius: 6px;
+    padding: 1rem;
+    margin-bottom: 1rem;
+}
+
+.outputConfigTitle {
+    font-weight: 600;
+    color: #495057;
+    margin-bottom: 0.75rem;
+    font-size: 0.875rem;
+}
+
+.outputConfigGrid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+    gap: 0.5rem;
+}
+
+.configItem {
+    display: flex;
+    gap: 0.5rem;
+    font-size: 0.875rem;
+}
+
+.configItem.configDesc {
+    grid-column: 1 / -1;
+}
+
+.configLabel {
+    color: #6c757d;
+}
+
+.configValue {
+    font-weight: 500;
+    color: #212529;
+}
+
+.expectedInfo {
+    margin-top: 0.75rem;
+    padding-top: 0.75rem;
+    border-top: 1px solid #e9ecef;
+    font-size: 0.875rem;
+    color: #6c757d;
+}
+
+.noConfig {
+    color: #6c757d;
+    font-style: italic;
+}
+
+/* Port Detail Chart */
+.portDetailChart {
+    height: 200px;
+}
+
+/* Chart Card */
+.efuseChartCard {
+    background: #fff;
+    border: 1px solid #e9ecef;
+    border-radius: 8px;
+    padding: 1.5rem;
+    margin-bottom: 1.5rem;
+}
+
+.efuseChartTitle {
+    font-weight: 600;
+    color: #495057;
+    margin-bottom: 1rem;
+}
+
+.efuseChartTitle i {
+    margin-right: 0.5rem;
+    color: #6c757d;
+}
+
+.chartLoading {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    padding: 2rem;
+    color: #6c757d;
+}
+
+.chartLoading i {
+    font-size: 2rem;
+    margin-bottom: 1rem;
+}
+
+/* Refresh Button */
+.refreshButton {
+    position: fixed;
+    bottom: 2rem;
+    right: 2rem;
+    width: 50px;
+    height: 50px;
+    border-radius: 50%;
+    background: #3498db;
+    color: #fff;
+    border: none;
+    box-shadow: 0 4px 12px rgba(52, 152, 219, 0.4);
+    cursor: pointer;
+    font-size: 1.25rem;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: transform 0.2s, background 0.2s;
+    z-index: 100;
+}
+
+.refreshButton:hover {
+    transform: scale(1.1);
+    background: #2980b9;
+}
+
+/* No Data Message */
+.noDataMessage {
+    text-align: center;
+    padding: 2rem;
+    color: #6c757d;
+    font-style: italic;
+}
+
+/* Responsive */
+@media (max-width: 768px) {
+    .efuseHeader {
+        flex-direction: column;
+        gap: 0.5rem;
+        text-align: center;
+    }
+
+    .efuseHardwareInfo {
+        flex-direction: column;
+        gap: 0.5rem;
+    }
+
+    .efuseGrid {
+        grid-template-columns: repeat(4, 1fr) !important;
+    }
+
+    .portDetailStats {
+        grid-template-columns: repeat(2, 1fr);
+    }
+}
+
+@media (max-width: 480px) {
+    .efuseGrid {
+        grid-template-columns: repeat(2, 1fr) !important;
+    }
+}
