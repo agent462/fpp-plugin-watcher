@@ -4,9 +4,12 @@
  *
  * Detects compatible eFuse hardware and provides methods to read current values.
  * Supports:
- * - BBB capes with eFuse (PB16, etc.)
- * - I2C ADC for current sensing (ADS7828)
+ * - BBB/PB capes with eFuse (PB2, PB16, F8-PB, etc.)
+ * - Pi hats with current sensing
  * - Falcon smart receivers
+ *
+ * IMPORTANT: This library NEVER uses i2cdetect or FPP API for hardware detection.
+ * All detection is done via fast file reads only.
  *
  * @package fpp-plugin-watcher
  */
@@ -17,9 +20,14 @@ include_once __DIR__ . '/../core/watcherCommon.php';
 define('EFUSE_HARDWARE_CACHE_TTL', 3600); // 1 hour - hardware doesn't change often
 define('EFUSE_HARDWARE_CACHE_FILE', WATCHEREFUSEDIR . '/hardware-cache.json');
 
+// FPP config file locations
+define('FPP_TMP_DIR', '/home/fpp/media/tmp');
+define('FPP_CONFIG_DIR', '/home/fpp/media/config');
+define('FPP_CAPES_DIR', '/opt/fpp/capes');
+
 /**
  * Detect eFuse-capable hardware on this system
- * Uses file-based caching to avoid slow I2C detection on every page load
+ * Uses file-based caching and ONLY reads config files - never calls APIs or i2cdetect
  *
  * @param bool $forceRefresh Force a fresh detection, ignoring cache
  * @return array ['supported' => bool, 'type' => string, 'ports' => int, 'details' => array]
@@ -42,27 +50,20 @@ function detectEfuseHardware($forceRefresh = false) {
         'details' => []
     ];
 
-    // Check in order of priority (fast checks first)
+    // Check in order of priority (all are fast file reads)
 
-    // 1. Check for BBB capes with eFuse support (file reads - fast)
-    $capeResult = detectBBBCapeEfuse();
+    // 1. Check for BBB/PB/Pi capes with eFuse support via cape-info.json + string configs
+    $capeResult = detectCapeEfuse();
     if ($capeResult['supported']) {
         saveEfuseHardwareCache($capeResult);
         return $capeResult;
     }
 
-    // 2. Check for Falcon smart receivers via channel output config (API call - medium)
-    $falconResult = detectFalconSmartReceivers();
-    if ($falconResult['supported']) {
-        saveEfuseHardwareCache($falconResult);
-        return $falconResult;
-    }
-
-    // 3. Check for I2C ADC (ADS7828) - SLOW, do this last
-    $i2cResult = detectI2CAdc();
-    if ($i2cResult['supported']) {
-        saveEfuseHardwareCache($i2cResult);
-        return $i2cResult;
+    // 2. Check for smart receivers via channel output config files (no API)
+    $smartResult = detectSmartReceiversFromConfig();
+    if ($smartResult['supported']) {
+        saveEfuseHardwareCache($smartResult);
+        return $smartResult;
     }
 
     // No hardware found - cache this result too
@@ -90,216 +91,88 @@ function saveEfuseHardwareCache($result) {
 }
 
 /**
- * Check for BBB capes with eFuse support
+ * Detect cape-based eFuse support by reading FPP config files
+ * Checks cape-info.json and string config files for eFuse pin definitions
  *
  * @return array Detection result
  */
-function detectBBBCapeEfuse() {
+function detectCapeEfuse() {
     $result = [
         'supported' => false,
-        'type' => 'bbb_cape',
+        'type' => 'cape',
         'ports' => 0,
         'details' => []
     ];
 
-    // Check if we're on a BeagleBone
-    if (!file_exists('/proc/device-tree/model')) {
+    // Step 1: Check for cape-info.json (FPP extracts this from EEPROM on boot)
+    $capeInfoFile = FPP_TMP_DIR . '/cape-info.json';
+    $capeInfo = null;
+
+    if (file_exists($capeInfoFile)) {
+        $capeInfo = @json_decode(file_get_contents($capeInfoFile), true);
+    }
+
+    // Step 2: Get the subType from channel output config
+    $channelOutputInfo = getChannelOutputConfig();
+    if (!$channelOutputInfo) {
         return $result;
     }
 
-    $model = @file_get_contents('/proc/device-tree/model');
-    if (stripos($model, 'BeagleBone') === false) {
+    $subType = $channelOutputInfo['subType'] ?? '';
+    $outputType = $channelOutputInfo['type'] ?? '';
+    $configuredPorts = $channelOutputInfo['outputCount'] ?? 0;
+
+    if (empty($subType)) {
         return $result;
     }
 
-    // Check for FPP cape configuration files
-    $capeDir = '/opt/fpp/capes';
-    if (!is_dir($capeDir)) {
+    // Step 3: Load the string config for this subType
+    $stringConfig = loadStringConfig($subType);
+    if (!$stringConfig) {
         return $result;
     }
 
-    // Look for cape JSON files that indicate eFuse capability
-    $capeFiles = glob($capeDir . '/*.json');
-    foreach ($capeFiles as $capeFile) {
-        $capeData = @json_decode(file_get_contents($capeFile), true);
-        if (!$capeData) {
-            continue;
-        }
+    // Step 4: Check if any outputs have eFuse pins or current monitors
+    $outputs = $stringConfig['outputs'] ?? [];
+    $portsWithEfuse = 0;
+    $hasCurrentMonitor = false;
 
-        // Check for eFuse/current monitoring capability indicators
-        // PB16 and similar capes with eFuse have specific identifiers
-        $capeName = $capeData['name'] ?? '';
-        $hasEfuse = false;
-        $ports = 0;
-
-        // Known capes with eFuse support
-        if (preg_match('/PB(\d+)/i', $capeName, $matches)) {
-            $ports = intval($matches[1]);
-            // PB16, PB8, etc. have eFuse monitoring
-            if ($ports > 0 && isset($capeData['outputs'])) {
-                $hasEfuse = true;
-            }
-        }
-
-        // Check for explicit eFuse indicator in cape config
-        if (isset($capeData['efuse']) || isset($capeData['currentMonitoring'])) {
-            $hasEfuse = true;
-            if (isset($capeData['outputs']) && is_array($capeData['outputs'])) {
-                $ports = count($capeData['outputs']);
-            }
-        }
-
-        if ($hasEfuse && $ports > 0) {
-            $result['supported'] = true;
-            $result['ports'] = $ports;
-            $result['details'] = [
-                'cape' => $capeName,
-                'capeFile' => basename($capeFile),
-                'method' => 'sysfs'
-            ];
-            return $result;
-        }
-    }
-
-    // Check for IIO devices (ADC on BBB)
-    $iioDevices = glob('/sys/bus/iio/devices/iio:device*/name');
-    foreach ($iioDevices as $nameFile) {
-        $name = trim(@file_get_contents($nameFile) ?: '');
-        // TI ADC on BBB for current sensing
-        if (strpos($name, 'TI-am335x-adc') !== false || strpos($name, 'adc') !== false) {
-            $deviceDir = dirname($nameFile);
-            $channels = glob($deviceDir . '/in_voltage*_raw');
-            if (count($channels) > 0) {
-                $result['supported'] = true;
-                $result['ports'] = count($channels);
-                $result['details'] = [
-                    'device' => $deviceDir,
-                    'channels' => count($channels),
-                    'method' => 'iio'
-                ];
-                return $result;
+    foreach ($outputs as $output) {
+        if (isset($output['eFusePin']) || isset($output['currentMonitor'])) {
+            $portsWithEfuse++;
+            if (isset($output['currentMonitor'])) {
+                $hasCurrentMonitor = true;
             }
         }
     }
 
-    return $result;
-}
-
-/**
- * Check for I2C ADC (ADS7828) for current sensing
- *
- * @return array Detection result
- */
-function detectI2CAdc() {
-    $result = [
-        'supported' => false,
-        'type' => 'i2c_adc',
-        'ports' => 0,
-        'details' => []
-    ];
-
-    // ADS7828 addresses are 0x48-0x4B
-    $adsAddresses = ['0x48', '0x49', '0x4a', '0x4b'];
-    $i2cBuses = [1, 2]; // Common I2C buses
-
-    foreach ($i2cBuses as $bus) {
-        if (!file_exists("/dev/i2c-{$bus}")) {
-            continue;
-        }
-
-        // Use i2cdetect to find ADS7828
-        $output = [];
-        exec("i2cdetect -y {$bus} 2>/dev/null", $output);
-
-        $detectedAddresses = [];
-        foreach ($output as $line) {
-            foreach ($adsAddresses as $addr) {
-                // i2cdetect shows addresses in the format "48" (without 0x)
-                $shortAddr = substr($addr, 2);
-                if (strpos($line, $shortAddr) !== false && strpos($line, '--') === false) {
-                    // Verify this is actually an ADS7828 by trying to read from it
-                    $testOutput = [];
-                    exec("i2cget -y {$bus} {$addr} 0x00 2>/dev/null", $testOutput, $retval);
-                    if ($retval === 0) {
-                        $detectedAddresses[] = $addr;
-                    }
-                }
-            }
-        }
-
-        if (!empty($detectedAddresses)) {
-            // ADS7828 has 8 channels per chip
-            $result['supported'] = true;
-            $result['ports'] = count($detectedAddresses) * 8;
-            $result['details'] = [
-                'bus' => $bus,
-                'addresses' => $detectedAddresses,
-                'channelsPerChip' => 8,
-                'method' => 'i2c'
-            ];
-            return $result;
+    // Also check if outputs have enablePin (indicates controllable outputs)
+    $portsWithEnable = 0;
+    foreach ($outputs as $output) {
+        if (isset($output['enablePin'])) {
+            $portsWithEnable++;
         }
     }
 
-    return $result;
-}
-
-/**
- * Check for Falcon smart receivers with current monitoring
- *
- * @return array Detection result
- */
-function detectFalconSmartReceivers() {
-    $result = [
-        'supported' => false,
-        'type' => 'falcon_smart',
-        'ports' => 0,
-        'details' => []
-    ];
-
-    // Query FPP's channel output configuration
-    $outputConfig = apiCall('GET', 'http://127.0.0.1/api/channel/output', [], true, 5);
-
-    if (!$outputConfig || !isset($outputConfig['channelOutputs'])) {
-        return $result;
+    // Use the larger of efuse ports or enable ports
+    $detectedPorts = max($portsWithEfuse, $portsWithEnable);
+    if ($detectedPorts == 0) {
+        $detectedPorts = count($outputs);
     }
 
-    $smartReceivers = [];
-
-    foreach ($outputConfig['channelOutputs'] as $output) {
-        $type = $output['type'] ?? '';
-
-        // Look for smart receiver configurations (Falcon V5+)
-        if (stripos($type, 'BBB48String') !== false ||
-            stripos($type, 'F48') !== false ||
-            stripos($type, 'FalconV5') !== false) {
-
-            // Check for smart receiver ports
-            $outputs = $output['outputs'] ?? [];
-            foreach ($outputs as $port) {
-                $smartRemote = $port['smartRemote'] ?? 0;
-                if ($smartRemote > 0) {
-                    $smartReceivers[$smartRemote] = [
-                        'dial' => $smartRemote,
-                        'ports' => isset($port['virtualStrings']) ? count($port['virtualStrings']) : 6
-                    ];
-                }
-            }
-        }
-    }
-
-    if (!empty($smartReceivers)) {
-        $totalPorts = 0;
-        foreach ($smartReceivers as $sr) {
-            $totalPorts += $sr['ports'];
-        }
+    if ($detectedPorts > 0) {
+        $capeName = $capeInfo['name'] ?? $stringConfig['name'] ?? $subType;
 
         $result['supported'] = true;
-        $result['ports'] = $totalPorts;
+        $result['type'] = 'cape';
+        $result['ports'] = $detectedPorts;
         $result['details'] = [
-            'receivers' => array_values($smartReceivers),
-            'count' => count($smartReceivers),
-            'method' => 'falcon_api'
+            'cape' => $capeName,
+            'subType' => $subType,
+            'outputType' => $outputType,
+            'portsWithEfuse' => $portsWithEfuse,
+            'hasCurrentMonitor' => $hasCurrentMonitor,
+            'method' => $hasCurrentMonitor ? 'current_monitor' : 'efuse_pin'
         ];
     }
 
@@ -307,7 +180,196 @@ function detectFalconSmartReceivers() {
 }
 
 /**
+ * Get channel output configuration from config files
+ *
+ * @return array|null Channel output info or null if not found
+ */
+function getChannelOutputConfig() {
+    // Check for BBB strings config
+    $configFiles = [
+        FPP_CONFIG_DIR . '/co-bbbStrings.json',
+        FPP_CONFIG_DIR . '/co-pixelStrings.json',
+        FPP_CONFIG_DIR . '/channeloutputs.json'
+    ];
+
+    foreach ($configFiles as $configFile) {
+        if (!file_exists($configFile)) {
+            continue;
+        }
+
+        $config = @json_decode(file_get_contents($configFile), true);
+        if (!$config || !isset($config['channelOutputs'])) {
+            continue;
+        }
+
+        foreach ($config['channelOutputs'] as $output) {
+            $type = $output['type'] ?? '';
+
+            // Look for string output types that might have eFuse
+            if (in_array($type, ['BBB48String', 'BBBSerial', 'RPIWS281X', 'DPIPixels', 'spixels'])) {
+                return [
+                    'type' => $type,
+                    'subType' => $output['subType'] ?? '',
+                    'outputCount' => $output['outputCount'] ?? count($output['outputs'] ?? []),
+                    'pinoutVersion' => $output['pinoutVersion'] ?? '1.x',
+                    'configFile' => basename($configFile)
+                ];
+            }
+        }
+    }
+
+    return null;
+}
+
+/**
+ * Load string configuration for a cape subType
+ *
+ * @param string $subType The cape subType name
+ * @return array|null String config or null if not found
+ */
+function loadStringConfig($subType) {
+    // Priority 1: Check /home/fpp/media/tmp/strings/ (extracted from EEPROM)
+    $tmpFile = FPP_TMP_DIR . '/strings/' . $subType . '.json';
+    if (file_exists($tmpFile)) {
+        $config = @json_decode(file_get_contents($tmpFile), true);
+        if ($config) {
+            return $config;
+        }
+    }
+
+    // Priority 2: Check platform-specific capes directory
+    $platform = detectPlatform();
+    $platformDir = FPP_CAPES_DIR . '/' . $platform . '/strings/' . $subType . '.json';
+    if (file_exists($platformDir)) {
+        $config = @json_decode(file_get_contents($platformDir), true);
+        if ($config) {
+            return $config;
+        }
+    }
+
+    // Priority 3: Check other capes directories
+    $capeDirs = ['bbb', 'pb', 'pi', 'virtual'];
+    foreach ($capeDirs as $dir) {
+        $file = FPP_CAPES_DIR . '/' . $dir . '/strings/' . $subType . '.json';
+        if (file_exists($file)) {
+            $config = @json_decode(file_get_contents($file), true);
+            if ($config) {
+                return $config;
+            }
+        }
+    }
+
+    return null;
+}
+
+/**
+ * Detect platform type
+ *
+ * @return string Platform directory name
+ */
+function detectPlatform() {
+    if (file_exists('/proc/device-tree/model')) {
+        $model = @file_get_contents('/proc/device-tree/model');
+        if (stripos($model, 'PocketBeagle') !== false) {
+            return 'pb';
+        }
+        if (stripos($model, 'BeagleBone') !== false) {
+            return 'bbb';
+        }
+        if (stripos($model, 'Raspberry') !== false) {
+            return 'pi';
+        }
+    }
+    return 'pi'; // Default to pi
+}
+
+/**
+ * Detect smart receivers from channel output config files (no API calls)
+ *
+ * @return array Detection result
+ */
+function detectSmartReceiversFromConfig() {
+    $result = [
+        'supported' => false,
+        'type' => 'smart_receiver',
+        'ports' => 0,
+        'details' => []
+    ];
+
+    // Check channel output config files
+    $configFiles = [
+        FPP_CONFIG_DIR . '/co-bbbStrings.json',
+        FPP_CONFIG_DIR . '/co-pixelStrings.json'
+    ];
+
+    foreach ($configFiles as $configFile) {
+        if (!file_exists($configFile)) {
+            continue;
+        }
+
+        $config = @json_decode(file_get_contents($configFile), true);
+        if (!$config || !isset($config['channelOutputs'])) {
+            continue;
+        }
+
+        $smartReceivers = [];
+
+        foreach ($config['channelOutputs'] as $output) {
+            $type = $output['type'] ?? '';
+
+            // Look for string output types that support smart receivers
+            if (!in_array($type, ['BBB48String', 'RPIWS281X', 'DPIPixels'])) {
+                continue;
+            }
+
+            $outputs = $output['outputs'] ?? [];
+            foreach ($outputs as $portConfig) {
+                $smartRemote = $portConfig['smartRemote'] ?? 0;
+                if ($smartRemote > 0) {
+                    // Count virtual strings as ports on this smart receiver
+                    $virtualStrings = $portConfig['virtualStrings'] ?? [];
+                    $activeStrings = 0;
+                    foreach ($virtualStrings as $vs) {
+                        if (($vs['pixelCount'] ?? 0) > 0) {
+                            $activeStrings++;
+                        }
+                    }
+
+                    if (!isset($smartReceivers[$smartRemote])) {
+                        $smartReceivers[$smartRemote] = [
+                            'dial' => $smartRemote,
+                            'ports' => 0
+                        ];
+                    }
+                    $smartReceivers[$smartRemote]['ports'] += max(1, $activeStrings);
+                }
+            }
+        }
+
+        if (!empty($smartReceivers)) {
+            $totalPorts = 0;
+            foreach ($smartReceivers as $sr) {
+                $totalPorts += $sr['ports'];
+            }
+
+            $result['supported'] = true;
+            $result['ports'] = $totalPorts;
+            $result['details'] = [
+                'receivers' => array_values($smartReceivers),
+                'count' => count($smartReceivers),
+                'method' => 'smart_receiver'
+            ];
+            return $result;
+        }
+    }
+
+    return $result;
+}
+
+/**
  * Read current eFuse port data
+ * For actual current values, we need to read from FPP's fppd/ports endpoint
+ * since that's where the real-time current data comes from
  *
  * @return array ['success' => bool, 'timestamp' => int, 'ports' => [portName => mA value]]
  */
@@ -324,202 +386,62 @@ function readEfuseData() {
 
     $method = $hardware['details']['method'] ?? 'unknown';
 
-    switch ($method) {
-        case 'sysfs':
-            return readEfuseFromSysfs($hardware['details']);
-
-        case 'iio':
-            return readEfuseFromIIO($hardware['details']);
-
-        case 'i2c':
-            return readEfuseFromI2C($hardware['details']);
-
-        case 'falcon_api':
-            return readEfuseFromFalconAPI($hardware['details']);
-
-        default:
-            return [
-                'success' => false,
-                'error' => "Unknown read method: {$method}",
-                'ports' => []
-            ];
-    }
+    // For reading actual current values, we use fppd/ports as it's the only
+    // reliable source of real-time current data from FPP's OutputMonitor
+    return readEfuseFromFppdPorts();
 }
 
 /**
- * Read eFuse data from sysfs (BBB capes)
+ * Read eFuse data from FPP's fppd/ports endpoint
+ * This is the reliable source for real-time current values
  *
- * @param array $details Hardware details
  * @return array Port data
  */
-function readEfuseFromSysfs($details) {
+function readEfuseFromFppdPorts() {
     $ports = [];
 
-    // Check for hwmon interface
-    $hwmonDirs = glob('/sys/class/hwmon/hwmon*/');
-    foreach ($hwmonDirs as $hwmonDir) {
-        $currFiles = glob($hwmonDir . 'curr*_input');
-        foreach ($currFiles as $i => $currFile) {
-            $value = @file_get_contents($currFile);
-            if ($value !== false) {
-                // hwmon values are typically in milliamps
-                $mA = intval(trim($value));
-                $portName = 'Port' . ($i + 1);
-                if ($mA > 0) { // Only store non-zero values
-                    $ports[$portName] = $mA;
-                }
-            }
-        }
-    }
-
-    return [
-        'success' => true,
-        'timestamp' => time(),
-        'ports' => $ports,
-        'method' => 'sysfs'
-    ];
-}
-
-/**
- * Read eFuse data from IIO devices (BBB ADC)
- *
- * @param array $details Hardware details
- * @return array Port data
- */
-function readEfuseFromIIO($details) {
-    $ports = [];
-    $deviceDir = $details['device'] ?? '';
-
-    if (empty($deviceDir) || !is_dir($deviceDir)) {
+    // Read from local fppd/ports - this is fast since it's just reading
+    // from OutputMonitor's in-memory data
+    $portsData = @file_get_contents('http://127.0.0.1/api/fppd/ports');
+    if ($portsData === false) {
         return [
             'success' => false,
-            'error' => 'IIO device directory not found',
+            'error' => 'Could not read port data from fppd',
             'ports' => []
         ];
     }
 
-    $channels = glob($deviceDir . '/in_voltage*_raw');
-    foreach ($channels as $channel) {
-        // Extract channel number from filename
-        if (preg_match('/in_voltage(\d+)_raw/', $channel, $matches)) {
-            $channelNum = intval($matches[1]);
-            $rawValue = intval(trim(@file_get_contents($channel) ?: '0'));
-
-            // Get scale if available
-            $scaleFile = $deviceDir . "/in_voltage{$channelNum}_scale";
-            $scale = file_exists($scaleFile) ? floatval(trim(@file_get_contents($scaleFile))) : 1.0;
-
-            // Convert to mA (assuming typical current sense resistor setup)
-            // This may need calibration based on actual hardware
-            $voltage = $rawValue * $scale;
-            $mA = intval($voltage * 1000); // Simplified conversion
-
-            $portName = 'Port' . ($channelNum + 1);
-            if ($mA > 0) {
-                $ports[$portName] = $mA;
-            }
-        }
+    $portsList = @json_decode($portsData, true);
+    if (!is_array($portsList)) {
+        return [
+            'success' => false,
+            'error' => 'Invalid port data from fppd',
+            'ports' => []
+        ];
     }
 
-    return [
-        'success' => true,
-        'timestamp' => time(),
-        'ports' => $ports,
-        'method' => 'iio'
-    ];
-}
-
-/**
- * Read eFuse data from I2C ADC (ADS7828)
- *
- * @param array $details Hardware details
- * @return array Port data
- */
-function readEfuseFromI2C($details) {
-    $ports = [];
-    $bus = $details['bus'] ?? 1;
-    $addresses = $details['addresses'] ?? [];
-
-    // ADS7828 channel command bytes (single-ended, internal ref off, AD on)
-    $channelCmds = [0x00, 0x40, 0x10, 0x50, 0x20, 0x60, 0x30, 0x70];
-
-    $portIndex = 1;
-    foreach ($addresses as $address) {
-        foreach ($channelCmds as $channel => $cmd) {
-            // Read from ADS7828
-            $cmdHex = sprintf('0x%02x', $cmd);
-            $output = [];
-            exec("i2cget -y {$bus} {$address} {$cmdHex} w 2>/dev/null", $output, $retval);
-
-            if ($retval === 0 && !empty($output[0])) {
-                // ADS7828 returns 12-bit value
-                $rawValue = hexdec($output[0]);
-                // Swap bytes (I2C word read is little-endian)
-                $rawValue = (($rawValue & 0xFF) << 8) | (($rawValue >> 8) & 0xFF);
-                $rawValue = $rawValue >> 4; // 12-bit value
-
-                // Convert to mA (assuming 3.3V reference, 0.1 ohm sense resistor)
-                // Adjust these values based on actual hardware
-                $voltage = ($rawValue / 4095.0) * 3.3;
-                $mA = intval(($voltage / 0.1) * 1000); // V/R * 1000 = mA
-
-                $portName = 'Port' . $portIndex;
-                if ($mA > 0) {
-                    $ports[$portName] = $mA;
-                }
-            }
-            $portIndex++;
+    foreach ($portsList as $port) {
+        $name = $port['name'] ?? '';
+        if (empty($name)) {
+            continue;
         }
-    }
 
-    return [
-        'success' => true,
-        'timestamp' => time(),
-        'ports' => $ports,
-        'method' => 'i2c'
-    ];
-}
-
-/**
- * Read eFuse data from Falcon smart receivers via API
- *
- * @param array $details Hardware details
- * @return array Port data
- */
-function readEfuseFromFalconAPI($details) {
-    $ports = [];
-
-    // Falcon smart receivers report current via the FPP plugin system
-    // Check for output monitor shared memory or socket
-    $shmFiles = glob('/dev/shm/fpp*');
-
-    foreach ($shmFiles as $shmFile) {
-        if (strpos($shmFile, 'output') !== false || strpos($shmFile, 'current') !== false) {
-            // Read from shared memory if available
-            $data = @file_get_contents($shmFile);
-            if ($data !== false) {
-                $parsed = @json_decode($data, true);
-                if (is_array($parsed)) {
-                    foreach ($parsed as $portName => $value) {
-                        if (is_numeric($value) && $value > 0) {
-                            $ports[$portName] = intval($value);
-                        }
+        // Check for smart receiver ports (A, B, C, D, E, F subports)
+        if (isset($port['smartReceivers']) && $port['smartReceivers']) {
+            foreach (['A', 'B', 'C', 'D', 'E', 'F'] as $sub) {
+                if (isset($port[$sub]) && isset($port[$sub]['ma'])) {
+                    $subName = $name . '-' . $sub;
+                    $ma = intval($port[$sub]['ma']);
+                    if ($ma > 0) {
+                        $ports[$subName] = $ma;
                     }
                 }
             }
-        }
-    }
-
-    // Fallback: Try to read from FPP's output monitor endpoint if available
-    if (empty($ports)) {
-        $monitorData = apiCall('GET', 'http://127.0.0.1/api/fppd/e131stats', [], true, 2);
-        if ($monitorData && isset($monitorData['ports'])) {
-            foreach ($monitorData['ports'] as $port) {
-                $name = $port['name'] ?? ('Port' . ($port['port'] ?? 0));
-                $current = $port['current'] ?? 0;
-                if ($current > 0) {
-                    $ports[$name] = intval($current);
-                }
+        } else {
+            // Standard port
+            $ma = $port['ma'] ?? 0;
+            if ($ma > 0) {
+                $ports[$name] = intval($ma);
             }
         }
     }
@@ -528,7 +450,7 @@ function readEfuseFromFalconAPI($details) {
         'success' => true,
         'timestamp' => time(),
         'ports' => $ports,
-        'method' => 'falcon_api'
+        'method' => 'fppd_ports'
     ];
 }
 
@@ -548,16 +470,14 @@ function getEfuseHardwareSummary() {
     }
 
     $typeLabels = [
-        'bbb_cape' => 'BeagleBone Cape',
-        'i2c_adc' => 'I2C Current Sensor',
-        'falcon_smart' => 'Falcon Smart Receiver'
+        'cape' => 'Cape/Hat',
+        'smart_receiver' => 'Smart Receiver'
     ];
 
     $methodLabels = [
-        'sysfs' => 'Linux sysfs',
-        'iio' => 'IIO subsystem',
-        'i2c' => 'I2C direct',
-        'falcon_api' => 'Falcon API'
+        'current_monitor' => 'Current Monitor',
+        'efuse_pin' => 'eFuse Pin',
+        'smart_receiver' => 'Smart Receiver Protocol'
     ];
 
     return [
