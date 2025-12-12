@@ -13,22 +13,26 @@
 
 include_once __DIR__ . '/../core/watcherCommon.php';
 
-// Cache for hardware detection results
-$_efuseHardwareCache = null;
-$_efuseHardwareCacheTime = 0;
-define('EFUSE_HARDWARE_CACHE_TTL', 300); // 5 minutes
+// Cache for hardware detection results (file-based for persistence across requests)
+define('EFUSE_HARDWARE_CACHE_TTL', 3600); // 1 hour - hardware doesn't change often
+define('EFUSE_HARDWARE_CACHE_FILE', WATCHEREFUSEDIR . '/hardware-cache.json');
 
 /**
  * Detect eFuse-capable hardware on this system
+ * Uses file-based caching to avoid slow I2C detection on every page load
  *
+ * @param bool $forceRefresh Force a fresh detection, ignoring cache
  * @return array ['supported' => bool, 'type' => string, 'ports' => int, 'details' => array]
  */
-function detectEfuseHardware() {
-    global $_efuseHardwareCache, $_efuseHardwareCacheTime;
-
-    // Return cached result if fresh
-    if ($_efuseHardwareCache !== null && (time() - $_efuseHardwareCacheTime) < EFUSE_HARDWARE_CACHE_TTL) {
-        return $_efuseHardwareCache;
+function detectEfuseHardware($forceRefresh = false) {
+    // Try to read from file cache first (fast path)
+    if (!$forceRefresh && file_exists(EFUSE_HARDWARE_CACHE_FILE)) {
+        $cacheData = @json_decode(file_get_contents(EFUSE_HARDWARE_CACHE_FILE), true);
+        if ($cacheData && isset($cacheData['timestamp']) && isset($cacheData['result'])) {
+            if ((time() - $cacheData['timestamp']) < EFUSE_HARDWARE_CACHE_TTL) {
+                return $cacheData['result'];
+            }
+        }
     }
 
     $result = [
@@ -38,36 +42,51 @@ function detectEfuseHardware() {
         'details' => []
     ];
 
-    // Check in order of priority
+    // Check in order of priority (fast checks first)
 
-    // 1. Check for BBB capes with eFuse support
+    // 1. Check for BBB capes with eFuse support (file reads - fast)
     $capeResult = detectBBBCapeEfuse();
     if ($capeResult['supported']) {
-        $_efuseHardwareCache = $capeResult;
-        $_efuseHardwareCacheTime = time();
+        saveEfuseHardwareCache($capeResult);
         return $capeResult;
     }
 
-    // 2. Check for I2C ADC (ADS7828) for current sensing
-    $i2cResult = detectI2CAdc();
-    if ($i2cResult['supported']) {
-        $_efuseHardwareCache = $i2cResult;
-        $_efuseHardwareCacheTime = time();
-        return $i2cResult;
-    }
-
-    // 3. Check for Falcon smart receivers via channel output config
+    // 2. Check for Falcon smart receivers via channel output config (API call - medium)
     $falconResult = detectFalconSmartReceivers();
     if ($falconResult['supported']) {
-        $_efuseHardwareCache = $falconResult;
-        $_efuseHardwareCacheTime = time();
+        saveEfuseHardwareCache($falconResult);
         return $falconResult;
     }
 
-    // No compatible hardware found
-    $_efuseHardwareCache = $result;
-    $_efuseHardwareCacheTime = time();
+    // 3. Check for I2C ADC (ADS7828) - SLOW, do this last
+    $i2cResult = detectI2CAdc();
+    if ($i2cResult['supported']) {
+        saveEfuseHardwareCache($i2cResult);
+        return $i2cResult;
+    }
+
+    // No hardware found - cache this result too
+    saveEfuseHardwareCache($result);
     return $result;
+}
+
+/**
+ * Save hardware detection result to file cache
+ */
+function saveEfuseHardwareCache($result) {
+    // Ensure directory exists
+    if (!is_dir(WATCHEREFUSEDIR)) {
+        @mkdir(WATCHEREFUSEDIR, 0755, true);
+    }
+
+    $cacheData = [
+        'timestamp' => time(),
+        'result' => $result
+    ];
+
+    @file_put_contents(EFUSE_HARDWARE_CACHE_FILE, json_encode($cacheData));
+    @chown(EFUSE_HARDWARE_CACHE_FILE, 'fpp');
+    @chgrp(EFUSE_HARDWARE_CACHE_FILE, 'fpp');
 }
 
 /**
@@ -556,8 +575,8 @@ function getEfuseHardwareSummary() {
  * Clear the hardware detection cache (useful after config changes)
  */
 function clearEfuseHardwareCache() {
-    global $_efuseHardwareCache, $_efuseHardwareCacheTime;
-    $_efuseHardwareCache = null;
-    $_efuseHardwareCacheTime = 0;
+    if (file_exists(EFUSE_HARDWARE_CACHE_FILE)) {
+        @unlink(EFUSE_HARDWARE_CACHE_FILE);
+    }
 }
 ?>

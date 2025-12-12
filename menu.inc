@@ -13,7 +13,6 @@
 
 # Check config for conditional menu entries
 include_once __DIR__ . '/lib/core/config.php';
-include_once __DIR__ . '/lib/controllers/efuseHardware.php';
 $watcherConfig = readPluginConfig();
 $showLocalMetricsMenu = !empty($watcherConfig['collectdEnabled']);
 $showConnectivityMenu = !empty($watcherConfig['connectivityCheckEnabled']);
@@ -22,8 +21,7 @@ $showMultiSyncPingMenu = !empty($watcherConfig['multiSyncPingEnabled']);
 $showFalconMonitorMenu = !empty($watcherConfig['falconMonitorEnabled']);
 $showControlUIMenu = !empty($watcherConfig['controlUIEnabled']);
 $showEventsMenu = !empty($watcherConfig['mqttMonitorEnabled']);
-$efuseHardwareInfo = detectEfuseHardware();
-$showEfuseMenu = $efuseHardwareInfo['supported'] && !empty($watcherConfig['efuseMonitorEnabled']);
+$showEfuseMenu = !empty($watcherConfig['efuseMonitorEnabled']);
 
 $menuEntries = Array(
 	Array(
