@@ -74,17 +74,11 @@ else
     echo "Watcher: MQTT Monitor is disabled"
 fi
 
-# Start eFuse Collector if enabled and hardware supported
+# Start eFuse Collector if enabled (collector checks hardware on startup and exits if unsupported)
 EFUSE_ENABLED=$(grep -E "^efuseMonitorEnabled" "$CONFIG_FILE" | cut -d'=' -f2 | tr -d ' \t\r\n"')
 if [ "$EFUSE_ENABLED" = "true" ] || [ "$EFUSE_ENABLED" = "1" ] || [ "$EFUSE_ENABLED" = "yes" ]; then
-    # Check for hardware support
-    EFUSE_SUPPORTED=$(/usr/bin/php -r "include '$PLUGIN_DIR/lib/controllers/efuseHardware.php'; echo detectEfuseHardware()['supported'] ? 'true' : 'false';")
-    if [ "$EFUSE_SUPPORTED" = "true" ]; then
-        echo "Watcher: eFuse Monitor is enabled, starting collector..."
-        /usr/bin/php /home/fpp/media/plugins/fpp-plugin-watcher/efuseCollector.php &
-    else
-        echo "Watcher: eFuse Monitor is enabled but no compatible hardware detected"
-    fi
+    echo "Watcher: eFuse Monitor is enabled, starting collector..."
+    /usr/bin/php /home/fpp/media/plugins/fpp-plugin-watcher/efuseCollector.php &
 else
     echo "Watcher: eFuse Monitor is disabled"
 fi
