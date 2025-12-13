@@ -154,29 +154,33 @@ renderCommonJS();
                 <button class="closeBtn" onclick="hideExpectedHelp()"><i class="fas fa-times"></i></button>
             </div>
             <div class="helpModalBody">
-                <p>Expected current is estimated based on the number of pixels configured for each port:</p>
+                <p>Expected current is estimated based on real-world measurements and pixel count:</p>
 
+                <h5>Theoretical Maximum (per pixel)</h5>
                 <table class="helpTable">
                     <thead>
-                        <tr><th>Protocol</th><th>Per-Pixel Current</th></tr>
+                        <tr><th>Protocol</th><th>Voltage</th><th>Max Current</th></tr>
                     </thead>
                     <tbody>
-                        <tr><td>WS2811 / WS2812 / SK6812</td><td>60mA (20mA × 3 colors)</td></tr>
-                        <tr><td>APA102</td><td>60mA</td></tr>
-                        <tr><td>TM1814 (RGBW)</td><td>80mA (20mA × 4 colors)</td></tr>
+                        <tr><td>WS2811</td><td>12V</td><td>42mA (~0.5W)</td></tr>
+                        <tr><td>WS2812 / WS2812B / SK6812</td><td>5V</td><td>60mA (~0.3W)</td></tr>
+                        <tr><td>APA102 / APA104</td><td>5V</td><td>60mA</td></tr>
+                        <tr><td>TM1814 / SK6812W (RGBW)</td><td>5V</td><td>80mA (~0.4W)</td></tr>
                     </tbody>
                 </table>
 
-                <p class="helpNote"><strong>Formula:</strong> Pixels × Per-Pixel mA × 10% = Expected Current</p>
+                <h5>Typical Show Usage</h5>
+                <p class="helpNote"><strong>Formula:</strong> Pixels × Per-Pixel Max × 6% = Expected Current</p>
+                <p class="helpNote"><strong>Example:</strong> 500 WS2811 × 42mA × 6% = 1,260mA (1.26A)</p>
 
-                <p>The 10% factor accounts for typical show usage, since pixels rarely run at full white. Actual current varies based on:</p>
+                <p>The 6% factor is based on real-world measurements. Testing with 496 WS2811 pixels at 12V shows:</p>
                 <ul>
-                    <li>Sequence brightness and colors</li>
-                    <li>Effects being displayed</li>
-                    <li>Global brightness settings</li>
+                    <li>At 30% brightness: 1.21A (~2.4mA per pixel)</li>
+                    <li>At 90% brightness: 1.24A (~2.5mA per pixel)</li>
+                    <li>Brightness changes have minimal impact on current draw</li>
                 </ul>
 
-                <p class="helpNote"><strong>Tip:</strong> If actual current significantly exceeds expected, check for shorts or misconfigured pixel counts.</p>
+                <p class="helpNote"><strong>Tip:</strong> If actual current significantly exceeds expected (>3x), check for shorts or misconfigured pixel counts. The "Max" value shows theoretical maximum if all pixels were full white.</p>
             </div>
         </div>
     </div>

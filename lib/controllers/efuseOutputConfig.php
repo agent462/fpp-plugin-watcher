@@ -11,9 +11,10 @@
 include_once __DIR__ . '/../core/watcherCommon.php';
 
 // Typical per-pixel current (mA) at full white by protocol
+// WS2811 assumes 12V (~0.5W = 42mA), others assume 5V (~0.3W = 60mA)
 define('EFUSE_PIXEL_CURRENT_ESTIMATES', [
-    'ws2811'  => 60,   // 20mA per color x 3
-    'ws2812'  => 60,
+    'ws2811'  => 42,   // 12V: ~0.5W / 12V = 42mA
+    'ws2812'  => 60,   // 5V: 20mA per color x 3
     'ws2812b' => 60,
     'sk6812'  => 60,
     'sk6812w' => 80,   // RGBW - 4 channels
@@ -23,7 +24,7 @@ define('EFUSE_PIXEL_CURRENT_ESTIMATES', [
     'tm1829'  => 60,
     'ucs8903' => 60,
     'ucs8904' => 80,   // RGBW
-    'default' => 60
+    'default' => 50    // Conservative middle estimate
 ]);
 
 // Maximum eFuse rating in mA
@@ -200,6 +201,11 @@ function getEfuseOutputConfig($forceRefresh = false) {
 /**
  * Estimate expected current for a port based on pixel count and protocol
  *
+ * Based on real-world measurements (496 12V WS2811 pixels @ 0.5W each):
+ * - 30% brightness: 1.21A, 60% brightness: 1.22A, 90% brightness: 1.24A
+ * - With 42mA max per pixel: 1,210 / (496 × 42) = ~6% of theoretical max
+ * - Brightness changes have minimal impact on current draw
+ *
  * @param int $pixelCount Number of pixels on this port
  * @param string $protocol LED protocol (ws2811, sk6812, etc.)
  * @return array ['typical' => mA, 'max' => mA, 'perPixel' => mA]
@@ -211,8 +217,8 @@ function estimatePortCurrent($pixelCount, $protocol = 'ws2811') {
     // Maximum theoretical current (all pixels full white)
     $maxCurrent = $pixelCount * $perPixel;
 
-    // Typical show usage is about 30% of max (most shows don't run all white)
-    $typicalCurrent = intval($maxCurrent * 0.30);
+    // Typical show usage is ~6% of theoretical max based on real-world measurements
+    $typicalCurrent = intval($maxCurrent * 0.06);
 
     return [
         'typical' => $typicalCurrent,
