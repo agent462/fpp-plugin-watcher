@@ -521,18 +521,30 @@ function getEfuseCapablePortNames() {
 /**
  * Read eFuse data from FPP's fppd/ports endpoint
  * This is the reliable source for real-time current values
+ * Always fetches fresh data (no caching) for accurate real-time readings
  *
  * @return array Port data
  */
 function readEfuseFromFppdPorts() {
     $ports = [];
 
-    // Use cached ports data (shared with getEfuseCapablePortNames)
-    $portsList = getFppdPortsCached();
-    if ($portsList === null) {
+    // Always fetch fresh data for real-time current readings
+    // Don't use getFppdPortsCached() here - that cache is for short web requests,
+    // not for long-running daemons that need fresh data each poll
+    $portsData = @file_get_contents('http://127.0.0.1/api/fppd/ports');
+    if ($portsData === false) {
         return [
             'success' => false,
-            'error' => 'Could not read port data from fppd',
+            'error' => 'Could not connect to fppd',
+            'ports' => []
+        ];
+    }
+
+    $portsList = @json_decode($portsData, true);
+    if (!is_array($portsList)) {
+        return [
+            'success' => false,
+            'error' => 'Invalid response from fppd',
             'ports' => []
         ];
     }
