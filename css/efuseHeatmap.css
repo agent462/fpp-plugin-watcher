@@ -33,6 +33,12 @@
     color: #6c757d;
 }
 
+.efuseHeaderRight {
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+}
+
 /* Not Supported Message */
 .efuseNotSupported {
     background: #f8f9fa;
@@ -580,4 +586,30 @@
     padding: 0.75rem 1rem;
     border-radius: 0 4px 4px 0;
     font-size: 0.9rem;
+}
+
+/* Page Help Icon (in header) */
+.efusePageHelp {
+    cursor: pointer;
+    color: #6c757d;
+    font-size: 1.25rem;
+    transition: color 0.2s;
+}
+
+.efusePageHelp:hover {
+    color: #3498db;
+}
+
+/* Help Modal Section Headings */
+.helpModalBody h5 {
+    margin: 1.25rem 0 0.5rem 0;
+    color: #495057;
+    font-size: 0.95rem;
+    font-weight: 600;
+    border-bottom: 1px solid #e9ecef;
+    padding-bottom: 0.25rem;
+}
+
+.helpModalBody h5:first-child {
+    margin-top: 0;
 }

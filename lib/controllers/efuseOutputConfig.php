@@ -211,8 +211,8 @@ function estimatePortCurrent($pixelCount, $protocol = 'ws2811') {
     // Maximum theoretical current (all pixels full white)
     $maxCurrent = $pixelCount * $perPixel;
 
-    // Typical show usage is about 10% of max (most shows don't run all white)
-    $typicalCurrent = intval($maxCurrent * 0.10);
+    // Typical show usage is about 30% of max (most shows don't run all white)
+    $typicalCurrent = intval($maxCurrent * 0.30);
 
     return [
         'typical' => $typicalCurrent,

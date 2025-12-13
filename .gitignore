@@ -2,8 +2,10 @@ docs/
 to_delete/
 .DS_Store
 **/.DS_Store
-notes.md
-
+*.md
+.*/*
+# Keep README.md
+!README.md
 # Build artifacts
 *.o
 *.so

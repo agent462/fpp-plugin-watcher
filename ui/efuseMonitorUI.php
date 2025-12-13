@@ -26,7 +26,10 @@ renderCommonJS();
         <h2>
             <i class="fas fa-bolt"></i> eFuse Current Monitor
         </h2>
-        <span id="lastUpdate" class="lastUpdate"></span>
+        <div class="efuseHeaderRight">
+            <span id="lastUpdate" class="lastUpdate"></span>
+            <i class="fas fa-question-circle efusePageHelp" onclick="showPageHelp(event)" title="About eFuse Monitoring"></i>
+        </div>
     </div>
 
     <?php if (!$hardware['supported']): ?>
@@ -177,6 +180,71 @@ renderCommonJS();
                 </ul>
 
                 <p class="helpNote"><strong>Tip:</strong> If actual current significantly exceeds expected, check for shorts or misconfigured pixel counts.</p>
+            </div>
+        </div>
+    </div>
+
+    <!-- Page Help Modal -->
+    <div id="pageHelpModal" class="helpModal" style="display: none;" onclick="hidePageHelp(event)">
+        <div class="helpModalContent" onclick="event.stopPropagation()">
+            <div class="helpModalHeader">
+                <h4><i class="fas fa-question-circle"></i> About eFuse Current Monitoring</h4>
+                <button class="closeBtn" onclick="hidePageHelp()"><i class="fas fa-times"></i></button>
+            </div>
+            <div class="helpModalBody">
+                <p>This dashboard monitors real-time current draw from each eFuse port on your controller.</p>
+
+                <h5>Data Collection</h5>
+                <table class="helpTable">
+                    <tbody>
+                        <tr><td><strong>Sampling Rate</strong></td><td>Every 5 seconds</td></tr>
+                        <tr><td><strong>Display Refresh</strong></td><td>Every 10 seconds</td></tr>
+                        <tr><td><strong>Aggregation</strong></td><td>1-minute averages (min/avg/max)</td></tr>
+                    </tbody>
+                </table>
+
+                <h5>Data Retention</h5>
+                <table class="helpTable">
+                    <tbody>
+                        <tr><td><strong>Raw Data</strong></td><td>6 hours (5-second samples)</td></tr>
+                        <tr><td><strong>Historical Data</strong></td><td>24 hours (1-minute averages)</td></tr>
+                    </tbody>
+                </table>
+
+                <h5>Estimated Storage (5-hour show, 5-10pm)</h5>
+                <table class="helpTable">
+                    <thead>
+                        <tr><th>Ports</th><th>Raw Data</th><th>Daily Rollup</th></tr>
+                    </thead>
+                    <tbody>
+                        <tr><td>4 ports</td><td>~400 KB</td><td>~200 KB</td></tr>
+                        <tr><td>8 ports</td><td>~600 KB</td><td>~350 KB</td></tr>
+                        <tr><td>16 ports</td><td>~1 MB</td><td>~600 KB</td></tr>
+                        <tr><td>32 ports</td><td>~2 MB</td><td>~1.1 MB</td></tr>
+                    </tbody>
+                </table>
+                <p style="font-size: 0.85rem; color: #6c757d; margin-top: 0.5rem;">
+                    Raw data auto-rotates after 6 hours; rollup data after 24 hours.
+                </p>
+
+                <h5>Dashboard Metrics</h5>
+                <ul>
+                    <li><strong>Total Current:</strong> Sum of all port current readings</li>
+                    <li><strong>Active Ports:</strong> Ports with current draw above 0mA</li>
+                    <li><strong>Peak (24h):</strong> Highest single port reading in the time range</li>
+                    <li><strong>Average (24h):</strong> Mean current across all ports in the time range</li>
+                </ul>
+
+                <h5>Heatmap Colors</h5>
+                <p>Port tiles change color based on current draw:</p>
+                <ul>
+                    <li><span style="color: #1e5128;">●</span> <strong>Green:</strong> Normal (0-2A)</li>
+                    <li><span style="color: #ffc107;">●</span> <strong>Yellow:</strong> Elevated (2-3A)</li>
+                    <li><span style="color: #fd7e14;">●</span> <strong>Orange:</strong> High (3-4A)</li>
+                    <li><span style="color: #dc3545;">●</span> <strong>Red:</strong> Very High (4A+)</li>
+                </ul>
+
+                <p class="helpNote"><strong>Tip:</strong> Click any port tile to view detailed history and output configuration for that port.</p>
             </div>
         </div>
     </div>

@@ -67,7 +67,7 @@ function apiCall($method, $uri, $data = [], $returnResponse = false, $timeout = 
         }
         return true;
     } else {
-        logMessage("API Request failed via FPP API");
+        logMessage("API Request failed via FPP API: $uri");
         logMessage("API Response (HTTP $httpCode): $response");
         return false;
     }

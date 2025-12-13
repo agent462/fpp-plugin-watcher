@@ -8,9 +8,6 @@
  * - Pi hats with current sensing
  * - Falcon smart receivers
  *
- * IMPORTANT: This library NEVER uses i2cdetect or FPP API for hardware detection.
- * All detection is done via fast file reads only.
- *
  * @package fpp-plugin-watcher
  */
 

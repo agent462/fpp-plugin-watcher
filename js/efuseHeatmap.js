@@ -644,6 +644,23 @@ function hideExpectedHelp(event) {
     if (modal) modal.style.display = 'none';
 }
 
+/**
+ * Show page help modal
+ */
+function showPageHelp(event) {
+    if (event) event.stopPropagation();
+    const modal = document.getElementById('pageHelpModal');
+    if (modal) modal.style.display = 'flex';
+}
+
+/**
+ * Hide page help modal
+ */
+function hidePageHelp(event) {
+    const modal = document.getElementById('pageHelpModal');
+    if (modal) modal.style.display = 'none';
+}
+
 // Cleanup on page unload
 window.addEventListener('beforeunload', function() {
     if (refreshInterval) {
