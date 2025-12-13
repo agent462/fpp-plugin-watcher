@@ -263,11 +263,14 @@ function getEfusePortHistory($portName, $hoursBack = 24) {
         $interval = 60; // Rollup data is 1-minute intervals
     }
 
-    // Build indexed lookup by timestamp
+    // Build indexed lookup by timestamp (align to interval boundaries for matching)
     $dataByTimestamp = [];
     foreach ($data as $entry) {
         $ts = $entry['timestamp'];
-        $dataByTimestamp[$ts] = $entry['ports'][$portName] ?? null;
+        // Align timestamp to interval boundary for lookup matching
+        $alignedTs = intval(floor($ts / $interval) * $interval);
+        // If multiple entries fall in same bucket, keep the latest
+        $dataByTimestamp[$alignedTs] = $entry['ports'][$portName] ?? null;
     }
 
     // Determine time range
@@ -369,7 +372,9 @@ function getEfuseHeatmapData($hoursBack = 24) {
 
     // Align to interval boundaries
     $startTime = intval(floor($startTime / $interval) * $interval);
-    $endTime = intval(floor($endTime / $interval) * $interval);
+    // Exclude current and previous bucket (rollup may not have processed them yet)
+    // Rollup runs every 60s, so we need 2-minute buffer to ensure data exists
+    $endTime = intval(floor($endTime / $interval) * $interval) - (2 * $interval);
 
     // Generate all expected timestamps
     $allTimestamps = [];

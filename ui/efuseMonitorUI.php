@@ -92,10 +92,6 @@ renderCommonJS();
                 </select>
             </div>
         </div>
-        <div class="efuseGridLoading" id="gridLoading">
-            <i class="fas fa-spinner fa-spin"></i>
-            <p>Loading port data...</p>
-        </div>
         <div id="efuseGrid" class="efuseGrid"></div>
         <div class="efuseColorScale">
             <span class="scaleLabel">0A</span>
@@ -145,10 +141,6 @@ renderCommonJS();
     <div class="efuseChartCard">
         <div class="efuseChartTitle">
             <span><i class="fas fa-chart-area"></i> Current History</span>
-        </div>
-        <div class="chartLoading" id="chartLoading">
-            <i class="fas fa-spinner fa-spin"></i>
-            <p>Loading history data...</p>
         </div>
         <canvas id="efuseHistoryChart" style="max-height: 400px;"></canvas>
     </div>

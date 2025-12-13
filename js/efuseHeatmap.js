@@ -39,6 +39,8 @@ function initEfuseMonitor() {
             })[0];
             showPortDetail(defaultPort);
         }
+    }).catch(err => {
+        console.error('Error in initial load:', err);
     });
     loadHeatmapData();
 
@@ -106,26 +108,27 @@ async function loadCurrentData() {
 async function loadHeatmapData() {
     const hours = document.getElementById('timeRange')?.value || 24;
 
-    showLoading('chartLoading', true);
-
     try {
         const response = await fetch(`/api/plugin/fpp-plugin-watcher/efuse/heatmap?hours=${hours}`);
         const data = await response.json();
 
         if (!data.success) {
             console.error('Failed to load heatmap data:', data.error);
-            showLoading('chartLoading', false);
+            showChartError('Failed to load data');
             return;
         }
 
-        updateHistoryChart(data);
-        updatePeakStats(data);
-
-        showLoading('chartLoading', false);
+        try {
+            updateHistoryChart(data);
+            updatePeakStats(data);
+        } catch (chartError) {
+            console.error('Error updating chart:', chartError);
+            showChartError('Error rendering chart');
+        }
 
     } catch (error) {
         console.error('Error loading heatmap data:', error);
-        showLoading('chartLoading', false);
+        showChartError('Network error');
     }
 }
 
@@ -199,8 +202,6 @@ function updatePeakStats(data) {
 function updatePortGrid(ports) {
     const grid = document.getElementById('efuseGrid');
     if (!grid) return;
-
-    showLoading('gridLoading', false);
 
     // Sort ports by number
     const sortedPorts = Object.entries(ports || {}).sort((a, b) => {
@@ -376,75 +377,79 @@ function updatePortHistoryChart(data) {
         y: h.max ?? h.value ?? 0
     }));
 
-    // Destroy existing chart
-    if (efuseCharts.portHistory) {
-        efuseCharts.portHistory.destroy();
-    }
-
-    efuseCharts.portHistory = new Chart(ctx, {
-        type: 'line',
-        data: {
-            datasets: [
-                {
-                    label: 'Average',
-                    data: chartData,
-                    borderColor: '#4e9f3d',
-                    backgroundColor: 'rgba(78, 159, 61, 0.1)',
-                    fill: true,
-                    tension: 0,
-                    pointRadius: 0
-                },
-                {
-                    label: 'Max',
-                    data: maxData,
-                    borderColor: '#dc3545',
-                    borderDash: [5, 5],
-                    fill: false,
-                    tension: 0,
-                    pointRadius: 0
-                }
-            ]
+    const datasets = [
+        {
+            label: 'Average',
+            data: chartData,
+            borderColor: '#4e9f3d',
+            backgroundColor: 'rgba(78, 159, 61, 0.1)',
+            fill: true,
+            tension: 0,
+            pointRadius: 0
         },
-        options: {
-            responsive: true,
-            maintainAspectRatio: false,
-            interaction: {
-                mode: 'index',
-                intersect: false
-            },
-            scales: {
-                x: {
-                    type: 'time',
-                    time: {
-                        displayFormats: {
-                            hour: 'HH:mm',
-                            minute: 'HH:mm'
-                        }
-                    },
-                    title: { display: false }
-                },
-                y: {
-                    min: 0,
-                    title: {
-                        display: true,
-                        text: 'mA'
+        {
+            label: 'Max',
+            data: maxData,
+            borderColor: '#dc3545',
+            borderDash: [5, 5],
+            fill: false,
+            tension: 0,
+            pointRadius: 0
+        }
+    ];
+
+    const chartOptions = {
+        responsive: true,
+        maintainAspectRatio: false,
+        animation: false,  // Disable animation to prevent flashing
+        interaction: {
+            mode: 'index',
+            intersect: false
+        },
+        scales: {
+            x: {
+                type: 'time',
+                time: {
+                    displayFormats: {
+                        hour: 'HH:mm',
+                        minute: 'HH:mm'
                     }
-                }
-            },
-            plugins: {
-                legend: {
-                    position: 'top'
                 },
-                tooltip: {
-                    callbacks: {
-                        label: function(context) {
-                            return context.dataset.label + ': ' + formatCurrent(context.raw.y);
-                        }
+                title: { display: false }
+            },
+            y: {
+                min: 0,
+                title: {
+                    display: true,
+                    text: 'mA'
+                }
+            }
+        },
+        plugins: {
+            legend: {
+                position: 'top'
+            },
+            tooltip: {
+                callbacks: {
+                    label: function(context) {
+                        return context.dataset.label + ': ' + formatCurrent(context.raw.y);
                     }
                 }
             }
         }
-    });
+    };
+
+    // Update existing chart or create new one
+    if (efuseCharts.portHistory) {
+        efuseCharts.portHistory.data.datasets = datasets;
+        efuseCharts.portHistory.update('none');
+    } else {
+        efuseCharts.portHistory = new Chart(ctx, {
+            type: 'line',
+            data: { datasets: datasets },
+            options: chartOptions
+        });
+    }
 }
 
 /**
@@ -454,6 +459,9 @@ function updateHistoryChart(data) {
     const canvas = document.getElementById('efuseHistoryChart');
     if (!canvas) return;
 
+    // Hide any previous error messages
+    hideChartError();
+
     const ctx = canvas.getContext('2d');
     const timeSeries = data.timeSeries || {};
 
@@ -462,6 +470,7 @@ function updateHistoryChart(data) {
 
     if (portsWithData.length === 0) {
         // No data - show message
+        showChartError('No data available for selected time range');
         return;
     }
 
@@ -484,58 +493,63 @@ function updateHistoryChart(data) {
         };
     });
 
-    // Destroy existing chart
-    if (efuseCharts.history) {
-        efuseCharts.history.destroy();
-    }
-
-    efuseCharts.history = new Chart(ctx, {
-        type: 'line',
-        data: { datasets: datasets },
-        options: {
-            responsive: true,
-            maintainAspectRatio: false,
-            interaction: {
-                mode: 'index',
-                intersect: false
-            },
-            scales: {
-                x: {
-                    type: 'time',
-                    time: {
-                        displayFormats: {
-                            hour: 'HH:mm',
-                            minute: 'HH:mm'
-                        }
-                    },
-                    title: { display: false }
-                },
-                y: {
-                    min: 0,
-                    title: {
-                        display: true,
-                        text: 'mA'
+    const chartOptions = {
+        responsive: true,
+        maintainAspectRatio: false,
+        animation: false,  // Disable animation to prevent flashing
+        interaction: {
+            mode: 'index',
+            intersect: false
+        },
+        scales: {
+            x: {
+                type: 'time',
+                time: {
+                    displayFormats: {
+                        hour: 'HH:mm',
+                        minute: 'HH:mm'
                     }
+                },
+                title: { display: false }
+            },
+            y: {
+                min: 0,
+                title: {
+                    display: true,
+                    text: 'mA'
+                }
+            }
+        },
+        plugins: {
+            legend: {
+                position: 'top',
+                labels: {
+                    boxWidth: 12,
+                    usePointStyle: true
                 }
             },
-            plugins: {
-                legend: {
-                    position: 'top',
-                    labels: {
-                        boxWidth: 12,
-                        usePointStyle: true
-                    }
-                },
-                tooltip: {
-                    callbacks: {
-                        label: function(context) {
-                            return context.dataset.label + ': ' + formatCurrent(context.raw.y);
-                        }
+            tooltip: {
+                callbacks: {
+                    label: function(context) {
+                        return context.dataset.label + ': ' + formatCurrent(context.raw.y);
                     }
                 }
             }
         }
-    });
+    };
+
+    // Update existing chart or create new one
+    if (efuseCharts.history) {
+        // Update data in place without destroying
+        efuseCharts.history.data.datasets = datasets;
+        efuseCharts.history.update('none');  // 'none' mode skips animations
+    } else {
+        efuseCharts.history = new Chart(ctx, {
+            type: 'line',
+            data: { datasets: datasets },
+            options: chartOptions
+        });
+    }
 }
 
 /**
@@ -562,13 +576,48 @@ function refreshData() {
 }
 
 /**
- * Show/hide loading indicator
+ * Show error message on chart area
  */
-function showLoading(elementId, show) {
-    const elem = document.getElementById(elementId);
-    if (elem) {
-        elem.style.display = show ? 'flex' : 'none';
+function showChartError(message) {
+    const canvas = document.getElementById('efuseHistoryChart');
+    if (!canvas) return;
+
+    // Destroy existing chart if any
+    if (efuseCharts.history) {
+        efuseCharts.history.destroy();
+        efuseCharts.history = null;
     }
+
+    // Show error message in chart area
+    const parent = canvas.parentElement;
+    let errorDiv = parent.querySelector('.chartErrorMessage');
+    if (!errorDiv) {
+        errorDiv = document.createElement('div');
+        errorDiv.className = 'chartErrorMessage noDataMessage';
+        parent.insertBefore(errorDiv, canvas);
+    }
+    errorDiv.innerHTML = `<i class="fas fa-exclamation-triangle"></i> ${escapeHtml(message)}`;
+    errorDiv.style.display = 'block';
+    canvas.style.display = 'none';
+}
+
+/**
+ * Hide chart error message and ensure canvas is visible
+ */
+function hideChartError() {
+    const canvas = document.getElementById('efuseHistoryChart');
+    if (!canvas) return;
+
+    const parent = canvas.parentElement;
+    const errorDiv = parent.querySelector('.chartErrorMessage');
+
+    // Hide error div if present
+    if (errorDiv) {
+        errorDiv.style.display = 'none';
+    }
+
+    // Always ensure canvas is visible when loading new data
+    canvas.style.display = 'block';
 }
 
 /**

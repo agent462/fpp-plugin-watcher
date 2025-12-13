@@ -148,20 +148,6 @@
     font-size: 0.875rem;
 }
 
-.efuseGridLoading {
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    justify-content: center;
-    padding: 2rem;
-    color: #6c757d;
-}
-
-.efuseGridLoading i {
-    font-size: 2rem;
-    margin-bottom: 1rem;
-}
-
 /* Port Grid */
 .efuseGrid {
     display: grid;
@@ -424,20 +410,6 @@
 .efuseChartTitle i {
     margin-right: 0.5rem;
     color: #6c757d;
-}
-
-.chartLoading {
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    justify-content: center;
-    padding: 2rem;
-    color: #6c757d;
-}
-
-.chartLoading i {
-    font-size: 2rem;
-    margin-bottom: 1rem;
 }
 
 /* Refresh Button */
