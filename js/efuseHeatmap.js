@@ -517,6 +517,14 @@ function updateHistoryChart(data) {
         portGroups.push(portsWithData.slice(i, i + PORTS_PER_CHART));
     }
 
+    // Destroy existing history charts before replacing DOM
+    Object.keys(efuseCharts).forEach(key => {
+        if (key.startsWith('history_') && efuseCharts[key]) {
+            efuseCharts[key].destroy();
+            delete efuseCharts[key];
+        }
+    });
+
     // Create chart cards for each group
     let chartsHtml = '';
     portGroups.forEach((group, groupIndex) => {
@@ -606,19 +614,6 @@ function updateHistoryChart(data) {
 
         // Use shared chart helper from commonUI.js
         updateOrCreateChart(efuseCharts, chartKey, chartId, 'line', datasets, chartOptions);
-    });
-
-    // Clean up old chart instances that are no longer needed
-    Object.keys(efuseCharts).forEach(key => {
-        if (key.startsWith('history_')) {
-            const groupIndex = parseInt(key.replace('history_', ''));
-            if (groupIndex >= portGroups.length) {
-                if (efuseCharts[key]) {
-                    efuseCharts[key].destroy();
-                    delete efuseCharts[key];
-                }
-            }
-        }
     });
 }
 

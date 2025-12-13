@@ -195,7 +195,10 @@ function runCollector() {
 }
 
 // Signal handling for graceful shutdown
-declare(ticks = 1);
+// Use async signals (PHP 7.1+) for immediate signal processing during sleep/blocking calls
+if (function_exists('pcntl_async_signals')) {
+    pcntl_async_signals(true);
+}
 
 function signalHandler($signo) {
     efuseLog("Received signal $signo, shutting down...");
