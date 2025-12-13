@@ -647,13 +647,14 @@ function refreshData() {
 
 
 /**
- * Get chart color by index
+ * Get chart color by index (16 distinct colors for PORTS_PER_CHART)
  */
 function getChartColor(index) {
     const colors = [
         '#4e9f3d', '#3498db', '#9b59b6', '#e67e22',
         '#1abc9c', '#e74c3c', '#34495e', '#f1c40f',
-        '#16a085', '#2ecc71', '#8e44ad', '#d35400'
+        '#16a085', '#2ecc71', '#8e44ad', '#d35400',
+        '#00bcd4', '#ff5722', '#607d8b', '#795548'
     ];
     return colors[index % colors.length];
 }

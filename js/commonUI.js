@@ -251,6 +251,9 @@
                 if (chart.data.datasets[i]) {
                     chart.data.datasets[i].data = newDataset.data;
                     chart.data.datasets[i].label = newDataset.label;
+                    // Also update colors in case dataset order changed
+                    if (newDataset.borderColor) chart.data.datasets[i].borderColor = newDataset.borderColor;
+                    if (newDataset.backgroundColor) chart.data.datasets[i].backgroundColor = newDataset.backgroundColor;
                 } else {
                     chart.data.datasets.push(newDataset);
                 }
