@@ -96,16 +96,13 @@ renderCommonJS();
     <!-- Time Range Selector -->
     <div class="efuseChartsHeader">
         <span><i class="fas fa-chart-line"></i> Current History</span>
-        <div class="efuseControls">
-            <label for="timeRange">Time Range:</label>
-            <select id="timeRange" onchange="refreshData()">
-                <option value="1">Last 1 Hour</option>
-                <option value="6">Last 6 Hours</option>
-                <option value="12">Last 12 Hours</option>
-                <option value="24" selected>Last 24 Hours</option>
-            </select>
-        </div>
     </div>
+    <?php renderTimeRangeSelector('timeRange', 'loadAllData()', 'Time Range:', [
+        '1' => 'Last 1 Hour',
+        '6' => 'Last 6 Hours',
+        '12' => 'Last 12 Hours',
+        '24' => 'Last 24 Hours'
+    ], '24'); ?>
 
     <!-- Port Detail Panel (shown on port click) -->
     <div id="portDetailPanel" class="portDetailPanel" style="display: none;">
@@ -148,7 +145,7 @@ renderCommonJS();
 
     <?php endif; ?>
 
-    <button class="refreshButton" onclick="refreshData()" title="Refresh Data">
+    <button class="refreshButton" onclick="loadAllData()" title="Refresh Data">
         <i class="fas fa-sync-alt"></i>
     </button>
 

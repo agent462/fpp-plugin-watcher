@@ -117,6 +117,10 @@
                 responsive: true,
                 maintainAspectRatio: false,
                 animation: false,
+                interaction: {
+                    mode: 'index',
+                    intersect: false
+                },
                 scales: {
                     x: {
                         type: 'time',
@@ -133,6 +137,13 @@
                     legend: {
                         position: 'top',
                         labels: { boxWidth: 12, usePointStyle: true }
+                    },
+                    tooltip: {
+                        callbacks: {
+                            label: function(context) {
+                                return context.dataset.label + ': ' + formatCurrent(context.raw.y);
+                            }
+                        }
                     }
                 }
             }
@@ -186,8 +197,7 @@
      */
     async function loadCurrentData() {
         try {
-            const response = await fetch('/api/plugin/fpp-plugin-watcher/efuse/current');
-            const data = await response.json();
+            const data = await fetchJson('/api/plugin/fpp-plugin-watcher/efuse/current');
 
             if (!data.success) {
                 console.error('Failed to load current data:', data.error);
@@ -195,7 +205,7 @@
             }
 
             currentPortData = data.ports || {};
-            updateLastUpdate();
+            updateLastUpdateTime('lastUpdate');
             updateStatsBar(data);
             updatePortGrid(data.ports);
 
@@ -236,7 +246,11 @@
                 <div class="efuseChartTitle">
                     <span><i class="fas fa-chart-area"></i> Current History</span>
                 </div>
-                <div class="noDataMessage"><i class="fas fa-exclamation-triangle"></i> ${escapeHtml(message)}</div>
+                <div class="empty-message">
+                    <i class="fas fa-exclamation-triangle"></i>
+                    <h3>Error Loading Data</h3>
+                    <p>${escapeHtml(message)}</p>
+                </div>
             </div>
         `;
     }
@@ -248,8 +262,7 @@
         const hours = document.getElementById('timeRange')?.value || 24;
 
         try {
-            const response = await fetch(`/api/plugin/fpp-plugin-watcher/efuse/heatmap?hours=${hours}`);
-            const data = await response.json();
+            const data = await fetchJson(`/api/plugin/fpp-plugin-watcher/efuse/heatmap?hours=${hours}`);
 
             if (!data.success) {
                 console.error('Failed to load heatmap data:', data.error);
@@ -271,15 +284,6 @@
         }
     }
 
-    /**
-     * Update the last update timestamp
-     */
-    function updateLastUpdate() {
-        const elem = document.getElementById('lastUpdate');
-        if (elem) {
-            elem.textContent = 'Updated: ' + new Date().toLocaleTimeString();
-        }
-    }
 
     /**
      * Update stats bar with totals
@@ -364,7 +368,7 @@
         });
 
         if (sortedPorts.length === 0) {
-            grid.innerHTML = '<div class="noDataMessage">No port data available</div>';
+            grid.innerHTML = '<div class="empty-message"><i class="fas fa-plug"></i><h3>No Port Data</h3><p>No port data available</p></div>';
             return;
         }
 
@@ -434,8 +438,7 @@
         const hours = document.getElementById('timeRange')?.value || 24;
 
         try {
-            const response = await fetch(`/api/plugin/fpp-plugin-watcher/efuse/history?port=${encodeURIComponent(portName)}&hours=${hours}`);
-            const data = await response.json();
+            const data = await fetchJson(`/api/plugin/fpp-plugin-watcher/efuse/history?port=${encodeURIComponent(portName)}&hours=${hours}`);
 
             if (!data.success) {
                 console.error('Failed to load port history:', data.error);
@@ -682,6 +685,11 @@
             // Reuse existing chart if available
             if (efuseCharts[chartKey]) {
                 efuseCharts[chartKey].data.datasets = datasets;
+                // Ensure interaction settings are correct for hover tooltips
+                efuseCharts[chartKey].options.interaction = {
+                    mode: 'index',
+                    intersect: false
+                };
                 efuseCharts[chartKey].options.plugins.tooltip = {
                     callbacks: {
                         label: function(context) {
@@ -756,9 +764,9 @@
     }
 
     /**
-     * Refresh all data
+     * Load/refresh all data
      */
-    function refreshData() {
+    function loadAllData() {
         loadCurrentData();
         loadHeatmapData();
 
@@ -841,7 +849,7 @@
 
     // Expose functions that need to be called from HTML onclick handlers
     window.initEfuseMonitor = initEfuseMonitor;
-    window.refreshData = refreshData;
+    window.loadAllData = loadAllData;
     window.showPortDetail = showPortDetail;
     window.closePortDetail = closePortDetail;
     window.showExpectedHelp = showExpectedHelp;
