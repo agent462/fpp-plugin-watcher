@@ -135,12 +135,9 @@ renderCommonJS();
         </div>
     </div>
 
-    <!-- History Chart -->
-    <div class="efuseChartCard">
-        <div class="efuseChartTitle">
-            <span><i class="fas fa-chart-area"></i> Current History</span>
-        </div>
-        <canvas id="efuseHistoryChart" style="max-height: 400px;"></canvas>
+    <!-- History Charts Container (one chart per 16 ports) -->
+    <div id="efuseHistoryChartsContainer">
+        <!-- Charts will be created dynamically by JavaScript -->
     </div>
 
     <?php endif; ?>

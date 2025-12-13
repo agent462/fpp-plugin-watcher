@@ -123,6 +123,23 @@ function updatePortDetailCurrent(portData) {
 }
 
 /**
+ * Show error message in the history charts container
+ */
+function showHistoryChartsError(message) {
+    const container = document.getElementById('efuseHistoryChartsContainer');
+    if (!container) return;
+
+    container.innerHTML = `
+        <div class="efuseChartCard">
+            <div class="efuseChartTitle">
+                <span><i class="fas fa-chart-area"></i> Current History</span>
+            </div>
+            <div class="noDataMessage"><i class="fas fa-exclamation-triangle"></i> ${escapeHtml(message)}</div>
+        </div>
+    `;
+}
+
+/**
  * Load heatmap/history data
  */
 async function loadHeatmapData() {
@@ -134,7 +151,7 @@ async function loadHeatmapData() {
 
         if (!data.success) {
             console.error('Failed to load heatmap data:', data.error);
-            showChartError('Failed to load data');
+            showHistoryChartsError('Failed to load data');
             return;
         }
 
@@ -143,12 +160,12 @@ async function loadHeatmapData() {
             updatePeakStats(data);
         } catch (chartError) {
             console.error('Error updating chart:', chartError);
-            showChartError('Error rendering chart');
+            showHistoryChartsError('Error rendering chart');
         }
 
     } catch (error) {
         console.error('Error loading heatmap data:', error);
-        showChartError('Network error');
+        showHistoryChartsError('Network error');
     }
 }
 
@@ -460,89 +477,149 @@ function updatePortHistoryChart(data) {
 }
 
 /**
- * Update main history chart with all ports
+ * Maximum ports per chart for readability
+ */
+const PORTS_PER_CHART = 16;
+
+/**
+ * Update main history charts with all ports (split into groups of 16)
  */
 function updateHistoryChart(data) {
-    // Hide any previous error messages
-    hideChartError();
+    const container = document.getElementById('efuseHistoryChartsContainer');
+    if (!container) return;
 
     const timeSeries = data.timeSeries || {};
 
-    // Get list of ports with data
-    const portsWithData = Object.keys(timeSeries).filter(p => timeSeries[p].length > 0);
+    // Get list of ports with data, sorted by port number
+    const portsWithData = Object.keys(timeSeries)
+        .filter(p => timeSeries[p].length > 0)
+        .sort((a, b) => {
+            const numA = parseInt(a.replace(/\D/g, '')) || 0;
+            const numB = parseInt(b.replace(/\D/g, '')) || 0;
+            return numA - numB;
+        });
 
     if (portsWithData.length === 0) {
-        // No data - show message
-        showChartError('No data available for selected time range');
+        container.innerHTML = `
+            <div class="efuseChartCard">
+                <div class="efuseChartTitle">
+                    <span><i class="fas fa-chart-area"></i> Current History</span>
+                </div>
+                <div class="noDataMessage"><i class="fas fa-exclamation-triangle"></i> No data available for selected time range</div>
+            </div>
+        `;
         return;
     }
 
-    // Build datasets
-    const datasets = portsWithData.map((portName, index) => {
-        const series = timeSeries[portName];
-        const color = getChartColor(index);
+    // Split ports into groups of PORTS_PER_CHART
+    const portGroups = [];
+    for (let i = 0; i < portsWithData.length; i += PORTS_PER_CHART) {
+        portGroups.push(portsWithData.slice(i, i + PORTS_PER_CHART));
+    }
 
-        return {
-            label: portName,
-            data: series.map(p => ({
-                x: new Date(p.timestamp * 1000),
-                y: p.value ?? 0
-            })),
-            borderColor: color,
-            backgroundColor: color + '20',
-            fill: false,
-            tension: 0,
-            pointRadius: 0
-        };
+    // Create chart cards for each group
+    let chartsHtml = '';
+    portGroups.forEach((group, groupIndex) => {
+        const startPort = parseInt(group[0].replace(/\D/g, '')) || (groupIndex * PORTS_PER_CHART + 1);
+        const endPort = parseInt(group[group.length - 1].replace(/\D/g, '')) || ((groupIndex + 1) * PORTS_PER_CHART);
+        const chartId = `efuseHistoryChart_${groupIndex}`;
+
+        chartsHtml += `
+            <div class="efuseChartCard">
+                <div class="efuseChartTitle">
+                    <span><i class="fas fa-chart-area"></i> Current History - Ports ${startPort}-${endPort}</span>
+                </div>
+                <canvas id="${chartId}" style="max-height: 400px;"></canvas>
+            </div>
+        `;
     });
+    container.innerHTML = chartsHtml;
 
-    const chartOptions = {
-        responsive: true,
-        maintainAspectRatio: false,
-        animation: false,  // Disable animation to prevent flashing
-        interaction: {
-            mode: 'index',
-            intersect: false
-        },
-        scales: {
-            x: {
-                type: 'time',
-                time: {
-                    displayFormats: {
-                        hour: 'HH:mm',
-                        minute: 'HH:mm'
+    // Create/update charts for each group
+    portGroups.forEach((group, groupIndex) => {
+        const chartId = `efuseHistoryChart_${groupIndex}`;
+        const chartKey = `history_${groupIndex}`;
+
+        // Build datasets for this group
+        const datasets = group.map((portName, index) => {
+            const series = timeSeries[portName];
+            const color = getChartColor(index);
+
+            return {
+                label: portName,
+                data: series.map(p => ({
+                    x: new Date(p.timestamp * 1000),
+                    y: p.value ?? 0
+                })),
+                borderColor: color,
+                backgroundColor: color + '20',
+                fill: false,
+                tension: 0,
+                pointRadius: 0
+            };
+        });
+
+        const chartOptions = {
+            responsive: true,
+            maintainAspectRatio: false,
+            animation: false,
+            interaction: {
+                mode: 'index',
+                intersect: false
+            },
+            scales: {
+                x: {
+                    type: 'time',
+                    time: {
+                        displayFormats: {
+                            hour: 'HH:mm',
+                            minute: 'HH:mm'
+                        }
+                    },
+                    title: { display: false }
+                },
+                y: {
+                    min: 0,
+                    title: {
+                        display: true,
+                        text: 'mA'
+                    }
+                }
+            },
+            plugins: {
+                legend: {
+                    position: 'top',
+                    labels: {
+                        boxWidth: 12,
+                        usePointStyle: true
                     }
                 },
-                title: { display: false }
-            },
-            y: {
-                min: 0,
-                title: {
-                    display: true,
-                    text: 'mA'
+                tooltip: {
+                    callbacks: {
+                        label: function(context) {
+                            return context.dataset.label + ': ' + formatCurrent(context.raw.y);
+                        }
+                    }
                 }
             }
-        },
-        plugins: {
-            legend: {
-                position: 'top',
-                labels: {
-                    boxWidth: 12,
-                    usePointStyle: true
-                }
-            },
-            tooltip: {
-                callbacks: {
-                    label: function(context) {
-                        return context.dataset.label + ': ' + formatCurrent(context.raw.y);
-                    }
+        };
+
+        // Use shared chart helper from commonUI.js
+        updateOrCreateChart(efuseCharts, chartKey, chartId, 'line', datasets, chartOptions);
+    });
+
+    // Clean up old chart instances that are no longer needed
+    Object.keys(efuseCharts).forEach(key => {
+        if (key.startsWith('history_')) {
+            const groupIndex = parseInt(key.replace('history_', ''));
+            if (groupIndex >= portGroups.length) {
+                if (efuseCharts[key]) {
+                    efuseCharts[key].destroy();
+                    delete efuseCharts[key];
                 }
             }
         }
-    };
-
-    // Use shared chart helper from commonUI.js
-    updateOrCreateChart(efuseCharts, 'history', 'efuseHistoryChart', 'line', datasets, chartOptions);
+    });
 }
 
 /**
@@ -568,50 +645,6 @@ function refreshData() {
     }
 }
 
-/**
- * Show error message on chart area
- */
-function showChartError(message) {
-    const canvas = document.getElementById('efuseHistoryChart');
-    if (!canvas) return;
-
-    // Destroy existing chart if any
-    if (efuseCharts.history) {
-        efuseCharts.history.destroy();
-        efuseCharts.history = null;
-    }
-
-    // Show error message in chart area
-    const parent = canvas.parentElement;
-    let errorDiv = parent.querySelector('.chartErrorMessage');
-    if (!errorDiv) {
-        errorDiv = document.createElement('div');
-        errorDiv.className = 'chartErrorMessage noDataMessage';
-        parent.insertBefore(errorDiv, canvas);
-    }
-    errorDiv.innerHTML = `<i class="fas fa-exclamation-triangle"></i> ${escapeHtml(message)}`;
-    errorDiv.style.display = 'block';
-    canvas.style.display = 'none';
-}
-
-/**
- * Hide chart error message and ensure canvas is visible
- */
-function hideChartError() {
-    const canvas = document.getElementById('efuseHistoryChart');
-    if (!canvas) return;
-
-    const parent = canvas.parentElement;
-    const errorDiv = parent.querySelector('.chartErrorMessage');
-
-    // Hide error div if present
-    if (errorDiv) {
-        errorDiv.style.display = 'none';
-    }
-
-    // Always ensure canvas is visible when loading new data
-    canvas.style.display = 'block';
-}
 
 /**
  * Get chart color by index
