@@ -1013,25 +1013,27 @@ class FalconController
 
     /**
      * Static method to discover Falcon controllers on a subnet
+     * Uses parallel HTTP requests for fast scanning
      *
      * @param string $subnet Subnet base (e.g., "192.168.1")
      * @param int $startIp Start IP (default 1)
      * @param int $endIp End IP (default 254)
-     * @param int $timeout Timeout per host in seconds (default 1)
+     * @param float $timeout Timeout per host in seconds (default 0.5)
+     * @param int $batchSize Number of concurrent requests (default 15)
      * @return array Array of discovered controllers
      */
-    public static function discover($subnet, $startIp = 1, $endIp = 254, $timeout = 1)
+    public static function discover($subnet, $startIp = 1, $endIp = 254, $timeout = 0.5, $batchSize = 15)
     {
         $discovered = [];
+        $allIps = range($startIp, $endIp);
+        $chunks = array_chunk($allIps, $batchSize);
 
-        for ($i = $startIp; $i <= $endIp; $i++) {
-            $ip = "{$subnet}.{$i}";
-            $controller = new self($ip, 80, $timeout);
+        foreach ($chunks as $chunk) {
+            $respondingIps = self::parallelProbe($subnet, $chunk, $timeout);
 
-            if ($controller->isReachable()) {
-                $status = $controller->getStatus();
-                // Only include devices where we can confirm model and firmware
-                // This filters out non-Falcon devices that happen to respond on port 80
+            // For each responding IP, get full status to validate it's a Falcon controller
+            foreach ($respondingIps as $ip => $xmlResponse) {
+                $status = self::parseStatusXml($xmlResponse);
                 if ($status !== false &&
                     !empty($status['model']) &&
                     !empty($status['firmware_version']) &&
@@ -1047,5 +1049,92 @@ class FalconController
         }
 
         return $discovered;
+    }
+
+    /**
+     * Probe multiple IPs in parallel using curl_multi
+     *
+     * @param string $subnet Subnet base
+     * @param array $ipSuffixes Array of IP suffixes to probe
+     * @param float $timeout Timeout in seconds
+     * @return array Associative array of IP => XML response for responding hosts
+     */
+    private static function parallelProbe($subnet, $ipSuffixes, $timeout)
+    {
+        $multiHandle = curl_multi_init();
+        $handles = [];
+
+        // Create all request handles
+        foreach ($ipSuffixes as $suffix) {
+            $ip = "{$subnet}.{$suffix}";
+            $ch = curl_init("http://{$ip}/status.xml");
+            curl_setopt_array($ch, [
+                CURLOPT_RETURNTRANSFER => true,
+                CURLOPT_TIMEOUT_MS => (int)($timeout * 1000),
+                CURLOPT_CONNECTTIMEOUT_MS => (int)($timeout * 1000),
+                CURLOPT_HTTPHEADER => ['Accept: application/xml, text/xml, */*'],
+                CURLOPT_FOLLOWLOCATION => true,
+            ]);
+            curl_multi_add_handle($multiHandle, $ch);
+            $handles[$ip] = $ch;
+        }
+
+        // Execute all requests in parallel
+        do {
+            $status = curl_multi_exec($multiHandle, $active);
+            if ($active) {
+                curl_multi_select($multiHandle, 0.1);
+            }
+        } while ($active && $status === CURLM_OK);
+
+        // Collect successful responses
+        $results = [];
+        foreach ($handles as $ip => $ch) {
+            $httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+            if ($httpCode === 200) {
+                $response = curl_multi_getcontent($ch);
+                if ($response) {
+                    $results[$ip] = $response;
+                }
+            }
+            curl_multi_remove_handle($multiHandle, $ch);
+            curl_close($ch);
+        }
+
+        curl_multi_close($multiHandle);
+        return $results;
+    }
+
+    /**
+     * Parse status.xml response into status array
+     *
+     * @param string $xml XML string from status.xml
+     * @return array|false Parsed status or false on error
+     */
+    private static function parseStatusXml($xml)
+    {
+        libxml_use_internal_errors(true);
+        $parsed = simplexml_load_string($xml);
+
+        if ($parsed === false) {
+            libxml_clear_errors();
+            return false;
+        }
+
+        $productCode = (int)$parsed->p;
+        $models = [
+            FALCON_F4V2_PRODUCT_CODE => 'F4V2',
+            FALCON_F16V2_PRODUCT_CODE => 'F16V2',
+            FALCON_F4V3_PRODUCT_CODE => 'F4V3',
+            FALCON_F16V3_PRODUCT_CODE => 'F16V3',
+            FALCON_F48_PRODUCT_CODE => 'F48',
+        ];
+
+        return [
+            'firmware_version' => (string)$parsed->fv,
+            'name' => trim((string)$parsed->n),
+            'product_code' => $productCode,
+            'model' => $models[$productCode] ?? "Unknown ($productCode)",
+        ];
     }
 }
