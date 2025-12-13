@@ -82,6 +82,7 @@ function getEfuseOutputConfig($forceRefresh = false) {
                 $virtualStrings = $portConfig['virtualStrings'] ?? [];
                 $totalPixels = 0;
                 $protocol = 'ws2811'; // default
+                $brightness = 100; // default
                 $descriptions = [];
 
                 if (!empty($virtualStrings)) {
@@ -91,12 +92,14 @@ function getEfuseOutputConfig($forceRefresh = false) {
                             $descriptions[] = $vs['description'];
                         }
                     }
-                    // Use protocol from first virtual string
+                    // Use protocol and brightness from first virtual string
                     $protocol = strtolower($virtualStrings[0]['protocol'] ?? 'ws2811');
+                    $brightness = intval($virtualStrings[0]['brightness'] ?? 100);
                 } else {
                     // Fallback to port-level config
                     $totalPixels = intval($portConfig['pixelCount'] ?? 0);
                     $protocol = strtolower($portConfig['protocol'] ?? 'ws2811');
+                    $brightness = intval($portConfig['brightness'] ?? 100);
                     if (!empty($portConfig['description'])) {
                         $descriptions[] = $portConfig['description'];
                     }
@@ -110,6 +113,7 @@ function getEfuseOutputConfig($forceRefresh = false) {
                     'portName' => $portName,
                     'outputType' => $outputType,
                     'protocol' => $protocol,
+                    'brightness' => $brightness,
                     'pixelCount' => $totalPixels,
                     'startChannel' => intval($portConfig['startChannel'] ?? $virtualStrings[0]['startChannel'] ?? 0),
                     'colorOrder' => $portConfig['colorOrder'] ?? $virtualStrings[0]['colorOrder'] ?? 'RGB',
@@ -152,6 +156,7 @@ function getEfuseOutputConfig($forceRefresh = false) {
                     $virtualStrings = $portConfig['virtualStrings'] ?? [];
                     $totalPixels = 0;
                     $protocol = 'ws2811';
+                    $brightness = 100;
                     $descriptions = [];
 
                     foreach ($virtualStrings as $vs) {
@@ -163,6 +168,7 @@ function getEfuseOutputConfig($forceRefresh = false) {
 
                     if (!empty($virtualStrings)) {
                         $protocol = strtolower($virtualStrings[0]['protocol'] ?? 'ws2811');
+                        $brightness = intval($virtualStrings[0]['brightness'] ?? 100);
                     }
 
                     $expectedCurrent = estimatePortCurrent($totalPixels, $protocol);
@@ -172,6 +178,7 @@ function getEfuseOutputConfig($forceRefresh = false) {
                         'portName' => $portName,
                         'outputType' => $type,
                         'protocol' => $protocol,
+                        'brightness' => $brightness,
                         'pixelCount' => $totalPixels,
                         'startChannel' => intval($virtualStrings[0]['startChannel'] ?? 0),
                         'colorOrder' => $virtualStrings[0]['colorOrder'] ?? 'RGB',

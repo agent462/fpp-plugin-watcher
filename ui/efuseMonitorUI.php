@@ -68,11 +68,11 @@ renderCommonJS();
             <div class="statValue" id="activePorts">--</div>
         </div>
         <div class="statItem">
-            <div class="statLabel">Peak (24h)</div>
+            <div class="statLabel" id="peakLabel">Peak (24h)</div>
             <div class="statValue" id="peakCurrent">-- A</div>
         </div>
         <div class="statItem">
-            <div class="statLabel">Average (24h)</div>
+            <div class="statLabel" id="avgLabel">Average (24h)</div>
             <div class="statValue" id="avgCurrent">-- A</div>
         </div>
     </div>
@@ -81,14 +81,6 @@ renderCommonJS();
     <div class="efuseGridCard">
         <div class="efuseGridTitle">
             <span><i class="fas fa-th"></i> Port Current Heatmap</span>
-            <div class="efuseControls">
-                <select id="timeRange" onchange="refreshData()">
-                    <option value="1">Last 1 Hour</option>
-                    <option value="6">Last 6 Hours</option>
-                    <option value="12">Last 12 Hours</option>
-                    <option value="24" selected>Last 24 Hours</option>
-                </select>
-            </div>
         </div>
         <div id="efuseGrid" class="efuseGrid"></div>
         <div class="efuseColorScale">
@@ -98,6 +90,20 @@ renderCommonJS();
         </div>
         <div class="efuseGridHint">
             <i class="fas fa-hand-pointer"></i> Click a port to view detailed history and configuration
+        </div>
+    </div>
+
+    <!-- Time Range Selector -->
+    <div class="efuseChartsHeader">
+        <span><i class="fas fa-chart-line"></i> Current History</span>
+        <div class="efuseControls">
+            <label for="timeRange">Time Range:</label>
+            <select id="timeRange" onchange="refreshData()">
+                <option value="1">Last 1 Hour</option>
+                <option value="6">Last 6 Hours</option>
+                <option value="12">Last 12 Hours</option>
+                <option value="24" selected>Last 24 Hours</option>
+            </select>
         </div>
     </div>
 
