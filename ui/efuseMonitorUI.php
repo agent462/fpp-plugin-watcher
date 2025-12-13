@@ -17,8 +17,7 @@ renderCommonJS();
     window.efuseConfig = {
         supported: <?php echo json_encode($hardware['supported']); ?>,
         type: <?php echo json_encode($hardware['type']); ?>,
-        ports: <?php echo json_encode($hardware['ports']); ?>,
-        typeLabel: <?php echo json_encode($hardware['details']['method'] ?? 'unknown'); ?>
+        ports: <?php echo json_encode($hardware['ports']); ?>
     };
 </script>
 
@@ -47,15 +46,11 @@ renderCommonJS();
     <div class="efuseHardwareInfo">
         <div class="hardwareItem">
             <span class="hardwareLabel">Hardware:</span>
-            <span class="hardwareValue" id="hardwareType"><?php echo htmlspecialchars(getEfuseHardwareSummary()['typeLabel'] ?? 'Unknown'); ?></span>
+            <span class="hardwareValue" id="hardwareType"><?php echo htmlspecialchars($hardware['details']['cape'] ?? $hardware['type'] ?? 'Unknown'); ?></span>
         </div>
         <div class="hardwareItem">
             <span class="hardwareLabel">Ports:</span>
             <span class="hardwareValue" id="portCount"><?php echo $hardware['ports']; ?></span>
-        </div>
-        <div class="hardwareItem">
-            <span class="hardwareLabel">Method:</span>
-            <span class="hardwareValue" id="readMethod"><?php echo htmlspecialchars(getEfuseHardwareSummary()['methodLabel'] ?? 'Unknown'); ?></span>
         </div>
         <div class="hardwareItem">
             <span class="hardwareLabel">Total Current:</span>

@@ -183,9 +183,10 @@ function detectCapeEfuse() {
         return $result;
     }
 
-    // Check if any outputs have eFuse pins or current monitors
+    // Check if any outputs have eFuse pins, current monitors, or enable pins
     $outputs = $stringConfig['outputs'] ?? [];
     $portsWithEfuse = 0;
+    $portsWithEnable = 0;
     $hasCurrentMonitor = false;
 
     foreach ($outputs as $output) {
@@ -195,11 +196,6 @@ function detectCapeEfuse() {
                 $hasCurrentMonitor = true;
             }
         }
-    }
-
-    // Also check if outputs have enablePin (indicates controllable outputs)
-    $portsWithEnable = 0;
-    foreach ($outputs as $output) {
         if (isset($output['enablePin'])) {
             $portsWithEnable++;
         }
@@ -444,6 +440,35 @@ function readEfuseData() {
 }
 
 /**
+ * Get fppd/ports data with in-request caching
+ * Avoids duplicate API calls within the same request
+ *
+ * @return array|null Ports list or null on error
+ */
+function getFppdPortsCached() {
+    static $cachedPorts = null;
+    static $cacheChecked = false;
+
+    if ($cacheChecked) {
+        return $cachedPorts;
+    }
+
+    $cacheChecked = true;
+    $portsData = @file_get_contents('http://127.0.0.1/api/fppd/ports');
+    if ($portsData === false) {
+        return null;
+    }
+
+    $portsList = @json_decode($portsData, true);
+    if (!is_array($portsList)) {
+        return null;
+    }
+
+    $cachedPorts = $portsList;
+    return $cachedPorts;
+}
+
+/**
  * Count eFuse-capable ports from fppd/ports endpoint
  * Ports with 'ma' field are eFuse-capable
  *
@@ -461,13 +486,8 @@ function countEfusePortsFromFppd() {
  * @return array List of port names (e.g., ['Port 1', 'Port 2', ...])
  */
 function getEfuseCapablePortNames() {
-    $portsData = @file_get_contents('http://127.0.0.1/api/fppd/ports');
-    if ($portsData === false) {
-        return [];
-    }
-
-    $portsList = @json_decode($portsData, true);
-    if (!is_array($portsList)) {
+    $portsList = getFppdPortsCached();
+    if ($portsList === null) {
         return [];
     }
 
@@ -510,22 +530,12 @@ function getEfuseCapablePortNames() {
 function readEfuseFromFppdPorts() {
     $ports = [];
 
-    // Read from local fppd/ports - this is fast since it's just reading
-    // from OutputMonitor's in-memory data
-    $portsData = @file_get_contents('http://127.0.0.1/api/fppd/ports');
-    if ($portsData === false) {
+    // Use cached ports data (shared with getEfuseCapablePortNames)
+    $portsList = getFppdPortsCached();
+    if ($portsList === null) {
         return [
             'success' => false,
             'error' => 'Could not read port data from fppd',
-            'ports' => []
-        ];
-    }
-
-    $portsList = @json_decode($portsData, true);
-    if (!is_array($portsList)) {
-        return [
-            'success' => false,
-            'error' => 'Invalid port data from fppd',
             'ports' => []
         ];
     }
@@ -575,28 +585,19 @@ function getEfuseHardwareSummary() {
     if (!$hardware['supported']) {
         return [
             'supported' => false,
-            'message' => 'No compatible eFuse hardware detected'
+            'message' => 'No compatible eFuse hardware detected',
+            'typeLabel' => 'None'
         ];
     }
 
-    $typeLabels = [
-        'cape' => 'Cape/Hat',
-        'smart_receiver' => 'Smart Receiver'
-    ];
-
-    $methodLabels = [
-        'current_monitor' => 'Current Monitor',
-        'efuse_pin' => 'eFuse Pin',
-        'smart_receiver' => 'Smart Receiver Protocol'
-    ];
+    // Build human-readable type label
+    $typeLabel = $hardware['details']['cape'] ?? ucfirst($hardware['type']);
 
     return [
         'supported' => true,
         'type' => $hardware['type'],
-        'typeLabel' => $typeLabels[$hardware['type']] ?? $hardware['type'],
+        'typeLabel' => $typeLabel,
         'ports' => $hardware['ports'],
-        'method' => $hardware['details']['method'] ?? 'unknown',
-        'methodLabel' => $methodLabels[$hardware['details']['method'] ?? ''] ?? 'Unknown',
         'details' => $hardware['details']
     ];
 }

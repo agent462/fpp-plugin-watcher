@@ -97,8 +97,28 @@ async function loadCurrentData() {
         updateStatsBar(data);
         updatePortGrid(data.ports);
 
+        // Update port detail panel if a port is selected
+        if (selectedPort && currentPortData[selectedPort]) {
+            updatePortDetailCurrent(currentPortData[selectedPort]);
+        }
+
     } catch (error) {
         console.error('Error loading current data:', error);
+    }
+}
+
+/**
+ * Update the port detail panel's current reading
+ */
+function updatePortDetailCurrent(portData) {
+    const currentElem = document.getElementById('portDetailCurrent');
+    if (currentElem) {
+        currentElem.textContent = formatCurrent(portData.currentMa);
+    }
+
+    const expectedElem = document.getElementById('portDetailExpected');
+    if (expectedElem) {
+        expectedElem.textContent = formatCurrent(portData.expectedCurrentMa);
     }
 }
 
@@ -360,10 +380,6 @@ function updatePortOutputConfig(portData) {
  * Update port history chart
  */
 function updatePortHistoryChart(data) {
-    const canvas = document.getElementById('portHistoryChart');
-    if (!canvas) return;
-
-    const ctx = canvas.getContext('2d');
     const history = data.history || [];
 
     // Prepare data points - treat null/undefined as 0
@@ -439,30 +455,17 @@ function updatePortHistoryChart(data) {
         }
     };
 
-    // Update existing chart or create new one
-    if (efuseCharts.portHistory) {
-        efuseCharts.portHistory.data.datasets = datasets;
-        efuseCharts.portHistory.update('none');
-    } else {
-        efuseCharts.portHistory = new Chart(ctx, {
-            type: 'line',
-            data: { datasets: datasets },
-            options: chartOptions
-        });
-    }
+    // Use shared chart helper from commonUI.js
+    updateOrCreateChart(efuseCharts, 'portHistory', 'portHistoryChart', 'line', datasets, chartOptions);
 }
 
 /**
  * Update main history chart with all ports
  */
 function updateHistoryChart(data) {
-    const canvas = document.getElementById('efuseHistoryChart');
-    if (!canvas) return;
-
     // Hide any previous error messages
     hideChartError();
 
-    const ctx = canvas.getContext('2d');
     const timeSeries = data.timeSeries || {};
 
     // Get list of ports with data
@@ -538,18 +541,8 @@ function updateHistoryChart(data) {
         }
     };
 
-    // Update existing chart or create new one
-    if (efuseCharts.history) {
-        // Update data in place without destroying
-        efuseCharts.history.data.datasets = datasets;
-        efuseCharts.history.update('none');  // 'none' mode skips animations
-    } else {
-        efuseCharts.history = new Chart(ctx, {
-            type: 'line',
-            data: { datasets: datasets },
-            options: chartOptions
-        });
-    }
+    // Use shared chart helper from commonUI.js
+    updateOrCreateChart(efuseCharts, 'history', 'efuseHistoryChart', 'line', datasets, chartOptions);
 }
 
 /**
@@ -632,15 +625,7 @@ function getChartColor(index) {
     return colors[index % colors.length];
 }
 
-/**
- * Escape HTML for safe display
- */
-function escapeHtml(text) {
-    if (typeof text !== 'string') return text;
-    const div = document.createElement('div');
-    div.textContent = text;
-    return div.innerHTML;
-}
+// Note: escapeHtml() is provided by commonUI.js
 
 /**
  * Show expected current help modal
