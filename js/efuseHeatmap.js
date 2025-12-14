@@ -24,12 +24,16 @@
     const MAX_CURRENT_MA = 6000;
     const PORTS_PER_CHART = 16;
     const MAX_CHART_POINTS = 200; // Downsample to this many points per line
+    const CONTROL_COOLDOWN_MS = 500; // Rate limiting for control actions
 
     let efuseCharts = {};
     let currentPortData = {};
     let selectedPort = null;
     let refreshInterval = null;
     let chartSkeletonsCreated = false;
+    let lastControlAction = 0;
+    let confirmModalCallback = null;
+    let controlCapabilities = null;
 
     /**
      * Downsample data array to target number of points using LTTB algorithm (simplified)
@@ -193,6 +197,312 @@
     }
 
     /**
+     * Check rate limiting for control actions
+     */
+    function canDoControlAction() {
+        const now = Date.now();
+        if (now - lastControlAction < CONTROL_COOLDOWN_MS) {
+            return false;
+        }
+        lastControlAction = now;
+        return true;
+    }
+
+    /**
+     * Show toast notification
+     */
+    function showToast(message, type = 'info', duration = 3000) {
+        const container = document.getElementById('toastContainer');
+        if (!container) return;
+
+        const toast = document.createElement('div');
+        toast.className = `toast toast-${type}`;
+
+        const icons = {
+            success: 'fa-check-circle',
+            error: 'fa-exclamation-circle',
+            warning: 'fa-exclamation-triangle',
+            info: 'fa-info-circle'
+        };
+
+        toast.innerHTML = `
+            <i class="fas ${icons[type] || icons.info}"></i>
+            <span>${escapeHtml(message)}</span>
+        `;
+
+        container.appendChild(toast);
+
+        // Trigger animation
+        requestAnimationFrame(() => {
+            toast.classList.add('show');
+        });
+
+        // Auto-remove after duration
+        setTimeout(() => {
+            toast.classList.remove('show');
+            setTimeout(() => toast.remove(), 300);
+        }, duration);
+    }
+
+    /**
+     * Show confirmation modal
+     */
+    function showConfirmModal(title, message, actionText, callback) {
+        const modal = document.getElementById('confirmModal');
+        if (!modal) return;
+
+        document.getElementById('confirmModalTitle').textContent = title;
+        document.getElementById('confirmModalMessage').textContent = message;
+        document.getElementById('confirmModalAction').textContent = actionText;
+
+        confirmModalCallback = callback;
+        modal.style.display = 'flex';
+    }
+
+    /**
+     * Hide confirmation modal
+     */
+    function hideConfirmModal(event) {
+        const modal = document.getElementById('confirmModal');
+        if (modal) {
+            modal.style.display = 'none';
+        }
+        confirmModalCallback = null;
+    }
+
+    /**
+     * Execute confirmed action
+     */
+    function executeConfirmAction() {
+        if (confirmModalCallback) {
+            confirmModalCallback();
+        }
+        hideConfirmModal();
+    }
+
+    /**
+     * Load control capabilities
+     */
+    async function loadControlCapabilities() {
+        try {
+            const data = await fetchJson('/api/plugin/fpp-plugin-watcher/efuse/capabilities');
+            if (data.success) {
+                controlCapabilities = data.capabilities;
+            }
+        } catch (error) {
+            console.error('Error loading capabilities:', error);
+        }
+    }
+
+    /**
+     * Toggle a port on/off
+     */
+    async function togglePort(portName, newState = null) {
+        if (!canDoControlAction()) {
+            showToast('Please wait before trying again', 'warning');
+            return;
+        }
+
+        try {
+            const response = await fetch('/api/plugin/fpp-plugin-watcher/efuse/port/toggle', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ port: portName, state: newState })
+            });
+
+            const data = await response.json();
+
+            if (data.success) {
+                const action = data.newState === 'on' ? 'enabled' : 'disabled';
+                showToast(`${portName} ${action}`, 'success');
+                // Refresh data to show new state
+                setTimeout(() => loadCurrentData(), 500);
+            } else {
+                showToast(data.error || 'Failed to toggle port', 'error');
+            }
+        } catch (error) {
+            console.error('Error toggling port:', error);
+            showToast('Network error', 'error');
+        }
+    }
+
+    /**
+     * Reset a tripped fuse
+     */
+    async function resetFuse(portName) {
+        if (!canDoControlAction()) {
+            showToast('Please wait before trying again', 'warning');
+            return;
+        }
+
+        try {
+            const response = await fetch('/api/plugin/fpp-plugin-watcher/efuse/port/reset', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ port: portName })
+            });
+
+            const data = await response.json();
+
+            if (data.success) {
+                showToast(`${portName} fuse reset`, 'success');
+                setTimeout(() => loadCurrentData(), 500);
+            } else {
+                showToast(data.error || 'Failed to reset fuse', 'error');
+            }
+        } catch (error) {
+            console.error('Error resetting fuse:', error);
+            showToast('Network error', 'error');
+        }
+    }
+
+    /**
+     * Master control - turn all ports on or off
+     */
+    async function masterControl(state) {
+        if (!canDoControlAction()) {
+            showToast('Please wait before trying again', 'warning');
+            return;
+        }
+
+        // Require confirmation for "All Off"
+        if (state === 'off') {
+            const portCount = window.efuseConfig?.ports || 16;
+            showConfirmModal(
+                'Disable All Ports?',
+                `This will turn off all ${portCount} eFuse ports immediately. Your show will stop outputting to all connected pixels.`,
+                'DISABLE ALL',
+                () => doMasterControl(state)
+            );
+            return;
+        }
+
+        doMasterControl(state);
+    }
+
+    /**
+     * Execute master control after confirmation
+     */
+    async function doMasterControl(state) {
+        try {
+            const response = await fetch('/api/plugin/fpp-plugin-watcher/efuse/ports/master', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ state: state })
+            });
+
+            const data = await response.json();
+
+            if (data.success) {
+                const action = state === 'on' ? 'enabled' : 'disabled';
+                showToast(`All ports ${action}`, 'success');
+                setTimeout(() => loadCurrentData(), 500);
+            } else {
+                showToast(data.error || 'Failed to set all ports', 'error');
+            }
+        } catch (error) {
+            console.error('Error with master control:', error);
+            showToast('Network error', 'error');
+        }
+    }
+
+    /**
+     * Reset all tripped fuses
+     */
+    async function resetAllTripped() {
+        if (!canDoControlAction()) {
+            showToast('Please wait before trying again', 'warning');
+            return;
+        }
+
+        try {
+            const response = await fetch('/api/plugin/fpp-plugin-watcher/efuse/ports/reset-all', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' }
+            });
+
+            const data = await response.json();
+
+            if (data.success) {
+                const count = data.resetCount || 0;
+                if (count > 0) {
+                    showToast(`Reset ${count} tripped fuse${count > 1 ? 's' : ''}`, 'success');
+                } else {
+                    showToast('No fuses to reset', 'info');
+                }
+                setTimeout(() => loadCurrentData(), 500);
+            } else {
+                showToast(data.error || 'Failed to reset fuses', 'error');
+            }
+        } catch (error) {
+            console.error('Error resetting fuses:', error);
+            showToast('Network error', 'error');
+        }
+    }
+
+    /**
+     * Toggle the currently selected port
+     */
+    function toggleSelectedPort() {
+        if (!selectedPort) return;
+        const portData = currentPortData[selectedPort];
+        const isEnabled = portData?.portEnabled !== false;
+        // Convert boolean to 'on'/'off' string for API
+        togglePort(selectedPort, isEnabled ? 'off' : 'on');
+    }
+
+    /**
+     * Reset the currently selected port's fuse
+     */
+    function resetSelectedPort() {
+        if (!selectedPort) return;
+        resetFuse(selectedPort);
+    }
+
+    /**
+     * Update tripped fuse banner visibility and content
+     */
+    function updateTrippedBanner(ports) {
+        const banner = document.getElementById('trippedBanner');
+        const resetBtn = document.getElementById('resetTrippedBtn');
+        if (!banner) return;
+
+        const trippedPorts = Object.entries(ports || {})
+            .filter(([_, p]) => p.fuseTripped)
+            .map(([name]) => name);
+
+        const count = trippedPorts.length;
+
+        if (count > 0) {
+            banner.style.display = 'flex';
+            document.getElementById('trippedCount').textContent = count;
+            document.getElementById('trippedPortList').textContent = trippedPorts.join(', ');
+
+            if (resetBtn) {
+                resetBtn.style.display = 'inline-flex';
+                resetBtn.querySelector('.badge').textContent = count;
+            }
+        } else {
+            banner.style.display = 'none';
+            if (resetBtn) {
+                resetBtn.style.display = 'none';
+            }
+        }
+    }
+
+    /**
+     * Update port detail panel control buttons (now integrated into output config)
+     */
+    function updatePortDetailControls(portData) {
+        // Controls are now rendered as part of updatePortOutputConfig
+        // This function is called to refresh after API operations
+        // Re-render the output config to update control state
+        if (portData) {
+            updatePortOutputConfig(portData);
+        }
+    }
+
+    /**
      * Load current readings
      */
     async function loadCurrentData() {
@@ -208,10 +518,12 @@
             updateLastUpdateTime('lastUpdate');
             updateStatsBar(data);
             updatePortGrid(data.ports);
+            updateTrippedBanner(data.ports);
 
             // Update port detail panel if a port is selected
             if (selectedPort && currentPortData[selectedPort]) {
                 updatePortDetailCurrent(currentPortData[selectedPort]);
+                updatePortDetailControls(currentPortData[selectedPort]);
             }
 
         } catch (error) {
@@ -381,24 +693,49 @@
         let html = '';
         for (const [portName, portData] of sortedPorts) {
             const current = portData.currentMa || 0;
-            const color = getEfuseColor(current);
-            const status = portData.status || 'normal';
+            const isEnabled = portData.portEnabled !== false;
+            const isTripped = portData.fuseTripped === true;
+            const color = isTripped ? '#c82333' : (isEnabled ? getEfuseColor(current) : '#333');
+            const status = isTripped ? 'tripped' : (portData.status || 'normal');
             const percent = Math.min(100, (current / MAX_CURRENT_MA) * 100);
             const isSelected = selectedPort === portName ? 'selected' : '';
+            const disabledClass = !isEnabled ? 'disabled' : '';
+
+            // Power button icon based on state
+            const powerIcon = isTripped ? 'fa-exclamation-triangle' : 'fa-power-off';
+            const powerClass = isTripped ? 'tripped' : (isEnabled ? 'on' : 'off');
+            const powerTitle = isTripped ? 'Reset fuse' : (isEnabled ? 'Disable port' : 'Enable port');
 
             html += `
-                <div class="efusePort ${status} ${isSelected}" onclick="showPortDetail('${escapeHtml(portName)}')"
+                <div class="efusePort ${status} ${isSelected} ${disabledClass}"
                      style="background: ${color};" title="Click to view ${escapeHtml(portName)} details">
-                    <div class="portName">${escapeHtml(portName.replace('Port', 'P'))}</div>
-                    <div class="portValue">${formatCurrent(current, false)}</div>
-                    <div class="portBar">
-                        <div class="portBarFill" style="width: ${percent}%;"></div>
+                    <button class="portPowerBtn ${powerClass}" onclick="event.stopPropagation(); portPowerClick('${escapeHtml(portName)}', ${isEnabled}, ${isTripped})" title="${powerTitle}">
+                        <i class="fas ${powerIcon}"></i>
+                    </button>
+                    <div class="portClickArea" onclick="showPortDetail('${escapeHtml(portName)}')">
+                        <div class="portName">${escapeHtml(portName.replace('Port', 'P'))}</div>
+                        <div class="portValue">${formatCurrent(current, false)}</div>
+                        <div class="portBar">
+                            <div class="portBarFill" style="width: ${percent}%;"></div>
+                        </div>
                     </div>
                 </div>
             `;
         }
 
         grid.innerHTML = html;
+    }
+
+    /**
+     * Handle power button click on port tile
+     */
+    function portPowerClick(portName, isEnabled, isTripped) {
+        if (isTripped) {
+            resetFuse(portName);
+        } else {
+            // Convert boolean to 'on'/'off' string for API
+            togglePort(portName, isEnabled ? 'off' : 'on');
+        }
     }
 
     /**
@@ -420,6 +757,9 @@
         const portData = currentPortData[portName] || {};
         document.getElementById('portDetailCurrent').textContent = formatCurrent(portData.currentMa);
         document.getElementById('portDetailExpected').textContent = formatCurrent(portData.expectedCurrentMa);
+
+        // Update control buttons state
+        updatePortDetailControls(portData);
 
         // Show panel
         panel.style.display = 'block';
@@ -470,14 +810,53 @@
     }
 
     /**
-     * Update port output configuration display
+     * Update port output configuration display (with integrated controls)
      */
     function updatePortOutputConfig(portData) {
         const container = document.getElementById('portOutputConfig');
         if (!container) return;
 
+        // Build control section
+        const isEnabled = portData?.portEnabled !== false;
+        const isTripped = portData?.fuseTripped === true;
+
+        let statusClass = 'enabled';
+        let statusText = 'ENABLED';
+        if (isTripped) {
+            statusClass = 'tripped';
+            statusText = 'TRIPPED';
+        } else if (!isEnabled) {
+            statusClass = 'disabled';
+            statusText = 'DISABLED';
+        }
+
+        const toggleBtnClass = isEnabled ? 'danger' : 'primary';
+        const toggleBtnText = isEnabled ? 'Disable' : 'Enable';
+        const resetBtnDisplay = isTripped ? 'inline-flex' : 'none';
+
+        const controlHtml = `
+            <div class="portControlRow">
+                <div class="portStatusIndicator">
+                    <span class="statusDot ${statusClass}"></span>
+                    <span>${statusText}</span>
+                </div>
+                <div class="portControlButtons">
+                    <button class="efuseControlBtn ${toggleBtnClass}" onclick="toggleSelectedPort()">
+                        <i class="fas fa-power-off"></i> ${toggleBtnText}
+                    </button>
+                    <button class="efuseControlBtn warning" onclick="resetSelectedPort()" style="display: ${resetBtnDisplay};">
+                        <i class="fas fa-redo"></i> Reset
+                    </button>
+                </div>
+            </div>
+        `;
+
         if (!portData || !portData.pixelCount) {
-            container.innerHTML = '<div class="noConfig">No output configuration found</div>';
+            container.innerHTML = `
+                <div class="outputConfigTitle">Output Configuration</div>
+                <div class="noConfig">No output configuration found</div>
+                ${controlHtml}
+            `;
             return;
         }
 
@@ -513,6 +892,7 @@
             <div class="expectedInfo">
                 Expected: ~${formatCurrent(portData.expectedCurrentMa)} typical / ${formatCurrent(portData.maxCurrentMa)} max
             </div>
+            ${controlHtml}
         `;
     }
 
@@ -856,5 +1236,16 @@
     window.hideExpectedHelp = hideExpectedHelp;
     window.showPageHelp = showPageHelp;
     window.hidePageHelp = hidePageHelp;
+
+    // Control functions
+    window.togglePort = togglePort;
+    window.resetFuse = resetFuse;
+    window.masterControl = masterControl;
+    window.resetAllTripped = resetAllTripped;
+    window.toggleSelectedPort = toggleSelectedPort;
+    window.resetSelectedPort = resetSelectedPort;
+    window.portPowerClick = portPowerClick;
+    window.hideConfirmModal = hideConfirmModal;
+    window.confirmModalCallback = executeConfirmAction;
 
 })();

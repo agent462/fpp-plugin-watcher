@@ -260,16 +260,30 @@ function getPortCurrentSummary($currentReadings) {
     $config = getEfuseOutputConfig();
     $summary = [];
 
+    // Get fuse status from fppd/ports for enabled/tripped info
+    $fuseStatus = getPortFuseStatus();
+
     foreach ($config['ports'] as $portName => $portConfig) {
         $currentMa = $currentReadings[$portName] ?? 0;
         $expectedMa = $portConfig['expectedCurrentMa'];
         $maxMa = $portConfig['maxCurrentMa'];
 
+        // Get fuse/enabled status from fppd/ports
+        $portFuseInfo = $fuseStatus[$portName] ?? [];
+        $fuseTripped = $portFuseInfo['fuseTripped'] ?? false;
+        $portEnabled = $portFuseInfo['enabled'] ?? true;
+
         // Calculate status
         $status = 'normal';
         $statusMessage = '';
 
-        if ($currentMa > EFUSE_MAX_CURRENT_MA) {
+        if ($fuseTripped) {
+            $status = 'tripped';
+            $statusMessage = 'Fuse tripped';
+        } elseif (!$portEnabled) {
+            $status = 'disabled';
+            $statusMessage = 'Port disabled';
+        } elseif ($currentMa > EFUSE_MAX_CURRENT_MA) {
             $status = 'critical';
             $statusMessage = 'Exceeds eFuse limit';
         } elseif ($currentMa > $maxMa * 0.9) {
@@ -292,11 +306,58 @@ function getPortCurrentSummary($currentReadings) {
             'status' => $status,
             'statusMessage' => $statusMessage,
             'percentOfMax' => $percentOfMax,
-            'percentOfEfuse' => $percentOfEfuse
+            'percentOfEfuse' => $percentOfEfuse,
+            'fuseTripped' => $fuseTripped,
+            'portEnabled' => $portEnabled
         ]);
     }
 
     return $summary;
+}
+
+/**
+ * Get fuse status for all ports from fppd/ports API
+ *
+ * @return array [portName => ['enabled' => bool, 'fuseTripped' => bool]]
+ */
+function getPortFuseStatus() {
+    $result = [];
+
+    $portsData = @file_get_contents('http://127.0.0.1/api/fppd/ports');
+    if ($portsData === false) {
+        return $result;
+    }
+
+    $portsList = @json_decode($portsData, true);
+    if (!is_array($portsList)) {
+        return $result;
+    }
+
+    foreach ($portsList as $port) {
+        $name = $port['name'] ?? '';
+        if (empty($name)) continue;
+
+        // Check for smart receiver ports
+        if (isset($port['smartReceivers']) && $port['smartReceivers']) {
+            foreach (['A', 'B', 'C', 'D', 'E', 'F'] as $sub) {
+                if (isset($port[$sub])) {
+                    $subName = $name . '-' . $sub;
+                    $result[$subName] = [
+                        'enabled' => $port[$sub]['fuseOn'] ?? $port[$sub]['enabled'] ?? false,
+                        'fuseTripped' => $port[$sub]['fuseBlown'] ?? false
+                    ];
+                }
+            }
+        } else {
+            // Standard port - status === false means tripped
+            $result[$name] = [
+                'enabled' => $port['enabled'] ?? false,
+                'fuseTripped' => isset($port['status']) ? ($port['status'] === false) : false
+            ];
+        }
+    }
+
+    return $result;
 }
 
 /**

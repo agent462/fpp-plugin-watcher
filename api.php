@@ -145,6 +145,11 @@ function getEndpointsfpppluginwatcher() {
         ['method' => 'GET', 'endpoint' => 'efuse/heatmap', 'callback' => 'fpppluginWatcherEfuseHeatmap'],
         ['method' => 'GET', 'endpoint' => 'efuse/config', 'callback' => 'fpppluginWatcherEfuseConfig'],
         ['method' => 'GET', 'endpoint' => 'efuse/outputs', 'callback' => 'fpppluginWatcherEfuseOutputs'],
+        ['method' => 'GET', 'endpoint' => 'efuse/capabilities', 'callback' => 'fpppluginWatcherEfuseCapabilities'],
+        ['method' => 'POST', 'endpoint' => 'efuse/port/toggle', 'callback' => 'fpppluginWatcherEfusePortToggle'],
+        ['method' => 'POST', 'endpoint' => 'efuse/port/reset', 'callback' => 'fpppluginWatcherEfusePortReset'],
+        ['method' => 'POST', 'endpoint' => 'efuse/ports/master', 'callback' => 'fpppluginWatcherEfusePortsMaster'],
+        ['method' => 'POST', 'endpoint' => 'efuse/ports/reset-all', 'callback' => 'fpppluginWatcherEfusePortsResetAll'],
 
         // Falcon controller
         ['method' => 'GET', 'endpoint' => 'falcon/status', 'callback' => 'fpppluginWatcherFalconStatus'],
@@ -1132,4 +1137,87 @@ function fpppluginWatcherEfuseOutputs() {
     }
 
     return apiSuccess(getEfuseOutputConfig());
+}
+
+// GET /api/plugin/fpp-plugin-watcher/efuse/capabilities
+function fpppluginWatcherEfuseCapabilities() {
+    return apiSuccess(getEfuseControlCapabilities());
+}
+
+// POST /api/plugin/fpp-plugin-watcher/efuse/port/toggle
+function fpppluginWatcherEfusePortToggle() {
+    $hardware = detectEfuseHardware();
+    if (!$hardware['supported']) {
+        return apiError('No compatible eFuse hardware detected', 404);
+    }
+
+    $input = getJsonBody();
+    $port = $input['port'] ?? null;
+    $state = $input['state'] ?? null;
+
+    if (empty($port)) {
+        return apiError('Missing port parameter');
+    }
+
+    $result = toggleEfusePort($port, $state);
+    if (!$result['success']) {
+        return apiError($result['error'] ?? 'Toggle failed');
+    }
+
+    return apiSuccess($result);
+}
+
+// POST /api/plugin/fpp-plugin-watcher/efuse/port/reset
+function fpppluginWatcherEfusePortReset() {
+    $hardware = detectEfuseHardware();
+    if (!$hardware['supported']) {
+        return apiError('No compatible eFuse hardware detected', 404);
+    }
+
+    $input = getJsonBody();
+    $port = $input['port'] ?? null;
+
+    if (empty($port)) {
+        return apiError('Missing port parameter');
+    }
+
+    $result = resetEfusePort($port);
+    if (!$result['success']) {
+        return apiError($result['error'] ?? 'Reset failed');
+    }
+
+    return apiSuccess($result);
+}
+
+// POST /api/plugin/fpp-plugin-watcher/efuse/ports/master
+function fpppluginWatcherEfusePortsMaster() {
+    $hardware = detectEfuseHardware();
+    if (!$hardware['supported']) {
+        return apiError('No compatible eFuse hardware detected', 404);
+    }
+
+    $input = getJsonBody();
+    $state = $input['state'] ?? null;
+
+    if (empty($state) || !in_array($state, ['on', 'off'])) {
+        return apiError('Missing or invalid state parameter. Use "on" or "off"');
+    }
+
+    $result = setAllEfusePorts($state);
+    if (!$result['success']) {
+        return apiError($result['error'] ?? 'Master control failed');
+    }
+
+    return apiSuccess($result);
+}
+
+// POST /api/plugin/fpp-plugin-watcher/efuse/ports/reset-all
+function fpppluginWatcherEfusePortsResetAll() {
+    $hardware = detectEfuseHardware();
+    if (!$hardware['supported']) {
+        return apiError('No compatible eFuse hardware detected', 404);
+    }
+
+    $result = resetAllTrippedFuses();
+    return apiSuccess($result);
 }

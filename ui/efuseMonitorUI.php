@@ -74,19 +74,44 @@ renderCommonJS();
     </div>
     <?php else: ?>
 
-    <!-- Hardware Info Bar -->
+    <!-- Tripped Fuse Alert Banner (shown by JS when fuses are tripped) -->
+    <div id="trippedBanner" class="efuseTrippedBanner" style="display: none;">
+        <span class="alertIcon"><i class="fas fa-exclamation-triangle"></i></span>
+        <span class="alertText">
+            <strong><span id="trippedCount">0</span> FUSES TRIPPED:</strong>
+            <span id="trippedPortList"></span>
+        </span>
+        <button class="efuseControlBtn warning" onclick="resetAllTripped()">
+            <i class="fas fa-redo"></i> Reset All
+        </button>
+    </div>
+
+    <!-- Hardware Info Bar with Master Controls -->
     <div class="efuseHardwareInfo">
-        <div class="hardwareItem">
-            <span class="hardwareLabel">Hardware:</span>
-            <span class="hardwareValue" id="hardwareType"><?php echo htmlspecialchars($hardware['details']['cape'] ?? $hardware['type'] ?? 'Unknown'); ?></span>
+        <div class="hardwareInfoLeft">
+            <div class="hardwareItem">
+                <span class="hardwareLabel">Hardware:</span>
+                <span class="hardwareValue" id="hardwareType"><?php echo htmlspecialchars($hardware['details']['cape'] ?? $hardware['type'] ?? 'Unknown'); ?></span>
+            </div>
+            <div class="hardwareItem">
+                <span class="hardwareLabel">Ports:</span>
+                <span class="hardwareValue" id="portCount"><?php echo $hardware['ports']; ?></span>
+            </div>
+            <div class="hardwareItem">
+                <span class="hardwareLabel">Total Current:</span>
+                <span class="hardwareValue" id="totalCurrent">-- A</span>
+            </div>
         </div>
-        <div class="hardwareItem">
-            <span class="hardwareLabel">Ports:</span>
-            <span class="hardwareValue" id="portCount"><?php echo $hardware['ports']; ?></span>
-        </div>
-        <div class="hardwareItem">
-            <span class="hardwareLabel">Total Current:</span>
-            <span class="hardwareValue" id="totalCurrent">-- A</span>
+        <div class="hardwareMasterControls">
+            <button class="efuseControlBtn primary" onclick="masterControl('on')" title="Enable all ports">
+                <i class="fas fa-power-off"></i> All On
+            </button>
+            <button class="efuseControlBtn danger" onclick="masterControl('off')" title="Disable all ports">
+                <i class="fas fa-power-off"></i> All Off
+            </button>
+            <button class="efuseControlBtn warning" id="resetTrippedBtn" onclick="resetAllTripped()" style="display: none;" title="Reset all tripped fuses">
+                <i class="fas fa-redo"></i> Reset <span class="badge">0</span>
+            </button>
         </div>
     </div>
 
@@ -118,15 +143,24 @@ renderCommonJS();
             <span class="scaleLabel">6A (per port max)</span>
         </div>
         <div class="efuseGridHint">
-            <i class="fas fa-hand-pointer"></i> Click a port to view detailed history and configuration
+            <i class="fas fa-hand-pointer"></i> Click a port tile for details, click <i class="fas fa-power-off"></i> button to toggle on/off
         </div>
     </div>
 
-    <!-- Time Range Selector -->
+    <!-- Current History Header with Time Range Selector -->
     <div class="efuseChartsHeader">
         <span><i class="fas fa-chart-line"></i> Current History</span>
+        <div class="efuseControls">
+            <label for="timeRange">Time Range:</label>
+            <select id="timeRange" onchange="loadAllData()">
+                <?php foreach ($timeRangeOptions as $value => $label): ?>
+                <option value="<?php echo htmlspecialchars($value); ?>"<?php echo $value == '24' ? ' selected' : ''; ?>>
+                    <?php echo htmlspecialchars($label); ?>
+                </option>
+                <?php endforeach; ?>
+            </select>
+        </div>
     </div>
-    <?php renderTimeRangeSelector('timeRange', 'loadAllData()', 'Time Range:', $timeRangeOptions, '24'); ?>
 
     <!-- Port Detail Panel (shown on port click) -->
     <div id="portDetailPanel" class="portDetailPanel" style="display: none;">
@@ -153,8 +187,9 @@ renderCommonJS();
                     <div class="detailStatValue" id="portDetailExpected">-- mA</div>
                 </div>
             </div>
+            <!-- Output Config with integrated Port Control -->
             <div class="portOutputConfig" id="portOutputConfig">
-                <!-- Output config loaded dynamically -->
+                <!-- Output config and control loaded dynamically -->
             </div>
             <div class="portDetailChart">
                 <canvas id="portHistoryChart"></canvas>
@@ -276,6 +311,24 @@ renderCommonJS();
             </div>
         </div>
     </div>
+
+    <!-- Confirmation Modal for destructive actions -->
+    <div id="confirmModal" class="confirmModal" style="display: none;" onclick="hideConfirmModal(event)">
+        <div class="confirmModalContent" onclick="event.stopPropagation()">
+            <div class="confirmModalIcon">
+                <i class="fas fa-exclamation-triangle"></i>
+            </div>
+            <h3 id="confirmModalTitle">Confirm Action</h3>
+            <p id="confirmModalMessage">Are you sure you want to proceed?</p>
+            <div class="confirmModalButtons">
+                <button class="efuseControlBtn secondary" onclick="hideConfirmModal()">Cancel</button>
+                <button class="efuseControlBtn danger" id="confirmModalAction" onclick="confirmModalCallback()">Confirm</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Toast notification container -->
+    <div id="toastContainer" class="toastContainer"></div>
 </div>
 
 <script>

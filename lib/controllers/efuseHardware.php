@@ -619,4 +619,427 @@ function clearEfuseHardwareCache() {
         @unlink(EFUSE_HARDWARE_CACHE_FILE);
     }
 }
+
+// =============================================================================
+// EFUSE CONTROL FUNCTIONS
+// =============================================================================
+
+/**
+ * Toggle a port on/off using FPP's command API
+ *
+ * @param string $portName Port name (e.g., "Port 1")
+ * @param string|null $state "on", "off", or null to toggle
+ * @return array ['success' => bool, 'newState' => string, 'message' => string]
+ */
+function toggleEfusePort($portName, $state = null) {
+    // Validate port name
+    if (empty($portName) || !preg_match('/^Port \d+(-[A-F])?$/', $portName)) {
+        return [
+            'success' => false,
+            'error' => 'Invalid port name format'
+        ];
+    }
+
+    // If no state specified, get current state and toggle
+    if ($state === null) {
+        $currentStatus = getPortStatus($portName);
+        if ($currentStatus === null) {
+            return [
+                'success' => false,
+                'error' => 'Could not determine current port state'
+            ];
+        }
+        $state = $currentStatus['enabled'] ? 'off' : 'on';
+    }
+
+    // Normalize state - handle booleans and strings
+    if ($state === true || $state === 'true' || $state === '1' || $state === 1) {
+        $state = 'on';
+    } elseif ($state === false || $state === 'false' || $state === '0' || $state === 0) {
+        $state = 'off';
+    } else {
+        $state = strtolower($state);
+    }
+
+    if (!in_array($state, ['on', 'off'])) {
+        return [
+            'success' => false,
+            'error' => 'Invalid state. Use "on" or "off"'
+        ];
+    }
+
+    // Call FPP command API with JSON body
+    $url = "http://127.0.0.1/api/command";
+    $postData = json_encode([
+        'command' => 'Set Port Status',
+        'args' => [$portName, $state === 'on']
+    ]);
+
+    $response = @file_get_contents($url, false, stream_context_create([
+        'http' => [
+            'method' => 'POST',
+            'header' => 'Content-Type: application/json',
+            'content' => $postData,
+            'timeout' => 5
+        ]
+    ]));
+
+    if ($response === false) {
+        return [
+            'success' => false,
+            'error' => 'Failed to communicate with FPP'
+        ];
+    }
+
+    // FPP returns "OK" on success, not JSON
+    if (trim($response) !== 'OK') {
+        return [
+            'success' => false,
+            'error' => $response ?: 'Command failed'
+        ];
+    }
+
+    logEfuseControl('toggle', $portName, $state);
+
+    return [
+        'success' => true,
+        'port' => $portName,
+        'newState' => $state,
+        'message' => "{$portName} " . ($state === 'on' ? 'enabled' : 'disabled')
+    ];
+}
+
+/**
+ * Reset a tripped fuse by toggling the port off then on
+ *
+ * @param string $portName Port name (e.g., "Port 1")
+ * @return array ['success' => bool, 'message' => string]
+ */
+function resetEfusePort($portName) {
+    // Validate port name
+    if (empty($portName) || !preg_match('/^Port \d+(-[A-F])?$/', $portName)) {
+        return [
+            'success' => false,
+            'error' => 'Invalid port name format'
+        ];
+    }
+
+    // Check if port is actually tripped
+    $status = getPortStatus($portName);
+    if ($status === null) {
+        return [
+            'success' => false,
+            'error' => 'Could not get port status'
+        ];
+    }
+
+    if (!isset($status['fuseTripped']) || !$status['fuseTripped']) {
+        return [
+            'success' => true,
+            'port' => $portName,
+            'message' => 'Fuse is not tripped, no reset needed'
+        ];
+    }
+
+    // Reset by turning off then on
+    $offResult = toggleEfusePort($portName, 'off');
+    if (!$offResult['success']) {
+        return $offResult;
+    }
+
+    // Brief delay to allow fuse to reset
+    usleep(100000); // 100ms
+
+    $onResult = toggleEfusePort($portName, 'on');
+    if (!$onResult['success']) {
+        return $onResult;
+    }
+
+    logEfuseControl('reset', $portName, 'success');
+
+    return [
+        'success' => true,
+        'port' => $portName,
+        'message' => "{$portName} fuse reset"
+    ];
+}
+
+/**
+ * Set all ports on or off (master control)
+ *
+ * @param string $state "on" or "off"
+ * @return array ['success' => bool, 'portsAffected' => int, 'message' => string]
+ */
+function setAllEfusePorts($state) {
+    $state = strtolower($state);
+    if (!in_array($state, ['on', 'off'])) {
+        return [
+            'success' => false,
+            'error' => 'Invalid state. Use "on" or "off"'
+        ];
+    }
+
+    // Get all eFuse-capable port names
+    $portNames = getEfuseCapablePortNames();
+    if (empty($portNames)) {
+        return [
+            'success' => false,
+            'error' => 'No eFuse-capable ports found'
+        ];
+    }
+
+    $successCount = 0;
+    $errors = [];
+
+    foreach ($portNames as $portName) {
+        $result = toggleEfusePort($portName, $state);
+        if ($result['success']) {
+            $successCount++;
+        } else {
+            $errors[] = "{$portName}: " . ($result['error'] ?? 'Unknown error');
+        }
+    }
+
+    logEfuseControl('master', 'all', $state . " ({$successCount}/" . count($portNames) . ")");
+
+    if ($successCount === 0) {
+        return [
+            'success' => false,
+            'error' => 'Failed to control any ports',
+            'details' => $errors
+        ];
+    }
+
+    return [
+        'success' => true,
+        'state' => $state,
+        'portsAffected' => $successCount,
+        'totalPorts' => count($portNames),
+        'errors' => $errors,
+        'message' => "All ports " . ($state === 'on' ? 'enabled' : 'disabled') .
+            ($successCount < count($portNames) ? " ({$successCount}/" . count($portNames) . " succeeded)" : '')
+    ];
+}
+
+/**
+ * Reset all tripped fuses
+ *
+ * @return array ['success' => bool, 'resetCount' => int, 'ports' => array, 'message' => string]
+ */
+function resetAllTrippedFuses() {
+    // Get all port statuses and find tripped ones
+    $trippedPorts = [];
+    $portsList = getFppdPortsCached();
+
+    if ($portsList === null) {
+        // Clear cache and try fresh
+        $portsData = @file_get_contents('http://127.0.0.1/api/fppd/ports');
+        if ($portsData === false) {
+            return [
+                'success' => false,
+                'error' => 'Could not get port status from fppd'
+            ];
+        }
+        $portsList = @json_decode($portsData, true);
+    }
+
+    if (!is_array($portsList)) {
+        return [
+            'success' => false,
+            'error' => 'Invalid response from fppd'
+        ];
+    }
+
+    // Find tripped ports
+    foreach ($portsList as $port) {
+        $name = $port['name'] ?? '';
+        if (empty($name)) continue;
+
+        // Check for smart receiver ports
+        if (isset($port['smartReceivers']) && $port['smartReceivers']) {
+            foreach (['A', 'B', 'C', 'D', 'E', 'F'] as $sub) {
+                if (isset($port[$sub]) && isset($port[$sub]['fuseBlown']) && $port[$sub]['fuseBlown']) {
+                    $trippedPorts[] = $name . '-' . $sub;
+                }
+            }
+        } else {
+            // Standard port - status === false means tripped
+            if (isset($port['status']) && $port['status'] === false) {
+                $trippedPorts[] = $name;
+            }
+        }
+    }
+
+    if (empty($trippedPorts)) {
+        return [
+            'success' => true,
+            'resetCount' => 0,
+            'ports' => [],
+            'message' => 'No tripped fuses found'
+        ];
+    }
+
+    $resetPorts = [];
+    $errors = [];
+
+    foreach ($trippedPorts as $portName) {
+        $result = resetEfusePort($portName);
+        if ($result['success']) {
+            $resetPorts[] = $portName;
+        } else {
+            $errors[] = "{$portName}: " . ($result['error'] ?? 'Unknown error');
+        }
+    }
+
+    logEfuseControl('reset-all', implode(',', $resetPorts), count($resetPorts) . ' reset');
+
+    return [
+        'success' => count($resetPorts) > 0,
+        'resetCount' => count($resetPorts),
+        'ports' => $resetPorts,
+        'errors' => $errors,
+        'message' => count($resetPorts) > 0
+            ? "Reset " . count($resetPorts) . " tripped fuse" . (count($resetPorts) !== 1 ? 's' : '')
+            : 'Failed to reset any fuses'
+    ];
+}
+
+/**
+ * Get control capabilities for current hardware
+ *
+ * @return array Capabilities info
+ */
+function getEfuseControlCapabilities() {
+    $hardware = detectEfuseHardware();
+
+    if (!$hardware['supported']) {
+        return [
+            'success' => true,
+            'supported' => false,
+            'canToggle' => false,
+            'canReset' => false,
+            'canMasterControl' => false,
+            'isSmartReceiver' => false,
+            'hardwareType' => 'none'
+        ];
+    }
+
+    $isSmartReceiver = $hardware['type'] === 'smart_receiver';
+    $method = $hardware['details']['method'] ?? 'unknown';
+
+    return [
+        'success' => true,
+        'supported' => true,
+        'canToggle' => true,
+        'canReset' => true,
+        'canMasterControl' => true,
+        'isSmartReceiver' => $isSmartReceiver,
+        'hardwareType' => $hardware['details']['cape'] ?? $hardware['type'],
+        'portCount' => $hardware['ports'],
+        'method' => $method
+    ];
+}
+
+/**
+ * Get status for a specific port
+ *
+ * @param string $portName Port name
+ * @return array|null Port status or null if not found
+ */
+function getPortStatus($portName) {
+    $portsData = @file_get_contents('http://127.0.0.1/api/fppd/ports');
+    if ($portsData === false) {
+        return null;
+    }
+
+    $portsList = @json_decode($portsData, true);
+    if (!is_array($portsList)) {
+        return null;
+    }
+
+    // Check for smart receiver sub-port (e.g., "Port 1-A")
+    $isSubPort = preg_match('/^(Port \d+)-([A-F])$/', $portName, $matches);
+
+    foreach ($portsList as $port) {
+        $name = $port['name'] ?? '';
+
+        if ($isSubPort) {
+            // Looking for smart receiver sub-port
+            if ($name === $matches[1] && isset($port['smartReceivers']) && $port['smartReceivers']) {
+                $sub = $matches[2];
+                if (isset($port[$sub])) {
+                    return [
+                        'name' => $portName,
+                        'enabled' => $port[$sub]['fuseOn'] ?? $port[$sub]['enabled'] ?? false,
+                        'fuseTripped' => $port[$sub]['fuseBlown'] ?? false,
+                        'currentMa' => $port[$sub]['ma'] ?? $port[$sub]['current'] ?? 0,
+                        'isSmartReceiver' => true
+                    ];
+                }
+            }
+        } else {
+            // Standard port
+            if ($name === $portName) {
+                return [
+                    'name' => $portName,
+                    'enabled' => $port['enabled'] ?? false,
+                    'fuseTripped' => isset($port['status']) ? ($port['status'] === false) : false,
+                    'currentMa' => $port['ma'] ?? 0,
+                    'isSmartReceiver' => false
+                ];
+            }
+        }
+    }
+
+    return null;
+}
+
+/**
+ * Get all tripped fuses
+ *
+ * @return array List of tripped port names
+ */
+function getTrippedFuses() {
+    $tripped = [];
+    $portsData = @file_get_contents('http://127.0.0.1/api/fppd/ports');
+    if ($portsData === false) {
+        return $tripped;
+    }
+
+    $portsList = @json_decode($portsData, true);
+    if (!is_array($portsList)) {
+        return $tripped;
+    }
+
+    foreach ($portsList as $port) {
+        $name = $port['name'] ?? '';
+        if (empty($name)) continue;
+
+        if (isset($port['smartReceivers']) && $port['smartReceivers']) {
+            foreach (['A', 'B', 'C', 'D', 'E', 'F'] as $sub) {
+                if (isset($port[$sub]) && isset($port[$sub]['fuseBlown']) && $port[$sub]['fuseBlown']) {
+                    $tripped[] = $name . '-' . $sub;
+                }
+            }
+        } else {
+            if (isset($port['status']) && $port['status'] === false) {
+                $tripped[] = $name;
+            }
+        }
+    }
+
+    return $tripped;
+}
+
+/**
+ * Log eFuse control action
+ *
+ * @param string $action Action type (toggle, reset, master, reset-all)
+ * @param string $target Target port or "all"
+ * @param string $result Result description
+ */
+function logEfuseControl($action, $target, $result) {
+    $message = sprintf("CONTROL: %s on %s - %s", strtoupper($action), $target, $result);
+    logMessage($message, 'efuse');
+}
 ?>
