@@ -56,7 +56,7 @@ renderCommonJS();
                     </select>
                 </div>
             </div>
-            <canvas id="rawPingLatencyChart" style="max-height: 400px;"></canvas>
+            <canvas id="rawPingLatencyChart" class="chartCanvas"></canvas>
         </div>
 
         <div id="noDataMessage" class="infoBox" style="display: none;">
@@ -121,7 +121,7 @@ renderCommonJS();
                         <span class="tierBadge" id="latencyTierBadge">1-minute averages</span>
                     </span>
                 </div>
-                <canvas id="latencyChart" style="max-height: 400px;"></canvas>
+                <canvas id="latencyChart" class="chartCanvas"></canvas>
             </div>
 
             <div class="chartCard">
@@ -131,7 +131,7 @@ renderCommonJS();
                         <span class="tierBadge" id="rangeTierBadge">1-minute averages</span>
                     </span>
                 </div>
-                <canvas id="rangeChart" style="max-height: 400px;"></canvas>
+                <canvas id="rangeChart" class="chartCanvas"></canvas>
             </div>
 
             <div class="chartCard">
@@ -141,7 +141,7 @@ renderCommonJS();
                         <span class="tierBadge" id="sampleTierBadge">1-minute averages</span>
                     </span>
                 </div>
-                <canvas id="sampleChart" style="max-height: 400px;"></canvas>
+                <canvas id="sampleChart" class="chartCanvas"></canvas>
             </div>
         </div>
     </div>

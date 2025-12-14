@@ -474,31 +474,116 @@
 }
 
 
-/* Responsive */
+/* Responsive - Tablet (768px) */
 @media (max-width: 768px) {
+    .efuseContainer {
+        padding: 0.75rem;
+    }
+
     .efuseHeader {
         flex-direction: column;
         gap: 0.5rem;
         text-align: center;
+        margin-bottom: 1rem;
+    }
+
+    .efuseHeader h2 {
+        font-size: 1.25rem;
     }
 
     .efuseHardwareInfo {
         flex-direction: column;
         gap: 0.5rem;
+        padding: 0.5rem 0.75rem;
+    }
+
+    .hardwareInfoLeft {
+        gap: 1rem;
+        justify-content: center;
     }
 
     .efuseGrid {
         grid-template-columns: repeat(4, 1fr) !important;
+        gap: 0.5rem;
     }
 
     .portDetailStats {
         grid-template-columns: repeat(2, 1fr);
     }
+
+    .portDetailChart {
+        height: 180px;
+    }
+
+    .efuseGridCard {
+        padding: 1rem;
+        margin-bottom: 1rem;
+    }
+
+    .efuseChartCard {
+        padding: 1rem;
+        margin-bottom: 1rem;
+    }
+
+    .efuseChartsHeader {
+        flex-direction: column;
+        align-items: flex-start;
+        gap: 0.5rem;
+        padding: 0.75rem 1rem;
+    }
 }
 
+/* Responsive - Phone (480px) */
 @media (max-width: 480px) {
+    .efuseContainer {
+        padding: 0.5rem;
+    }
+
     .efuseGrid {
         grid-template-columns: repeat(2, 1fr) !important;
+        gap: 0.375rem;
+    }
+
+    .efusePort {
+        padding: 0.5rem;
+        min-height: 70px;
+    }
+
+    .portDetailChart {
+        height: 150px;
+    }
+
+    .efuseGridCard {
+        padding: 0.75rem;
+    }
+
+    .efuseChartCard {
+        padding: 0.75rem;
+    }
+
+    .efuseStatsBar {
+        grid-template-columns: repeat(2, 1fr);
+        gap: 0.5rem;
+    }
+
+    .efuseStatsBar .statItem {
+        padding: 0.75rem;
+    }
+
+    .efuseStatsBar .statValue {
+        font-size: 1.25rem;
+    }
+
+    .portDetailPanel {
+        padding: 1rem;
+    }
+
+    .portDetailHeader h3 {
+        font-size: 1rem;
+    }
+
+    .outputConfigGrid {
+        grid-template-columns: 1fr;
     }
 }
 

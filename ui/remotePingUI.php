@@ -57,7 +57,7 @@ if ($access['show']) renderCommonJS();
                     </select>
                 </div>
             </div>
-            <canvas id="rawPingLatencyChart" style="max-height: 400px;"></canvas>
+            <canvas id="rawPingLatencyChart" class="chartCanvas"></canvas>
         </div>
 
         <div id="noDataMessage" class="infoBox" style="display: none;">
@@ -105,11 +105,11 @@ if ($access['show']) renderCommonJS();
         <div id="rollupChartsSection" style="display: none;">
             <div class="chartCard">
                 <div class="chartTitle"><span><i class="fas fa-chart-line"></i> Average Latency by Host <span class="tierBadge" id="latencyTierBadge">1-minute averages</span></span></div>
-                <canvas id="latencyChart" style="max-height: 400px;"></canvas>
+                <canvas id="latencyChart" class="chartCanvas"></canvas>
             </div>
             <div class="chartCard">
                 <div class="chartTitle"><span><i class="fas fa-check-circle"></i> Success Rate by Host <span class="tierBadge" id="successTierBadge">1-minute averages</span></span></div>
-                <canvas id="successChart" style="max-height: 400px;"></canvas>
+                <canvas id="successChart" class="chartCanvas"></canvas>
             </div>
         </div>
     </div>

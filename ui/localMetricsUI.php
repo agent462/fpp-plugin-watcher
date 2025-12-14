@@ -25,14 +25,14 @@ renderCommonJS();
         <div class="chartCard" id="cpuCard">
             <div class="chartLoading" id="cpuLoading"><i class="fas fa-spinner fa-spin"></i><p>Loading CPU data...</p></div>
             <div class="chartTitle"><span><i class="fas fa-microchip"></i> CPU Usage (Averaged Across All Cores)</span></div>
-            <canvas id="cpuChart" style="max-height: 400px;"></canvas>
+            <canvas id="cpuChart" class="chartCanvas"></canvas>
         </div>
 
         <!-- Load Average Chart -->
         <div class="chartCard" id="loadCard">
             <div class="chartLoading" id="loadLoading"><i class="fas fa-spinner fa-spin"></i><p>Loading load average data...</p></div>
             <div class="chartTitle"><span><i class="fas fa-tachometer-alt"></i> Load Average</span></div>
-            <canvas id="loadChart" style="max-height: 400px;"></canvas>
+            <canvas id="loadChart" class="chartCanvas"></canvas>
         </div>
 
         <!-- Memory Stats Bar -->
@@ -50,7 +50,7 @@ renderCommonJS();
                 <span><i class="fas fa-memory"></i> Memory Usage</span>
                 <span class="infoTooltip" title="Buffer Cache is memory used by Linux to cache frequently accessed files (like sequences). This memory is automatically released when applications need it, so high buffer cache usage is good - it means your system is efficiently caching data for faster access."><i class="fas fa-info-circle"></i></span>
             </div>
-            <canvas id="memoryChart" style="max-height: 400px;"></canvas>
+            <canvas id="memoryChart" class="chartCanvas"></canvas>
         </div>
 
         <!-- Disk Chart -->
@@ -58,7 +58,7 @@ renderCommonJS();
             <div class="chartLoading" id="diskLoading"><i class="fas fa-spinner fa-spin"></i><p>Loading disk data...</p></div>
             <div class="chartTitle"><span><i class="fas fa-hdd"></i> Disk Free Space (Root)</span></div>
             <div id="diskStatusBar" class="systemStatusBar" style="display: none; background: #f8f9fa; padding: 1rem; border-radius: 6px; margin-bottom: 1.5rem; border: 1px solid #e9ecef;"></div>
-            <canvas id="diskChart" style="max-height: 400px;"></canvas>
+            <canvas id="diskChart" class="chartCanvas"></canvas>
         </div>
 
         <!-- Network Chart -->
@@ -71,7 +71,7 @@ renderCommonJS();
                     <select id="interfaceSelect" onchange="refreshMetric('network');"><option value="eth0">eth0</option></select>
                 </div>
             </div>
-            <canvas id="networkChart" style="max-height: 400px;"></canvas>
+            <canvas id="networkChart" class="chartCanvas"></canvas>
         </div>
 
         <!-- Temperature Chart -->
@@ -79,14 +79,14 @@ renderCommonJS();
             <div class="chartLoading" id="thermalLoading"><i class="fas fa-spinner fa-spin"></i><p>Loading temperature data...</p></div>
             <div class="chartTitle"><span><i class="fas fa-thermometer-half"></i> Temperature (Thermal Zones)</span></div>
             <div id="temperatureStatusBar" class="systemStatusBar" style="display: none; background: #f8f9fa; padding: 1rem; border-radius: 6px; margin-bottom: 1.5rem; border: 1px solid #e9ecef;"></div>
-            <canvas id="thermalChart" style="max-height: 400px;"></canvas>
+            <canvas id="thermalChart" class="chartCanvas"></canvas>
         </div>
 
         <!-- Wireless Chart -->
         <div class="chartCard" id="wirelessCard" style="display: none;">
             <div class="chartLoading" id="wirelessLoading"><i class="fas fa-spinner fa-spin"></i><p>Loading wireless data...</p></div>
             <div class="chartTitle"><span><i class="fas fa-wifi"></i> Wireless Signal Quality</span></div>
-            <canvas id="wirelessChart" style="max-height: 400px;"></canvas>
+            <canvas id="wirelessChart" class="chartCanvas"></canvas>
         </div>
     </div>
 

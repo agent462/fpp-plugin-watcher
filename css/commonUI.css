@@ -3797,6 +3797,219 @@
 }
 
 /* ==========================================================================
+   Responsive Canvas Container
+   ========================================================================== */
+
+/**
+ * Responsive canvas class - replaces inline style="max-height: 400px"
+ * Use this class on all chart canvas elements for consistent mobile behavior
+ */
+.chartCanvas {
+    width: 100%;
+    max-height: 400px;
+}
+
+/* ==========================================================================
+   Page Header Component
+   ========================================================================== */
+
+/**
+ * Responsive page header with title and timestamp
+ * Usage: <div class="pageHeader"><h2>...</h2><span id="lastUpdate"></span></div>
+ */
+.pageHeader {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 1.5rem;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+}
+
+.pageHeader h2 {
+    margin: 0;
+    color: #212529;
+}
+
+.pageHeader h2 i {
+    margin-right: 0.5rem;
+}
+
+.pageHeader span {
+    font-size: 0.875rem;
+    color: #6c757d;
+}
+
+/* ==========================================================================
+   Mobile Responsive Styles
+   ========================================================================== */
+
+/**
+ * Tablet breakpoint (768px)
+ * Primary mobile breakpoint for tablets and small laptops
+ */
+@media (max-width: 768px) {
+    /* Page Container */
+    .metricsContainer {
+        padding: 0.75rem;
+    }
+
+    /* Chart Cards */
+    .chartCard {
+        padding: 1rem;
+        margin-bottom: 1rem;
+    }
+
+    /* Canvas */
+    .chartCanvas {
+        max-height: 300px;
+    }
+
+    /* Stats Bar */
+    .statsBar {
+        flex-wrap: wrap;
+        gap: 0.75rem;
+        padding: 0.75rem;
+    }
+
+    .statItem {
+        flex: 1 1 calc(50% - 0.375rem);
+        min-width: 120px;
+    }
+
+    .statValue {
+        font-size: 1.25rem;
+    }
+
+    /* Chart Title */
+    .chartTitle {
+        font-size: 1.125rem;
+        padding-bottom: 0.375rem;
+        margin-bottom: 0.75rem;
+    }
+
+    /* Chart Controls */
+    .chartControls {
+        gap: 0.75rem;
+    }
+
+    .controlGroup {
+        flex: 1 1 auto;
+    }
+
+    .controlGroup select {
+        width: 100%;
+    }
+
+    /* Refresh Button */
+    .refreshButton {
+        bottom: 1.5rem;
+        right: 1.5rem;
+        width: 50px;
+        height: 50px;
+    }
+
+    .refreshButton i {
+        font-size: 1.25rem;
+    }
+
+    /* Page Header */
+    .pageHeader {
+        margin-bottom: 1rem;
+    }
+}
+
+/**
+ * Phone breakpoint (480px)
+ * Small screen optimizations for phones
+ */
+@media (max-width: 480px) {
+    /* Page Container */
+    .metricsContainer {
+        padding: 0.5rem;
+    }
+
+    /* Chart Cards */
+    .chartCard {
+        padding: 0.75rem;
+        margin-bottom: 0.75rem;
+        border-radius: 0.375rem;
+    }
+
+    /* Canvas */
+    .chartCanvas {
+        max-height: 250px;
+    }
+
+    /* Stats Bar - vertical stacking */
+    .statsBar {
+        flex-direction: column;
+        gap: 0.5rem;
+        padding: 0.5rem;
+    }
+
+    .statItem {
+        flex: 1 1 100%;
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        text-align: left;
+    }
+
+    .statLabel {
+        margin-bottom: 0;
+    }
+
+    .statValue {
+        font-size: 1.125rem;
+    }
+
+    /* Chart Title */
+    .chartTitle {
+        font-size: 1rem;
+        flex-direction: column;
+        align-items: flex-start;
+        gap: 0.5rem;
+    }
+
+    /* Chart Controls - vertical stacking */
+    .chartControls {
+        flex-direction: column;
+        gap: 0.5rem;
+    }
+
+    .controlGroup {
+        width: 100%;
+        flex-direction: column;
+        align-items: stretch;
+        gap: 0.25rem;
+    }
+
+    /* Refresh Button */
+    .refreshButton {
+        bottom: 1rem;
+        right: 1rem;
+        width: 44px;
+        height: 44px;
+    }
+
+    .refreshButton i {
+        font-size: 1.125rem;
+    }
+
+    /* Page Header */
+    .pageHeader {
+        flex-direction: column;
+        align-items: flex-start;
+        margin-bottom: 1rem;
+    }
+
+    .pageHeader h2 {
+        font-size: 1.25rem;
+    }
+}
+
+/* ==========================================================================
    Info Tooltips
    ========================================================================== */
 
