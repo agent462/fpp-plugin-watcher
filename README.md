@@ -1,6 +1,6 @@
 # Watcher Plugin for FPP
 
-A monitoring and control plugin for Falcon Player (FPP) that provides network connectivity monitoring, system metrics dashboards, multi-sync host monitoring, Falcon controller management, and remote FPP control.
+A monitoring and control plugin for Falcon Player (FPP) that provides network connectivity monitoring, system metrics dashboards, multi-sync host monitoring, Falcon controller management, eFuse current monitoring, and remote FPP control.
 
 **Requires**: FPP 9.0+
 
@@ -21,6 +21,7 @@ Watcher adapts its features based on your FPP's operating mode:
 | Connectivity Check | ✓ | ✓ |
 | System Metrics (collectd) | ✓ | ✓ |
 | Falcon Controller Monitor | ✓ | ✓ |
+| eFuse Monitor | ✓ | ✓ |
 | Sync Metrics Dashboard | ✓ | ✓ |
 | Remote Metrics | ✓ | - |
 | Remote Ping | ✓ | - |
@@ -34,12 +35,15 @@ Watcher adapts its features based on your FPP's operating mode:
 ## Features
 
 ### All Modes
+
 - **Connectivity Check**: Monitors network and automatically resets adapter after consecutive ping failures
 - **System Metrics**: CPU, memory, disk, thermal, and wireless monitoring via collectd
-- **Falcon Controllers**: Monitor and control Falcon hardware on your network
+- **Falcon Controllers**: Monitor and control Falcon hardware on your network (F4V2, F16V2, F4V3, F16V3, F48)
 - **Sync Metrics**: View sync timing, jitter, and packet statistics (player shows all remotes, remotes show their own sync status)
+- **eFuse Monitor**: Real-time current monitoring for eFuse-equipped capes with historical data and heatmap visualization
 
 ### Player Mode Only
+
 - **Remote Metrics**: Aggregate system metrics from all remote FPP systems (requires Watcher + collectd on remotes)
 - **Remote Ping**: Track latency and availability to all remote multi-sync hosts
 - **Remote Control**: Restart FPPD, reboot systems, trigger FPP upgrades across all remotes
@@ -48,11 +52,31 @@ Watcher adapts its features based on your FPP's operating mode:
 ## Installation
 
 1. Go to **Content Setup > Plugin Manager** in FPP
-2. Watcher can only be installed by providing the json url currently until we publish a final version: (https://github.com/agent462/fpp-plugin-watcher/blob/main/pluginInfo.json)
+2. Install via the plugin JSON URL: `https://raw.githubusercontent.com/agent462/fpp-plugin-watcher/main/pluginInfo.json`
 
 ## Configuration
 
 Navigate to **Content Setup > Watcher - Config** to enable features. Each feature adds a corresponding dashboard under the **Status** menu when enabled.
+
+### Configuration Options
+
+| Setting | Default | Description |
+|---------|---------|-------------|
+| **Connectivity Check** | Off | Monitor network and auto-reset adapter on failures |
+| Check Interval | 20s | Time between ping tests |
+| Max Failures | 3 | Consecutive failures before adapter reset |
+| Test Hosts | 8.8.8.8, 1.1.1.1 | Comma-separated IPs to ping |
+| **System Metrics** | On | Enable collectd for local metrics |
+| **Multi-Sync Metrics** | Off | Aggregate metrics from remote systems |
+| **Multi-Sync Ping** | Off | Track ping to remote hosts |
+| Ping Interval | 60s | Time between multi-sync pings |
+| **Falcon Monitor** | Off | Discover and monitor Falcon controllers |
+| **eFuse Monitor** | Off | Monitor eFuse current readings |
+| Collection Interval | 5s | eFuse reading frequency (1-60s) |
+| Retention | 7 days | eFuse data retention (1-90 days) |
+| **Remote Control** | On | Enable remote system control panel |
+| **MQTT Events** | Off | Capture FPP events via MQTT |
+| Event Retention | 60 days | MQTT event retention (1-365 days) |
 
 ## Screenshots
 
@@ -73,15 +97,56 @@ Navigate to **Content Setup > Watcher - Config** to enable features. Each featur
 ![Ping Host View](https://github.com/agent462/fpp-watcher-images/blob/main/ping-host-view.png)
 ![Connectivity Metrics](https://github.com/agent462/fpp-watcher-images/blob/main/connectivity-metrics.png)
 
+### Efuses
+![Efuse View](https://github.com/agent462/fpp-watcher-images/blob/main/efuse-1.png)
+![Efuse Metrics](https://github.com/agent462/fpp-watcher-images/blob/main/efuse-2.png)
+
 ### Falcon Controllers
 ![Falcon Controllers](https://github.com/agent462/fpp-watcher-images/blob/main/falcon-controllers.png)
 
 ### MQTT
 ![MQTT](https://github.com/agent462/fpp-watcher-images/blob/main/mqtt-events.png)
 
+## Architecture
+
+### Background Services
+
+Watcher runs several background daemons managed by FPP:
+
+- **connectivityCheck.php**: Network monitoring with automatic adapter reset
+- **efuseCollector.php**: eFuse current readings collection (when hardware detected)
+- **mqttSubscriber.php**: MQTT event capture (when enabled)
+
+### Data Storage
+
+Metrics are stored in `/home/fpp/media/plugin-data/fpp-plugin-watcher/`:
+- Ping metrics with automatic rollup (1min, 5min, 15min, 1hour tiers)
+- Multi-sync ping metrics per remote host
+- eFuse current readings and heatmap data
+- MQTT events log
+
+### API
+
+The plugin exposes a REST API at `/api/plugin/fpp-plugin-watcher/` for:
+- Local and remote system metrics
+- Ping statistics and rollups
+- Falcon controller operations
+- eFuse readings and configuration
+- Multi-sync status and comparison
+- Remote system control commands
+
 ## Troubleshooting
 
-Check logs at `/home/fpp/media/logs/fpp-plugin-watcher.log` for any issues.
+**Logs**: Check `/home/fpp/media/logs/fpp-plugin-watcher.log` for issues.
+
+**Common Issues**:
+
+| Issue | Solution |
+|-------|----------|
+| No metrics displayed | Verify collectd is enabled in config and wait 1-2 minutes for data |
+| Remote systems not showing | Ensure Watcher is installed on remotes with collectd enabled |
+| eFuse not available | eFuse monitoring requires supported hardware (detected automatically) |
+| MQTT events empty | Enable MQTT in FPP settings and configure broker connection |
 
 ## Support
 
