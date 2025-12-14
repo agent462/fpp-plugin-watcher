@@ -6,6 +6,33 @@ include_once __DIR__ . '/../lib/controllers/efuseHardware.php';
 
 $config = readPluginConfig();
 $hardware = detectEfuseHardware();
+$retentionDays = $config['efuseRetentionDays'] ?? 7;
+$collectionInterval = $config['efuseCollectionInterval'] ?? 5;
+
+// Build dynamic time range options based on retention
+$timeRangeOptions = [
+    '1' => 'Last 1 Hour',
+    '6' => 'Last 6 Hours',
+    '12' => 'Last 12 Hours',
+    '24' => 'Last 24 Hours'
+];
+
+if ($retentionDays >= 3) {
+    $timeRangeOptions['48'] = 'Last 2 Days';
+    $timeRangeOptions['72'] = 'Last 3 Days';
+}
+if ($retentionDays >= 7) {
+    $timeRangeOptions['168'] = 'Last 7 Days';
+}
+if ($retentionDays >= 14) {
+    $timeRangeOptions['336'] = 'Last 14 Days';
+}
+if ($retentionDays >= 30) {
+    $timeRangeOptions['720'] = 'Last 30 Days';
+}
+if ($retentionDays >= 90) {
+    $timeRangeOptions['2160'] = 'Last 90 Days';
+}
 
 renderCSSIncludes(true);
 renderCommonJS();
@@ -17,7 +44,9 @@ renderCommonJS();
     window.efuseConfig = {
         supported: <?php echo json_encode($hardware['supported']); ?>,
         type: <?php echo json_encode($hardware['type']); ?>,
-        ports: <?php echo json_encode($hardware['ports']); ?>
+        ports: <?php echo json_encode($hardware['ports']); ?>,
+        collectionInterval: <?php echo json_encode($collectionInterval); ?>,
+        retentionDays: <?php echo json_encode($retentionDays); ?>
     };
 </script>
 
@@ -97,12 +126,7 @@ renderCommonJS();
     <div class="efuseChartsHeader">
         <span><i class="fas fa-chart-line"></i> Current History</span>
     </div>
-    <?php renderTimeRangeSelector('timeRange', 'loadAllData()', 'Time Range:', [
-        '1' => 'Last 1 Hour',
-        '6' => 'Last 6 Hours',
-        '12' => 'Last 12 Hours',
-        '24' => 'Last 24 Hours'
-    ], '24'); ?>
+    <?php renderTimeRangeSelector('timeRange', 'loadAllData()', 'Time Range:', $timeRangeOptions, '24'); ?>
 
     <!-- Port Detail Panel (shown on port click) -->
     <div id="portDetailPanel" class="portDetailPanel" style="display: none;">
@@ -201,17 +225,17 @@ renderCommonJS();
                 <h5>Data Collection</h5>
                 <table class="helpTable">
                     <tbody>
-                        <tr><td><strong>Sampling Rate</strong></td><td>Every 5 seconds</td></tr>
+                        <tr><td><strong>Sampling Rate</strong></td><td>Every <?php echo $collectionInterval; ?> second<?php echo $collectionInterval !== 1 ? 's' : ''; ?></td></tr>
                         <tr><td><strong>Display Refresh</strong></td><td>Every 10 seconds</td></tr>
-                        <tr><td><strong>Aggregation</strong></td><td>1-minute averages (min/avg/max)</td></tr>
+                        <tr><td><strong>Aggregation</strong></td><td>1-minute to 2-hour averages (min/avg/max)</td></tr>
                     </tbody>
                 </table>
 
                 <h5>Data Retention</h5>
                 <table class="helpTable">
                     <tbody>
-                        <tr><td><strong>Raw Data</strong></td><td>6 hours (5-second samples)</td></tr>
-                        <tr><td><strong>Historical Data</strong></td><td>24 hours (1-minute averages)</td></tr>
+                        <tr><td><strong>Raw Data</strong></td><td>6 hours (<?php echo $collectionInterval; ?>-second samples)</td></tr>
+                        <tr><td><strong>Historical Data</strong></td><td><?php echo $retentionDays; ?> day<?php echo $retentionDays !== 1 ? 's' : ''; ?> (multi-tier rollups)</td></tr>
                     </tbody>
                 </table>
 

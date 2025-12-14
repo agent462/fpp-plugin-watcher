@@ -59,7 +59,9 @@ define("WATCHERDEFAULTSETTINGS",
         'mqttRetentionDays' => 60,
         'issueCheckOutputs' => true,
         'issueCheckSequences' => true,
-        'efuseMonitorEnabled' => false)
+        'efuseMonitorEnabled' => false,
+        'efuseCollectionInterval' => 5,   // seconds (1-60)
+        'efuseRetentionDays' => 7)        // days (1-90)
         );
 
 // Settings that require FPP restart when changed
@@ -82,7 +84,9 @@ define("WATCHERSETTINGSRESTARTREQUIRED",
         'mqttRetentionDays' => false,         // Cleanup schedule, no restart needed
         'issueCheckOutputs' => false,         // UI feature only
         'issueCheckSequences' => false,       // UI feature only
-        'efuseMonitorEnabled' => true         // Daemon started/stopped in postStart.sh
+        'efuseMonitorEnabled' => true,        // Daemon started/stopped in postStart.sh
+        'efuseCollectionInterval' => false,   // Hot-reloadable
+        'efuseRetentionDays' => false         // Hot-reloadable
     ));
 
 // Ensure plugin-created files are owned by the FPP user/group for web access
@@ -857,6 +861,92 @@ function clearDataFile($category, $filename) {
     }
 
     return ['success' => false, 'error' => 'Failed to delete file'];
+}
+
+/**
+ * Acquire a daemon lock with stale lock detection
+ *
+ * Uses flock() for locking with PID tracking for stale detection.
+ * If a lock file exists but the process is dead, automatically clears it.
+ *
+ * @param string $daemonName Short name for the daemon (used in lock filename and logs)
+ * @param string|null $logFile Optional log file path for messages (uses main log if null)
+ * @return resource|false File handle on success (keep open for daemon lifetime), false on failure
+ *
+ * Usage:
+ *   $lockFp = acquireDaemonLock('efuse-collector', EFUSE_LOG_FILE);
+ *   if (!$lockFp) exit(1);
+ *   // ... daemon main loop ...
+ *   releaseDaemonLock($lockFp, 'efuse-collector');
+ */
+function acquireDaemonLock($daemonName, $logFile = null) {
+    $lockFile = "/tmp/fpp-watcher-{$daemonName}.lock";
+    $logFile = $logFile ?? WATCHERLOGFILE;
+
+    $lockFp = @fopen($lockFile, 'c');
+    if (!$lockFp) {
+        logMessage("[{$daemonName}] Failed to open lock file: $lockFile", $logFile);
+        return false;
+    }
+
+    if (flock($lockFp, LOCK_EX | LOCK_NB)) {
+        // Got the lock - write our PID
+        ftruncate($lockFp, 0);
+        fwrite($lockFp, getmypid());
+        fflush($lockFp);
+        return $lockFp;
+    }
+
+    // Lock failed - check if holding process is still alive
+    $stalePid = @file_get_contents($lockFile);
+    if ($stalePid && is_numeric(trim($stalePid))) {
+        $stalePid = (int)trim($stalePid);
+
+        // posix_kill with signal 0 tests process existence without sending a signal
+        if (!posix_kill($stalePid, 0)) {
+            // Process doesn't exist - lock is stale
+            logMessage("[{$daemonName}] Detected stale lock from PID $stalePid (process no longer exists). Clearing stale lock...", $logFile);
+            @fclose($lockFp);
+            @unlink($lockFile);
+
+            // Try again with fresh file
+            $lockFp = @fopen($lockFile, 'c');
+            if ($lockFp && flock($lockFp, LOCK_EX | LOCK_NB)) {
+                ftruncate($lockFp, 0);
+                fwrite($lockFp, getmypid());
+                fflush($lockFp);
+                logMessage("[{$daemonName}] Successfully acquired lock after clearing stale lock.", $logFile);
+                return $lockFp;
+            }
+
+            logMessage("[{$daemonName}] Failed to acquire lock even after clearing stale lock. Exiting.", $logFile);
+            return false;
+        }
+
+        // Process is alive
+        logMessage("[{$daemonName}] Another instance (PID $stalePid) is already running. Exiting.", $logFile);
+    } else {
+        logMessage("[{$daemonName}] Another instance is already running. Exiting.", $logFile);
+    }
+
+    @fclose($lockFp);
+    return false;
+}
+
+/**
+ * Release a daemon lock acquired with acquireDaemonLock()
+ *
+ * @param resource $lockFp File handle from acquireDaemonLock()
+ * @param string $daemonName Daemon name (must match acquireDaemonLock call)
+ */
+function releaseDaemonLock($lockFp, $daemonName) {
+    $lockFile = "/tmp/fpp-watcher-{$daemonName}.lock";
+
+    if ($lockFp) {
+        flock($lockFp, LOCK_UN);
+        fclose($lockFp);
+    }
+    @unlink($lockFile);
 }
 
 /**

@@ -12,17 +12,70 @@ include_once __DIR__ . '/rollupBase.php';
 include_once __DIR__ . '/../controllers/efuseHardware.php';
 include_once __DIR__ . '/../controllers/efuseOutputConfig.php';
 
-// eFuse rollup tier configuration (24-hour focused)
-define('EFUSE_ROLLUP_TIERS', [
-    '1min' => [
-        'interval' => 60,        // 1 minute buckets
-        'retention' => 86400,    // 24 hours
-        'label' => '1-minute averages'
-    ]
-]);
-
-// Raw data retention (shorter than rollup since we have aggregates)
+// Raw data retention (6 hours fixed - rollups handle longer retention)
 define('EFUSE_RAW_RETENTION', 21600); // 6 hours
+
+/**
+ * Get eFuse rollup tiers based on configured retention
+ * Tiers are capped by the retention period - no point storing more than we'll keep
+ *
+ * @param int|null $retentionDays Number of days to retain data (null = read from config)
+ * @return array Tier configuration
+ */
+function getEfuseRollupTiers($retentionDays = null) {
+    if ($retentionDays === null) {
+        $config = readPluginConfig();
+        $retentionDays = $config['efuseRetentionDays'] ?? 7;
+    }
+
+    $retentionSeconds = $retentionDays * 86400;
+
+    return [
+        '1min' => [
+            'interval' => 60,           // 1 minute buckets
+            'retention' => min(21600, $retentionSeconds),    // max 6 hours
+            'label' => '1-minute averages'
+        ],
+        '5min' => [
+            'interval' => 300,          // 5 minute buckets
+            'retention' => min(172800, $retentionSeconds),   // max 48 hours
+            'label' => '5-minute averages'
+        ],
+        '30min' => [
+            'interval' => 1800,         // 30 minute buckets
+            'retention' => min(1209600, $retentionSeconds),  // max 14 days
+            'label' => '30-minute averages'
+        ],
+        '2hour' => [
+            'interval' => 7200,         // 2 hour buckets
+            'retention' => $retentionSeconds,                // full retention
+            'label' => '2-hour averages'
+        ]
+    ];
+}
+
+/**
+ * Get rollup file path for a specific tier
+ *
+ * @param string $tier Tier name
+ * @return string File path
+ */
+function getEfuseRollupFilePath($tier) {
+    return WATCHEREFUSEDIR . "/{$tier}.log";
+}
+
+/**
+ * Select best tier for requested time range
+ *
+ * @param int $hours Hours of data requested
+ * @return string Tier name
+ */
+function getBestEfuseTierForHours($hours) {
+    if ($hours <= 6) return '1min';
+    if ($hours <= 48) return '5min';
+    if ($hours <= 336) return '30min';  // 14 days
+    return '2hour';
+}
 
 /**
  * Write a raw eFuse metric sample
@@ -90,32 +143,49 @@ function readEfuseRawMetrics($hoursBack = 6, $portFilter = null) {
 }
 
 /**
- * Process eFuse rollup for 1-minute tier
- * Aggregates raw 5-second samples into 1-minute buckets
+ * Process all eFuse rollup tiers
+ * Aggregates raw samples into all configured tier buckets
  */
 function processEfuseRollup() {
-    $tierConfig = EFUSE_ROLLUP_TIERS['1min'];
+    $tiers = getEfuseRollupTiers();
 
-    processRollupTierGeneric(
-        '1min',
-        $tierConfig,
-        EFUSE_ROLLUP_TIERS,
-        WATCHEREFUSEROLLUPSTATEFILE,
-        WATCHEREFUSERAWFILE,
-        function($tier) {
-            return WATCHEREFUSEROLLUPFILE;
-        },
-        'aggregateEfuseBucket'
-    );
+    foreach ($tiers as $tierName => $tierConfig) {
+        // Determine source: raw data for 1min, previous tier for higher tiers
+        if ($tierName === '1min') {
+            $sourceFile = WATCHEREFUSERAWFILE;
+        } else {
+            // Higher tiers aggregate from the previous tier
+            $tierOrder = array_keys($tiers);
+            $tierIndex = array_search($tierName, $tierOrder);
+            $previousTier = $tierOrder[$tierIndex - 1];
+            $sourceFile = getEfuseRollupFilePath($previousTier);
+        }
 
-    // Also rotate the raw file to keep only recent data
+        processRollupTierGeneric(
+            $tierName,
+            $tierConfig,
+            $tiers,
+            WATCHEREFUSEROLLUPSTATEFILE,
+            $sourceFile,
+            'getEfuseRollupFilePath',
+            'aggregateEfuseBucket'
+        );
+    }
+
+    // Rotate the raw file to keep only recent data
     rotateRawMetricsFileGeneric(WATCHEREFUSERAWFILE, EFUSE_RAW_RETENTION);
+
+    // Also rotate rollup files according to their retention
+    foreach ($tiers as $tierName => $tierConfig) {
+        rotateRawMetricsFileGeneric(getEfuseRollupFilePath($tierName), $tierConfig['retention']);
+    }
 }
 
 /**
  * Aggregate eFuse metrics for a time bucket
+ * Handles both raw metrics (port value is integer) and rollup metrics (port value is object with avg/min/max)
  *
- * @param array $metrics Array of raw metrics in this bucket
+ * @param array $metrics Array of raw or rollup metrics in this bucket
  * @param int $bucketStart Start timestamp of bucket
  * @param int $interval Bucket interval in seconds
  * @return array|null Aggregated entry or null if no data
@@ -126,15 +196,30 @@ function aggregateEfuseBucket($metrics, $bucketStart, $interval) {
     }
 
     // Collect all port readings
+    // For raw data: $mA is an integer
+    // For rollup data: $mA is an array with 'avg', 'min', 'max', 'samples'
     $portData = [];
 
     foreach ($metrics as $metric) {
         $ports = $metric['ports'] ?? [];
         foreach ($ports as $portName => $mA) {
             if (!isset($portData[$portName])) {
-                $portData[$portName] = [];
+                $portData[$portName] = ['values' => [], 'mins' => [], 'maxs' => [], 'samples' => 0];
             }
-            $portData[$portName][] = $mA;
+
+            if (is_array($mA)) {
+                // Rollup entry - extract aggregated values
+                $portData[$portName]['values'][] = $mA['avg'] ?? 0;
+                $portData[$portName]['mins'][] = $mA['min'] ?? 0;
+                $portData[$portName]['maxs'][] = $mA['max'] ?? 0;
+                $portData[$portName]['samples'] += $mA['samples'] ?? 1;
+            } else {
+                // Raw entry - simple integer value
+                $portData[$portName]['values'][] = $mA;
+                $portData[$portName]['mins'][] = $mA;
+                $portData[$portName]['maxs'][] = $mA;
+                $portData[$portName]['samples'] += 1;
+            }
         }
     }
 
@@ -144,20 +229,23 @@ function aggregateEfuseBucket($metrics, $bucketStart, $interval) {
 
     // Calculate aggregates for each port
     $aggregatedPorts = [];
-    foreach ($portData as $portName => $readings) {
-        if (empty($readings)) {
+    foreach ($portData as $portName => $data) {
+        if (empty($data['values'])) {
             continue;
         }
 
-        sort($readings);
-        $count = count($readings);
+        $values = $data['values'];
+        $mins = $data['mins'];
+        $maxs = $data['maxs'];
+        $sampleCount = $data['samples'];
+        $count = count($values);
 
         $aggregatedPorts[$portName] = [
-            'avg' => intval(round(array_sum($readings) / $count)),
-            'min' => min($readings),
-            'max' => max($readings),
-            'peak' => max($readings), // For backward compatibility
-            'samples' => $count
+            'avg' => intval(round(array_sum($values) / $count)),
+            'min' => min($mins),
+            'max' => max($maxs),
+            'peak' => max($maxs), // For backward compatibility
+            'samples' => $sampleCount
         ];
     }
 
@@ -179,6 +267,11 @@ function readEfuseRollup($hoursBack = 24, $portFilter = null) {
     $endTime = time();
     $startTime = $endTime - ($hoursBack * 3600);
 
+    // Select best tier for the requested time range
+    $bestTier = getBestEfuseTierForHours($hoursBack);
+    $tiers = getEfuseRollupTiers();
+    $tierOrder = array_keys($tiers);
+
     $filterFn = null;
     if ($portFilter !== null) {
         $filterFn = function($entry) use ($portFilter) {
@@ -186,14 +279,44 @@ function readEfuseRollup($hoursBack = 24, $portFilter = null) {
         };
     }
 
-    return readRollupDataGeneric(
-        WATCHEREFUSEROLLUPFILE,
-        '1min',
-        EFUSE_ROLLUP_TIERS,
+    // Try preferred tier first, fall back to lower tiers if file doesn't exist
+    $selectedTier = $bestTier;
+    $selectedFile = getEfuseRollupFilePath($bestTier);
+
+    if (!file_exists($selectedFile)) {
+        // Find the best available tier that exists
+        $tierIndex = array_search($bestTier, $tierOrder);
+        for ($i = $tierIndex - 1; $i >= 0; $i--) {
+            $fallbackTier = $tierOrder[$i];
+            $fallbackFile = getEfuseRollupFilePath($fallbackTier);
+            if (file_exists($fallbackFile)) {
+                $selectedTier = $fallbackTier;
+                $selectedFile = $fallbackFile;
+                break;
+            }
+        }
+    }
+
+    $result = readRollupDataGeneric(
+        $selectedFile,
+        $selectedTier,
+        $tiers,
         $startTime,
         $endTime,
         $filterFn
     );
+
+    // Add tier_info like ping metrics does for UI display
+    if ($result['success']) {
+        $tierConfig = $tiers[$selectedTier] ?? [];
+        $result['tier_info'] = [
+            'tier' => $selectedTier,
+            'interval' => $tierConfig['interval'] ?? 60,
+            'label' => $tierConfig['label'] ?? 'Unknown'
+        ];
+    }
+
+    return $result;
 }
 
 /**
@@ -251,16 +374,22 @@ function getEfuseCurrentStatus() {
  * @return array Historical data
  */
 function getEfusePortHistory($portName, $hoursBack = 24) {
-    // Use rollup data for longer periods, raw for shorter
-    if ($hoursBack <= 6) {
+    $tierInfo = null;
+
+    // Use raw data for very short periods, rollups for longer
+    if ($hoursBack <= 1) {
         $data = readEfuseRawMetrics($hoursBack, $portName);
         $source = 'raw';
-        $interval = 5; // Raw data is 5-second intervals
+        // Get collection interval from config
+        $config = readPluginConfig();
+        $interval = $config['efuseCollectionInterval'] ?? 5;
     } else {
         $result = readEfuseRollup($hoursBack, $portName);
         $data = $result['data'] ?? [];
         $source = 'rollup';
-        $interval = 60; // Rollup data is 1-minute intervals
+        $tierInfo = $result['tier_info'] ?? null;
+        // Get interval from the tier that was actually selected (may be fallback)
+        $interval = $tierInfo['interval'] ?? 60;
     }
 
     // Build indexed lookup by timestamp (align to interval boundaries for matching)
@@ -330,7 +459,8 @@ function getEfusePortHistory($portName, $hoursBack = 24) {
         'source' => $source,
         'count' => count($history),
         'history' => $history,
-        'config' => $portConfig
+        'config' => $portConfig,
+        'tier_info' => $tierInfo
     ];
 }
 
@@ -350,9 +480,10 @@ function getEfuseHeatmapData($hoursBack = 24) {
         ];
     }
 
-    // Get rollup data
+    // Get rollup data using appropriate tier (with automatic fallback)
     $result = readEfuseRollup($hoursBack);
     $rollupData = $result['data'] ?? [];
+    $tierInfo = $result['tier_info'] ?? null;
 
     // Get output config
     $outputConfig = getEfuseOutputConfig();
@@ -365,8 +496,8 @@ function getEfuseHeatmapData($hoursBack = 24) {
         $dataByTimestamp[$ts] = $entry['ports'] ?? [];
     }
 
-    // Determine time range and interval (1 minute = 60 seconds)
-    $interval = 60;
+    // Use the actual tier that was selected (may be fallback)
+    $interval = $tierInfo['interval'] ?? 60;
     $endTime = time();
     $startTime = $endTime - ($hoursBack * 3600);
 
@@ -427,7 +558,8 @@ function getEfuseHeatmapData($hoursBack = 24) {
         'timeSeries' => $timeSeries,
         'peaks' => $peaks,
         'timestamps' => $allTimestamps,
-        'period' => $result['period'] ?? null
+        'period' => $result['period'] ?? null,
+        'tier_info' => $tierInfo
     ];
 }
 
@@ -437,9 +569,7 @@ function getEfuseHeatmapData($hoursBack = 24) {
  * @return array Tier info
  */
 function getEfuseRollupTiersInfo() {
-    return getTiersInfoGeneric(EFUSE_ROLLUP_TIERS, function($tier) {
-        return WATCHEREFUSEROLLUPFILE;
-    });
+    return getTiersInfoGeneric(getEfuseRollupTiers(), 'getEfuseRollupFilePath');
 }
 
 /**
@@ -448,6 +578,19 @@ function getEfuseRollupTiersInfo() {
  * @return array State information
  */
 function getEfuseRollupState() {
-    return getRollupStateGeneric(WATCHEREFUSEROLLUPSTATEFILE, EFUSE_ROLLUP_TIERS);
+    return getRollupStateGeneric(WATCHEREFUSEROLLUPSTATEFILE, getEfuseRollupTiers());
+}
+
+/**
+ * Get configured eFuse settings for API response
+ *
+ * @return array Config settings relevant to eFuse
+ */
+function getEfuseConfig() {
+    $config = readPluginConfig();
+    return [
+        'collectionInterval' => $config['efuseCollectionInterval'] ?? 5,
+        'retentionDays' => $config['efuseRetentionDays'] ?? 7
+    ];
 }
 ?>

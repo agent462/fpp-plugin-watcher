@@ -19,8 +19,7 @@ require_once __DIR__ . '/lib/core/watcherCommon.php';
 require_once __DIR__ . '/lib/core/config.php';
 require_once __DIR__ . '/lib/metrics/efuseMetrics.php';
 
-// Collection configuration
-define('EFUSE_COLLECTION_INTERVAL', 5);     // Collect every 5 seconds
+// Collection configuration (fixed values)
 define('EFUSE_ROLLUP_INTERVAL', 60);        // Process rollups every 60 seconds
 define('EFUSE_CONFIG_CHECK_INTERVAL', 60);  // Check config every 60 seconds
 define('EFUSE_MAX_AMPERAGE', 6000);         // Max 6A per port in mA
@@ -31,6 +30,12 @@ define('EFUSE_ERROR_LOG_INTERVAL', 60);     // Only log errors every N seconds t
 
 // Log file for eFuse collector
 define('EFUSE_LOG_FILE', WATCHERLOGDIR . '/fpp-plugin-watcher-efuse.log');
+
+// Config hot-reload tracking (global for checkAndReloadEfuseConfig)
+$lastConfigMtime = file_exists(WATCHERCONFIGFILELOCATION) ? filemtime(WATCHERCONFIGFILELOCATION) : 0;
+$config = readPluginConfig();
+$collectionInterval = $config['efuseCollectionInterval'] ?? 5;
+$retentionDays = $config['efuseRetentionDays'] ?? 7;
 
 /**
  * Log a message with timestamp
@@ -56,9 +61,57 @@ function hasEfuseHardware() {
 }
 
 /**
+ * Check if config file has changed and reload if necessary
+ * Returns true if config was reloaded, false otherwise
+ */
+function checkAndReloadEfuseConfig() {
+    global $config, $lastConfigMtime, $collectionInterval, $retentionDays;
+
+    $currentMtime = file_exists(WATCHERCONFIGFILELOCATION) ? filemtime(WATCHERCONFIGFILELOCATION) : 0;
+
+    if ($currentMtime <= $lastConfigMtime) {
+        return false;
+    }
+
+    efuseLog("Config file changed (mtime: $lastConfigMtime -> $currentMtime), reloading configuration...");
+    $lastConfigMtime = $currentMtime;
+
+    // Force reload config (bypass cache)
+    $newConfig = readPluginConfig(true);
+
+    // Check if eFuse monitoring was disabled
+    if (empty($newConfig['efuseMonitorEnabled'])) {
+        efuseLog("eFuse monitoring disabled via config reload. Exiting gracefully.");
+        exit(0);
+    }
+
+    // Log and apply collection interval changes
+    $newInterval = $newConfig['efuseCollectionInterval'] ?? 5;
+    if ($newInterval !== $collectionInterval) {
+        efuseLog("Collection interval changed: {$collectionInterval}s -> {$newInterval}s");
+        $collectionInterval = $newInterval;
+    }
+
+    // Log and apply retention changes
+    $newRetention = $newConfig['efuseRetentionDays'] ?? 7;
+    if ($newRetention !== $retentionDays) {
+        efuseLog("Retention changed: {$retentionDays} days -> {$newRetention} days");
+        $retentionDays = $newRetention;
+    }
+
+    // Apply new config
+    $config = $newConfig;
+
+    efuseLog("Configuration reloaded successfully");
+    return true;
+}
+
+/**
  * Main collection loop
  */
 function runCollector() {
+    global $collectionInterval, $retentionDays;
+
     efuseLog("eFuse Collector starting...");
 
     // Verify hardware on startup
@@ -70,6 +123,7 @@ function runCollector() {
 
     efuseLog("Hardware detected: {$hardware['type']} with {$hardware['ports']} ports");
     efuseLog("Collection method: " . ($hardware['details']['method'] ?? 'unknown'));
+    efuseLog("Collection interval: {$collectionInterval}s, Retention: {$retentionDays} days");
 
     // Ensure data directories exist
     ensureDataDirectories();
@@ -88,15 +142,11 @@ function runCollector() {
         $loopStart = microtime(true);
         $now = time();
 
-        // Check config periodically to see if we should exit
+        // Check config periodically for hot-reload
         try {
             if (($now - $lastConfigCheckTime) >= EFUSE_CONFIG_CHECK_INTERVAL) {
                 $lastConfigCheckTime = $now;
-
-                if (!isEfuseEnabled()) {
-                    efuseLog("eFuse monitoring disabled in config. Exiting gracefully.");
-                    exit(0);
-                }
+                checkAndReloadEfuseConfig();
             }
         } catch (Exception $e) {
             // Config check failed - continue anyway, will retry next interval
@@ -178,7 +228,7 @@ function runCollector() {
 
         // Calculate sleep time with backoff when errors occur
         $elapsed = microtime(true) - $loopStart;
-        $baseInterval = EFUSE_COLLECTION_INTERVAL;
+        $baseInterval = $collectionInterval;
 
         // Apply exponential backoff when in error state (max 60 seconds)
         if ($consecutiveErrors > 0) {
@@ -211,38 +261,23 @@ if (function_exists('pcntl_signal')) {
     pcntl_signal(SIGHUP, 'signalHandler');
 }
 
-// Prevent multiple instances
-$lockFile = '/tmp/fpp-watcher-efuse-collector.lock';
-$lockFp = fopen($lockFile, 'c');
-
-if (!$lockFp || !flock($lockFp, LOCK_EX | LOCK_NB)) {
-    efuseLog("Another instance is already running. Exiting.");
+// Acquire daemon lock (handles stale lock detection automatically)
+$lockFp = acquireDaemonLock('efuse-collector', EFUSE_LOG_FILE);
+if (!$lockFp) {
     exit(1);
 }
-
-// Write PID to lock file
-ftruncate($lockFp, 0);
-fwrite($lockFp, getmypid());
-fflush($lockFp);
-
-// Keep lock file open for duration of process
-// Lock will be released when process exits
 
 // Verify enabled before starting
 if (!isEfuseEnabled()) {
     efuseLog("eFuse monitoring is not enabled in config. Exiting.");
-    flock($lockFp, LOCK_UN);
-    fclose($lockFp);
-    @unlink($lockFile);
+    releaseDaemonLock($lockFp, 'efuse-collector');
     exit(0);
 }
 
 // Verify hardware before starting
 if (!hasEfuseHardware()) {
     efuseLog("No compatible eFuse hardware detected. Exiting.");
-    flock($lockFp, LOCK_UN);
-    fclose($lockFp);
-    @unlink($lockFile);
+    releaseDaemonLock($lockFp, 'efuse-collector');
     exit(0);
 }
 
@@ -253,8 +288,6 @@ try {
     efuseLog("FATAL ERROR: " . $e->getMessage());
     exit(1);
 } finally {
-    flock($lockFp, LOCK_UN);
-    fclose($lockFp);
-    @unlink($lockFile);
+    releaseDaemonLock($lockFp, 'efuse-collector');
 }
 ?>

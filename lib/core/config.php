@@ -77,12 +77,27 @@ function prepareConfig($config) {
     normalizeBoolean($config, 'mqttMonitorEnabled', false);
     normalizeBoolean($config, 'issueCheckOutputs', true);
     normalizeBoolean($config, 'issueCheckSequences', true);
+    normalizeBoolean($config, 'efuseMonitorEnabled', false);
 
     // Parse retention days as integer
     if (isset($config['mqttRetentionDays'])) {
         $config['mqttRetentionDays'] = max(1, min(365, intval($config['mqttRetentionDays'])));
     } else {
         $config['mqttRetentionDays'] = WATCHERDEFAULTSETTINGS['mqttRetentionDays'];
+    }
+
+    // Parse eFuse collection interval (1-60 seconds)
+    if (isset($config['efuseCollectionInterval'])) {
+        $config['efuseCollectionInterval'] = max(1, min(60, intval($config['efuseCollectionInterval'])));
+    } else {
+        $config['efuseCollectionInterval'] = WATCHERDEFAULTSETTINGS['efuseCollectionInterval'];
+    }
+
+    // Parse eFuse retention days (1-90 days)
+    if (isset($config['efuseRetentionDays'])) {
+        $config['efuseRetentionDays'] = max(1, min(90, intval($config['efuseRetentionDays'])));
+    } else {
+        $config['efuseRetentionDays'] = WATCHERDEFAULTSETTINGS['efuseRetentionDays'];
     }
 
     // Process testHosts into an array

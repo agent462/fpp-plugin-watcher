@@ -600,3 +600,60 @@
     background: #218838;
     border-color: #1e7e34;
 }
+
+/* eFuse Storage Estimate Styles */
+.efuseStorageEstimate {
+    margin-top: 1rem;
+    padding: 0.75rem 1rem;
+    background: #f8f9fa;
+    border: 1px solid #dee2e6;
+    border-radius: 0.375rem;
+}
+
+.storageEstimateTitle {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    font-size: 0.85rem;
+    font-weight: 600;
+    color: #495057;
+    margin-bottom: 0.75rem;
+}
+
+.storageEstimateTitle i {
+    color: #6c757d;
+}
+
+.storageEstimateGrid {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 0.5rem;
+}
+
+@media (max-width: 600px) {
+    .storageEstimateGrid {
+        grid-template-columns: repeat(2, 1fr);
+    }
+}
+
+.storageEstimateItem {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 0.25rem;
+    padding: 0.5rem;
+    background: #fff;
+    border: 1px solid #e9ecef;
+    border-radius: 0.25rem;
+}
+
+.storageEstimatePorts {
+    font-size: 0.75rem;
+    color: #6c757d;
+}
+
+.storageEstimateSize {
+    font-size: 0.9rem;
+    font-weight: 600;
+    color: #212529;
+}

@@ -35,6 +35,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['save_settings'])) {
     $issueCheckOutputs = isset($_POST['issueCheckOutputs']) ? 'true' : 'false';
     $issueCheckSequences = isset($_POST['issueCheckSequences']) ? 'true' : 'false';
     $efuseMonitorEnabled = isset($_POST['efuseMonitorEnabled']) ? 'true' : 'false';
+    $efuseCollectionInterval = intval($_POST['efuseCollectionInterval'] ?? 5);
+    $efuseRetentionDays = intval($_POST['efuseRetentionDays'] ?? 7);
 
     // If 'default' is selected, auto-detect and save the actual interface
     if ($networkAdapter === 'default') {
@@ -73,6 +75,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['save_settings'])) {
     if ($mqttRetentionDays < 1 || $mqttRetentionDays > 365) {
         $errors[] = "MQTT retention must be between 1 and 365 days";
     }
+    if ($efuseCollectionInterval < 1 || $efuseCollectionInterval > 60) {
+        $errors[] = "eFuse collection interval must be between 1 and 60 seconds";
+    }
+    if ($efuseRetentionDays < 1 || $efuseRetentionDays > 90) {
+        $errors[] = "eFuse retention must be between 1 and 90 days";
+    }
 
     if (empty($errors)) {
         // Save settings using FPP's WriteSettingToFile
@@ -92,7 +100,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['save_settings'])) {
             'mqttRetentionDays' => $mqttRetentionDays,
             'issueCheckOutputs' => $issueCheckOutputs,
             'issueCheckSequences' => $issueCheckSequences,
-            'efuseMonitorEnabled' => $efuseMonitorEnabled
+            'efuseMonitorEnabled' => $efuseMonitorEnabled,
+            'efuseCollectionInterval' => $efuseCollectionInterval,
+            'efuseRetentionDays' => $efuseRetentionDays
         ];
 
         foreach ($settingsToSave as $settingName => $settingValue) {
@@ -460,7 +470,8 @@ if ($isPlayerMode) {
                     <div class="panelTitle">
                         <label class="toggleSwitch toggleSwitch--sm" onclick="event.stopPropagation()">
                             <input type="checkbox" id="efuseMonitorEnabled" name="efuseMonitorEnabled" value="1"
-                                <?php echo (!empty($config['efuseMonitorEnabled'])) ? 'checked' : ''; ?>>
+                                <?php echo (!empty($config['efuseMonitorEnabled'])) ? 'checked' : ''; ?>
+                                onchange="toggleEfuseOptions()">
                             <span class="toggleSlider toggleSlider--green"></span>
                         </label>
                         <i class="fas fa-bolt"></i>
@@ -469,9 +480,38 @@ if ($isPlayerMode) {
                     <i class="fas fa-chevron-down panelToggle"></i>
                 </div>
                 <div class="panelBody">
-                    <div class="panelDesc">
+                    <div class="panelDesc" style="margin-bottom: 1rem;">
                         Track per-port current draw with heatmap visualization. Detected hardware: <?php echo htmlspecialchars(getEfuseHardwareSummary()['typeLabel'] ?? 'Unknown'); ?>
                         (<?php echo $efuseHardware['ports']; ?> ports). View trends in the eFuse Monitor dashboard.
+                    </div>
+                    <div id="efuseOptionsContainer" style="<?php echo empty($config['efuseMonitorEnabled']) ? 'display:none;' : ''; ?>">
+                        <div class="formRow">
+                            <div class="formGroup">
+                                <label class="formLabel">Collection Interval</label>
+                                <select id="efuseCollectionInterval" name="efuseCollectionInterval" class="form-control" onchange="updateEfuseStorageEstimate()">
+                                    <option value="1" <?php echo ($config['efuseCollectionInterval'] ?? 5) == 1 ? 'selected' : ''; ?>>1 second</option>
+                                    <option value="2" <?php echo ($config['efuseCollectionInterval'] ?? 5) == 2 ? 'selected' : ''; ?>>2 seconds</option>
+                                    <option value="5" <?php echo ($config['efuseCollectionInterval'] ?? 5) == 5 ? 'selected' : ''; ?>>5 seconds</option>
+                                    <option value="10" <?php echo ($config['efuseCollectionInterval'] ?? 5) == 10 ? 'selected' : ''; ?>>10 seconds</option>
+                                    <option value="30" <?php echo ($config['efuseCollectionInterval'] ?? 5) == 30 ? 'selected' : ''; ?>>30 seconds</option>
+                                    <option value="60" <?php echo ($config['efuseCollectionInterval'] ?? 5) == 60 ? 'selected' : ''; ?>>60 seconds</option>
+                                </select>
+                            </div>
+                            <div class="formGroup">
+                                <label class="formLabel">Data Retention</label>
+                                <select id="efuseRetentionDays" name="efuseRetentionDays" class="form-control" onchange="updateEfuseStorageEstimate()">
+                                    <option value="1" <?php echo ($config['efuseRetentionDays'] ?? 7) == 1 ? 'selected' : ''; ?>>1 day</option>
+                                    <option value="3" <?php echo ($config['efuseRetentionDays'] ?? 7) == 3 ? 'selected' : ''; ?>>3 days</option>
+                                    <option value="7" <?php echo ($config['efuseRetentionDays'] ?? 7) == 7 ? 'selected' : ''; ?>>7 days</option>
+                                    <option value="14" <?php echo ($config['efuseRetentionDays'] ?? 7) == 14 ? 'selected' : ''; ?>>14 days</option>
+                                    <option value="30" <?php echo ($config['efuseRetentionDays'] ?? 7) == 30 ? 'selected' : ''; ?>>30 days</option>
+                                    <option value="90" <?php echo ($config['efuseRetentionDays'] ?? 7) == 90 ? 'selected' : ''; ?>>90 days</option>
+                                </select>
+                            </div>
+                        </div>
+                        <div class="efuseStorageEstimate" id="efuseStorageEstimate">
+                            <!-- Populated by JavaScript -->
+                        </div>
                     </div>
                 </div>
             </div>
@@ -558,6 +598,69 @@ if ($isPlayerMode) {
     <script>
         // Player mode flag for filtering data categories
         const isPlayerMode = <?php echo $isPlayerMode ? 'true' : 'false'; ?>;
+
+        // eFuse storage calculator functions
+        function calculateEfuseStorage(interval, days, ports) {
+            // Raw storage (6 hours fixed)
+            const rawSamplesPerHour = 3600 / interval;
+            const rawSamples = rawSamplesPerHour * 6;
+            const rawEntrySize = 50 + (18 * ports);
+            const rawStorage = rawSamples * rawEntrySize;
+
+            // Rollup buckets (capped by retention)
+            const daysInSeconds = days * 86400;
+            const tier1minBuckets = Math.min(360, Math.floor(daysInSeconds / 60));
+            const tier5minBuckets = Math.min(576, Math.floor(daysInSeconds / 300));
+            const tier30minBuckets = Math.min(672, Math.floor(daysInSeconds / 1800));
+            const tier2hourBuckets = Math.floor(daysInSeconds / 7200);
+
+            const rollupEntrySize = 50 + (80 * ports);
+            const rollupStorage = (tier1minBuckets + tier5minBuckets + tier30minBuckets + tier2hourBuckets) * rollupEntrySize;
+
+            return rawStorage + rollupStorage;
+        }
+
+        function updateEfuseStorageEstimate() {
+            const intervalSelect = document.getElementById('efuseCollectionInterval');
+            const daysSelect = document.getElementById('efuseRetentionDays');
+            const container = document.getElementById('efuseStorageEstimate');
+
+            if (!intervalSelect || !daysSelect || !container) return;
+
+            const interval = parseInt(intervalSelect.value);
+            const days = parseInt(daysSelect.value);
+
+            const portCounts = [4, 8, 16, 32];
+            let html = '<div class="storageEstimateTitle"><i class="fas fa-hdd"></i> Estimated Storage</div>';
+            html += '<div class="storageEstimateGrid">';
+
+            portCounts.forEach(ports => {
+                const bytes = calculateEfuseStorage(interval, days, ports);
+                html += `<div class="storageEstimateItem">
+                    <span class="storageEstimatePorts">${ports} ports</span>
+                    <span class="storageEstimateSize">${formatBytes(bytes)}</span>
+                </div>`;
+            });
+
+            html += '</div>';
+            container.innerHTML = html;
+        }
+
+        function toggleEfuseOptions() {
+            const checkbox = document.getElementById('efuseMonitorEnabled');
+            const container = document.getElementById('efuseOptionsContainer');
+            if (checkbox && container) {
+                container.style.display = checkbox.checked ? '' : 'none';
+                if (checkbox.checked) {
+                    updateEfuseStorageEstimate();
+                }
+            }
+        }
+
+        // Initialize eFuse storage estimate on page load
+        document.addEventListener('DOMContentLoaded', function() {
+            updateEfuseStorageEstimate();
+        });
 
         // Toggle panel collapse
         function watcherTogglePanel(header) {
