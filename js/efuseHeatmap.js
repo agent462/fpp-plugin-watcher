@@ -1180,9 +1180,18 @@
         });
         loadHeatmapData();
 
-        // Auto-refresh every 10 seconds
+        // Auto-refresh: current data every 10 seconds, history charts every 60 seconds
+        let refreshCount = 0;
         refreshInterval = setInterval(() => {
+            refreshCount++;
             loadCurrentData();
+            // Refresh history charts every 6th cycle (60 seconds)
+            if (refreshCount % 6 === 0) {
+                loadHeatmapData();
+                if (selectedPort) {
+                    loadPortHistory(selectedPort);
+                }
+            }
         }, 10000);
     }
 
