@@ -40,7 +40,7 @@ Watcher adapts its features based on your FPP's operating mode:
 - **System Metrics**: CPU, memory, disk, thermal, and wireless monitoring via collectd
 - **Falcon Controllers**: Monitor and control Falcon hardware on your network (F4V2, F16V2, F4V3, F16V3, F48)
 - **Sync Metrics**: View sync timing, jitter, and packet statistics (player shows all remotes, remotes show their own sync status)
-- **eFuse Monitor**: Real-time current monitoring for eFuse-equipped capes with historical data and heatmap visualization
+- **eFuse Monitor**: Real-time current monitoring for eFuse-equipped capes with historical data and heatmap visualization, efuse control
 
 ### Player Mode Only
 

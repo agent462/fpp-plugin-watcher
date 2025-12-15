@@ -121,7 +121,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['save_settings'])) {
         if (settingsRequireRestart($oldConfig, $settingsToSave)) {
             /** @disregard P1010 */
             WriteSettingToFile('restartFlag', 1);
-            $statusMessage = 'Settings saved! FPP restart required for collectd/MQTT changes.';
+            $statusMessage = 'Settings saved! FPP restart required for collectd/MQTT/efuse process changes.';
         } else {
             $statusMessage = 'Settings saved! Changes take effect within 60 seconds.';
         }
