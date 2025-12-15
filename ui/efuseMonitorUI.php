@@ -154,7 +154,7 @@ renderCommonJS();
             <label for="timeRange">Time Range:</label>
             <select id="timeRange" onchange="loadAllData()">
                 <?php foreach ($timeRangeOptions as $value => $label): ?>
-                <option value="<?php echo htmlspecialchars($value); ?>"<?php echo $value == '24' ? ' selected' : ''; ?>>
+                <option value="<?php echo htmlspecialchars($value); ?>"<?php echo $value == '6' ? ' selected' : ''; ?>>
                     <?php echo htmlspecialchars($label); ?>
                 </option>
                 <?php endforeach; ?>
