@@ -644,7 +644,7 @@ function getDataCategories() {
         ],
         'collectd' => [
             'name' => 'Collectd RRD Data',
-            'dir' => '/home/fpp/media/plugin-data/fpp-plugin-watcher/collectd/rrd',
+            'dir' => '/var/lib/collectd/rrd',
             'description' => 'System metrics collected by collectd (CPU, memory, disk, etc.)',
             'showFiles' => false,
             'recursive' => true,
