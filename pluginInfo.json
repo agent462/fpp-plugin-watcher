@@ -1,7 +1,7 @@
 {
   "repoName": "fpp-plugin-watcher",
   "name": "Watcher",
-  "version": "1.7.0",
+  "version": "1.7.1",
   "description": "Monitors internet connectivity and automatically resets network adapter after consecutive failures. Provides historcal system metrics and has the ability to graph metrics.",
   "author": "Bryan Brandau",
   "homeURL": "https://github.com/agent462/fpp-plugin-watcher",
