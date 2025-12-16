@@ -80,8 +80,8 @@ if [ -d "${OLD_RRD_DIR}" ] && [ "$(ls -A ${OLD_RRD_DIR} 2>/dev/null)" ]; then
         echo "Migrating collectd RRD data to new location..."
         mkdir -p "${NEW_RRD_DIR}"
         cp -a "${OLD_RRD_DIR}/"* "${NEW_RRD_DIR}/"
+        rm -rf "${OLD_RRD_DIR}"
         echo "Collectd RRD data migrated successfully"
-        echo "Old data retained at ${OLD_RRD_DIR} - can be manually removed if desired"
     fi
 else
     echo "No existing collectd RRD data to migrate."
