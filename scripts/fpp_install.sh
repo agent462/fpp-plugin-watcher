@@ -68,6 +68,27 @@ else
     echo "WARNING: Custom collectd.conf not found at ${PLUGIN_DIR}/config/collectd.conf"
 fi
 
+# Migrate collectd RRD data from old location to new plugin-data location
+OLD_RRD_DIR="/var/lib/collectd/rrd"
+NEW_RRD_DIR="/home/fpp/media/plugin-data/fpp-plugin-watcher/collectd/rrd"
+
+if [ -d "${OLD_RRD_DIR}" ] && [ "$(ls -A ${OLD_RRD_DIR} 2>/dev/null)" ]; then
+    # Old data exists
+    if [ -d "${NEW_RRD_DIR}" ] && [ "$(ls -A ${NEW_RRD_DIR} 2>/dev/null)" ]; then
+        echo "Collectd RRD data already exists at new location; skipping migration."
+    else
+        echo "Migrating collectd RRD data to new location..."
+        mkdir -p "${NEW_RRD_DIR}"
+        cp -a "${OLD_RRD_DIR}/"* "${NEW_RRD_DIR}/"
+        echo "Collectd RRD data migrated successfully"
+        echo "Old data retained at ${OLD_RRD_DIR} - can be manually removed if desired"
+    fi
+else
+    echo "No existing collectd RRD data to migrate."
+    # Ensure the new directory structure exists
+    mkdir -p "${NEW_RRD_DIR}"
+fi
+
 # Include common scripts functions and variables
 . ${FPPDIR}/scripts/common
 

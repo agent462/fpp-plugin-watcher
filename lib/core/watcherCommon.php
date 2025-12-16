@@ -28,6 +28,7 @@ define("WATCHERNETWORKQUALITYDIR", WATCHERDATADIR."/network-quality");
 define("WATCHERMQTTDIR", WATCHERDATADIR."/mqtt");
 define("WATCHERCONNECTIVITYDIR", WATCHERDATADIR."/connectivity");
 define("WATCHEREFUSEDIR", WATCHERDATADIR."/efuse");
+define("WATCHERCOLLECTDRRDDIR", WATCHERDATADIR."/collectd/rrd");
 
 // Data file paths (now in plugin-data subdirectories)
 define("WATCHERPINGMETRICSFILE", WATCHERPINGDIR."/raw.log");
@@ -644,7 +645,7 @@ function getDataCategories() {
         ],
         'collectd' => [
             'name' => 'Collectd RRD Data',
-            'dir' => '/var/lib/collectd/rrd',
+            'dir' => WATCHERCOLLECTDRRDDIR,
             'description' => 'System metrics collected by collectd (CPU, memory, disk, etc.)',
             'showFiles' => false,
             'recursive' => true,

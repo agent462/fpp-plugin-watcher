@@ -60,7 +60,7 @@ function getPingMetrics($hoursBack = 24) {
  * @return array Result with success status and data
  */
 function getCollectdMetrics($category, $metric, $consolidationFunction = 'AVERAGE', $hoursBack = 24) {
-    $rrdFile = "/var/lib/collectd/rrd/" . COLLECTD_HOSTNAME . "/{$category}/{$metric}.rrd";
+    $rrdFile = WATCHERCOLLECTDRRDDIR . "/" . COLLECTD_HOSTNAME . "/{$category}/{$metric}.rrd";
 
     if (!file_exists($rrdFile)) {
         return [
@@ -260,7 +260,7 @@ function getBatchedCollectdMetrics($rrdSources, $consolidationFunction = 'AVERAG
  * @return array Result with formatted memory data including buffer cache
  */
 function getMemoryFreeMetrics($hoursBack = 24) {
-    $basePath = "/var/lib/collectd/rrd/" . COLLECTD_HOSTNAME . "/memory";
+    $basePath = WATCHERCOLLECTDRRDDIR . "/" . COLLECTD_HOSTNAME . "/memory";
 
     // Fetch free, buffered, and cached in one command
     $rrdSources = [
@@ -350,7 +350,7 @@ function getDiskFreeMetrics($hoursBack = 24) {
  * @return int Number of CPU cores
  */
 function getCPUCoreCount() {
-    $cpuDirs = glob("/var/lib/collectd/rrd/" . COLLECTD_HOSTNAME . "/cpu-*", GLOB_ONLYDIR);
+    $cpuDirs = glob(WATCHERCOLLECTDRRDDIR . "/" . COLLECTD_HOSTNAME . "/cpu-*", GLOB_ONLYDIR);
     return count($cpuDirs);
 }
 
@@ -373,7 +373,7 @@ function getCPUAverageMetrics($hoursBack = 24) {
     }
 
     // Build RRD sources for all CPU cores (single exec instead of N)
-    $basePath = "/var/lib/collectd/rrd/" . COLLECTD_HOSTNAME;
+    $basePath = WATCHERCOLLECTDRRDDIR . "/" . COLLECTD_HOSTNAME;
     $rrdSources = [];
     for ($i = 0; $i < $cpuCount; $i++) {
         $rrdSources[] = [
@@ -439,7 +439,7 @@ function getCPUAverageMetrics($hoursBack = 24) {
  * @return array List of interface names
  */
 function getNetworkInterfaces() {
-    $interfaceDirs = glob("/var/lib/collectd/rrd/" . COLLECTD_HOSTNAME . "/interface-*", GLOB_ONLYDIR);
+    $interfaceDirs = glob(WATCHERCOLLECTDRRDDIR . "/" . COLLECTD_HOSTNAME . "/interface-*", GLOB_ONLYDIR);
 
     $interfaces = [];
     foreach ($interfaceDirs as $dir) {
@@ -535,7 +535,7 @@ function getLoadAverageMetrics($hoursBack = 24) {
  * @return array List of thermal zone names
  */
 function getThermalZones() {
-    $thermalDirs = glob("/var/lib/collectd/rrd/" . COLLECTD_HOSTNAME . "/thermal-*", GLOB_ONLYDIR);
+    $thermalDirs = glob(WATCHERCOLLECTDRRDDIR . "/" . COLLECTD_HOSTNAME . "/thermal-*", GLOB_ONLYDIR);
 
     $zones = [];
     foreach ($thermalDirs as $dir) {
@@ -624,7 +624,7 @@ function formatThermalZoneType($type) {
  * @return array List of wireless interface names
  */
 function getWirelessInterfaces() {
-    $wirelessDirs = glob("/var/lib/collectd/rrd/" . COLLECTD_HOSTNAME . "/wireless-*", GLOB_ONLYDIR);
+    $wirelessDirs = glob(WATCHERCOLLECTDRRDDIR . "/" . COLLECTD_HOSTNAME . "/wireless-*", GLOB_ONLYDIR);
 
     $interfaces = [];
     foreach ($wirelessDirs as $dir) {
@@ -656,7 +656,7 @@ function getThermalMetrics($hoursBack = 24) {
     }
 
     // Build RRD sources for all thermal zones (single exec instead of N)
-    $basePath = "/var/lib/collectd/rrd/" . COLLECTD_HOSTNAME;
+    $basePath = WATCHERCOLLECTDRRDDIR . "/" . COLLECTD_HOSTNAME;
     $rrdSources = [];
     foreach ($zones as $zone) {
         $rrdSources[] = [
@@ -726,7 +726,7 @@ function getWirelessMetrics($hoursBack = 24) {
     }
 
     // Build RRD sources for all interfaces × metrics (single exec instead of N×M)
-    $basePath = "/var/lib/collectd/rrd/" . COLLECTD_HOSTNAME;
+    $basePath = WATCHERCOLLECTDRRDDIR . "/" . COLLECTD_HOSTNAME;
     $metricTypes = ['signal_quality', 'signal_power', 'signal_noise'];
     $rrdSources = [];
 
