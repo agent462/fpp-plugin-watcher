@@ -181,10 +181,9 @@ function processEfuseRollup() {
     // Rotate the raw file to keep only recent data
     rotateRawMetricsFileGeneric(WATCHEREFUSERAWFILE, EFUSE_RAW_RETENTION);
 
-    // Also rotate rollup files according to their retention
-    foreach ($tiers as $tierName => $tierConfig) {
-        rotateRawMetricsFileGeneric(getEfuseRollupFilePath($tierName), $tierConfig['retention']);
-    }
+    // Note: Rollup file rotation is handled inside processRollupTierGeneric()
+    // via rotateRollupFileGeneric() which has a 1MB threshold to prevent
+    // excessive I/O and data loss on small files (consistent with other metrics)
 }
 
 /**
