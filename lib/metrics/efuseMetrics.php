@@ -88,6 +88,12 @@ function writeEfuseRawMetric($ports) {
         return true; // Nothing to write
     }
 
+    // Calculate total from all ports (we already have all values here)
+    $total = array_sum($ports);
+
+    // Add total as pseudo-port with underscore prefix to distinguish from real ports
+    $ports['_total'] = $total;
+
     $entry = [
         'timestamp' => time(),
         'ports' => $ports
@@ -517,7 +523,17 @@ function getEfuseHeatmapData($hoursBack = 24) {
     $timeSeries = [];
     $peaks = [];
 
-    foreach ($portNames as $portName) {
+    // Also collect _total if present in data
+    $allPortsIncludingTotal = $portNames;
+    // Check if _total exists in any data entry
+    foreach ($dataByTimestamp as $ts => $ports) {
+        if (isset($ports['_total']) && !in_array('_total', $allPortsIncludingTotal)) {
+            $allPortsIncludingTotal[] = '_total';
+            break;
+        }
+    }
+
+    foreach ($allPortsIncludingTotal as $portName) {
         $timeSeries[$portName] = [];
         $peaks[$portName] = 0;
 
@@ -548,6 +564,16 @@ function getEfuseHeatmapData($hoursBack = 24) {
         }
     }
 
+    // Extract total history (separate from port data)
+    $totalHistory = [];
+    if (isset($timeSeries['_total'])) {
+        $totalHistory = $timeSeries['_total'];
+        unset($timeSeries['_total']);
+    }
+
+    // Remove _total from peaks and ports list
+    unset($peaks['_total']);
+
     return [
         'success' => true,
         'hours' => $hoursBack,
@@ -556,6 +582,7 @@ function getEfuseHeatmapData($hoursBack = 24) {
         'ports' => $portNames,
         'outputConfig' => $outputConfig['ports'],
         'timeSeries' => $timeSeries,
+        'totalHistory' => $totalHistory,
         'peaks' => $peaks,
         'timestamps' => $allTimestamps,
         'period' => $result['period'] ?? null,

@@ -434,6 +434,12 @@
     color: #6c757d;
 }
 
+/* Chart Container */
+.efuseChartContainer {
+    position: relative;
+    height: 250px;
+}
+
 /* Charts Section Header */
 .efuseChartsHeader {
     display: flex;

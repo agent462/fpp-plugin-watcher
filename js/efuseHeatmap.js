@@ -584,6 +584,7 @@
 
             try {
                 updateHistoryChart(data);
+                updateTotalHistoryChart(data);
                 updatePeakStats(data);
             } catch (chartError) {
                 console.error('Error updating chart:', chartError);
@@ -594,6 +595,118 @@
             console.error('Error loading heatmap data:', error);
             showHistoryChartsError('Network error');
         }
+    }
+
+    /**
+     * Update total current history chart
+     */
+    function updateTotalHistoryChart(data) {
+        const totalHistory = data.totalHistory || [];
+        const card = document.getElementById('totalHistoryCard');
+
+        if (totalHistory.length === 0) {
+            if (card) card.style.display = 'none';
+            return;
+        }
+
+        if (card) card.style.display = 'block';
+
+        // Convert mA to Amps for display
+        const avgData = totalHistory.map(p => ({
+            x: new Date(p.timestamp * 1000),
+            y: p.value / 1000
+        }));
+
+        const minData = totalHistory.map(p => ({
+            x: new Date(p.timestamp * 1000),
+            y: p.min / 1000
+        }));
+
+        const maxData = totalHistory.map(p => ({
+            x: new Date(p.timestamp * 1000),
+            y: p.max / 1000
+        }));
+
+        // Downsample if needed
+        const downsampledAvg = downsampleData(avgData, MAX_CHART_POINTS);
+        const downsampledMin = downsampleData(minData, MAX_CHART_POINTS);
+        const downsampledMax = downsampleData(maxData, MAX_CHART_POINTS);
+
+        const datasets = [
+            {
+                label: 'Max',
+                data: downsampledMax,
+                borderColor: 'rgba(220, 53, 69, 0.8)',
+                backgroundColor: 'rgba(220, 53, 69, 0.1)',
+                fill: '+1',
+                borderWidth: 1,
+                pointRadius: 0,
+                tension: 0
+            },
+            {
+                label: 'Average',
+                data: downsampledAvg,
+                borderColor: '#3498db',
+                backgroundColor: 'rgba(52, 152, 219, 0.1)',
+                fill: false,
+                borderWidth: 2,
+                pointRadius: 0,
+                tension: 0
+            },
+            {
+                label: 'Min',
+                data: downsampledMin,
+                borderColor: 'rgba(40, 167, 69, 0.8)',
+                backgroundColor: 'transparent',
+                fill: false,
+                borderWidth: 1,
+                pointRadius: 0,
+                tension: 0
+            }
+        ];
+
+        const chartOptions = {
+            responsive: true,
+            maintainAspectRatio: false,
+            animation: false,
+            interaction: {
+                mode: 'index',
+                intersect: false
+            },
+            scales: {
+                x: {
+                    type: 'time',
+                    time: {
+                        displayFormats: {
+                            hour: 'HH:mm',
+                            minute: 'HH:mm'
+                        }
+                    }
+                },
+                y: {
+                    min: 0,
+                    title: {
+                        display: true,
+                        text: 'Amps'
+                    }
+                }
+            },
+            plugins: {
+                legend: {
+                    position: 'top',
+                    labels: { boxWidth: 12, usePointStyle: true }
+                },
+                tooltip: {
+                    callbacks: {
+                        label: function(context) {
+                            return context.dataset.label + ': ' + context.raw.y.toFixed(2) + ' A';
+                        }
+                    }
+                }
+            }
+        };
+
+        updateOrCreateChart(efuseCharts, 'totalHistory', 'totalHistoryChart', 'line', datasets, chartOptions);
     }
 
 
@@ -616,8 +729,46 @@
 
     /**
      * Update peak statistics from heatmap data
+     * Uses total history for accurate system-wide stats, falls back to per-port calculation
      */
     function updatePeakStats(data) {
+        const totalHistory = data.totalHistory || [];
+
+        // Update labels to reflect selected time range
+        const hours = document.getElementById('timeRange')?.value || 24;
+        const timeLabel = hours == 1 ? '1h' : hours + 'h';
+
+        const peakLabel = document.getElementById('peakLabel');
+        if (peakLabel) {
+            peakLabel.textContent = `Peak (${timeLabel})`;
+        }
+
+        const avgLabel = document.getElementById('avgLabel');
+        if (avgLabel) {
+            avgLabel.textContent = `Average (${timeLabel})`;
+        }
+
+        // Use total history if available (more accurate)
+        if (totalHistory.length > 0) {
+            // Peak: maximum total across time range
+            const peakTotal = Math.max(...totalHistory.map(p => p.max || p.value));
+
+            // Average: mean of average totals
+            const avgTotal = totalHistory.reduce((sum, p) => sum + p.value, 0) / totalHistory.length;
+
+            const peakElem = document.getElementById('peakCurrent');
+            if (peakElem) {
+                peakElem.textContent = formatCurrent(peakTotal);
+            }
+
+            const avgElem = document.getElementById('avgCurrent');
+            if (avgElem) {
+                avgElem.textContent = formatCurrent(Math.round(avgTotal));
+            }
+            return;
+        }
+
+        // Fallback: calculate from per-port data (legacy behavior)
         const peaks = data.peaks || {};
         let maxPeak = 0;
         let totalAvg = 0;
@@ -638,20 +789,6 @@
                 totalAvg += sum / series.length;
                 avgCount++;
             }
-        }
-
-        // Update labels to reflect selected time range
-        const hours = document.getElementById('timeRange')?.value || 24;
-        const timeLabel = hours == 1 ? '1h' : hours + 'h';
-
-        const peakLabel = document.getElementById('peakLabel');
-        if (peakLabel) {
-            peakLabel.textContent = `Peak (${timeLabel})`;
-        }
-
-        const avgLabel = document.getElementById('avgLabel');
-        if (avgLabel) {
-            avgLabel.textContent = `Average (${timeLabel})`;
         }
 
         const peakElem = document.getElementById('peakCurrent');
