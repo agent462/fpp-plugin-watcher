@@ -1,5 +1,5 @@
 <?php
-include_once "/opt/fpp/www/common.php";
+include_once __DIR__ . "/fppSettings.php";
 
 // API timeout constants (in seconds) - defined before apiCall.php include
 define("WATCHER_TIMEOUT_STATUS", 2);    // Quick status checks (fppd/status, playback sync)
@@ -42,6 +42,8 @@ define("WATCHEREFUSERAWFILE", WATCHEREFUSEDIR."/raw.log");
 define("WATCHEREFUSEROLLUPFILE", WATCHEREFUSEDIR."/1min.log");
 define("WATCHEREFUSEROLLUPSTATEFILE", WATCHEREFUSEDIR."/rollup-state.json");
 define("WATCHEREFUSECONFIGFILE", WATCHEREFUSEDIR."/config.json");
+
+// Default plugin settings
 define("WATCHERDEFAULTSETTINGS",
     array(
         'connectivityCheckEnabled' => false,

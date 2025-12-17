@@ -2,7 +2,6 @@
 /**
  * Falcon Controller Monitor UI - Dashboard for Falcon pixel controllers
  */
-include_once '/opt/fpp/www/common.php';
 include_once __DIR__ . '/../lib/core/config.php';
 include_once __DIR__ . '/../lib/ui/common.php';
 

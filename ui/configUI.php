@@ -5,8 +5,6 @@
     <script src="/plugin.php?plugin=fpp-plugin-watcher&file=js/commonUI.js&nopage=1"></script>
 
 <?php
-// Include FPP common functions and configuration
-include_once "/opt/fpp/www/common.php";
 include_once __DIR__ . "/../lib/core/watcherCommon.php";
 include_once __DIR__ . "/../lib/core/config.php";
 include_once __DIR__ . "/../lib/controllers/efuseHardware.php";

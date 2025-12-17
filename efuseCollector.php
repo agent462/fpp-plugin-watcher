@@ -11,10 +11,7 @@
  * @package fpp-plugin-watcher
  */
 
-// Include FPP common first (sets up $settings global)
-include_once "/opt/fpp/www/common.php";
-
-// Include required files (watcherCommon.php defines WATCHERPLUGINDIR)
+// Include required files (watcherCommon.php loads fppSettings.php for $settings)
 require_once __DIR__ . '/lib/core/watcherCommon.php';
 require_once __DIR__ . '/lib/core/config.php';
 require_once __DIR__ . '/lib/metrics/efuseMetrics.php';

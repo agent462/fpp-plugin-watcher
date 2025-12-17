@@ -7,16 +7,6 @@
  * Runs as a background process, started by postStart.sh when enabled.
  */
 
-// Load FPP settings without web context
-$settings = [];
-$settingsFile = '/opt/fpp/settings';
-if (file_exists($settingsFile)) {
-    $settings = parse_ini_file($settingsFile);
-}
-$settings['pluginDirectory'] = $settings['pluginDirectory'] ?? '/home/fpp/media/plugins';
-$settings['configDirectory'] = $settings['configDirectory'] ?? '/home/fpp/media/config';
-$settings['logDirectory'] = $settings['logDirectory'] ?? '/home/fpp/media/logs';
-
 include_once __DIR__ . "/lib/core/watcherCommon.php";
 include_once __DIR__ . "/lib/core/config.php";
 include_once __DIR__ . "/lib/utils/mqttEvents.php";
