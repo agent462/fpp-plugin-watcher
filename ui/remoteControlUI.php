@@ -1929,6 +1929,9 @@ function closeFPPUpgradeModal() {
     fppUpgradeStates.clear();
     fppUpgradeIsRunning = false;
     document.getElementById('fppUpgradeModal').style.display = 'none';
+    // Invalidate version cache so banners update immediately after upgrade
+    DATA_SOURCES.bulkUpdates.lastFetch = 0;
+    DATA_SOURCES.localVersion.lastFetch = 0;
     refreshAllStatus();
 }
 
@@ -2285,6 +2288,9 @@ function closeWatcherUpgradeModal() {
     watcherUpgradeStates.clear();
     watcherUpgradeIsRunning = false;
     document.getElementById('watcherUpgradeModal').style.display = 'none';
+    // Invalidate version cache so banners update immediately after upgrade
+    DATA_SOURCES.bulkUpdates.lastFetch = 0;
+    DATA_SOURCES.localVersion.lastFetch = 0;
     refreshAllStatus();
 }
 
