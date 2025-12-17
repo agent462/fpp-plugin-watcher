@@ -77,6 +77,7 @@ if ($access['show']) renderCommonJS();
             <div class="summaryCard cpu"><div class="summaryLabel">Avg CPU Usage</div><div class="summaryValue" id="avgCpu">--%</div><div class="summarySubtext">across all systems</div></div>
             <div class="summaryCard memory"><div class="summaryLabel">Avg Free Memory</div><div class="summaryValue" id="avgMemory">-- MB</div><div class="summarySubtext">across all systems</div></div>
             <div class="summaryCard disk"><div class="summaryLabel">Avg Free Disk</div><div class="summaryValue" id="avgDisk">-- GB</div><div class="summarySubtext">across all systems</div></div>
+            <div class="summaryCard efuse" id="efuseSummaryCard" style="display: none; background: linear-gradient(135deg, #f5af19 0%, #f12711 100%);"><div class="summaryLabel">Total Current</div><div class="summaryValue" id="totalEfuse">-- A</div><div class="summarySubtext" id="efuseSystems">-- systems with eFuse</div></div>
         </div>
 
         <div id="systemsContainer"></div>
@@ -104,7 +105,8 @@ const metricConfig = {
     load: { getValue: m => m.load?.shortterm, getClass: () => '', format: v => v.toFixed(2), chartKey: null },
     temp: { getValue: m => m.temperature?.current, getClass: v => v > 80 ? 'danger' : v > 70 ? 'warning' : '', format: v => convertTemp(v).toFixed(1) + getTempUnit(useFahrenheit), chartKey: 'temperature' },
     wireless: { getValue: m => m.wireless?.signal, getClass: v => v < -80 ? 'danger' : v < -70 ? 'warning' : '', format: v => v.toFixed(0) + ' dBm', chartKey: 'signal_dbm' },
-    ping: { getValue: m => m.ping?.current, getClass: v => v > 100 ? 'danger' : v > 50 ? 'warning' : '', format: v => v.toFixed(1) + ' ms', chartKey: 'avg_latency' }
+    ping: { getValue: m => m.ping?.current, getClass: v => v > 100 ? 'danger' : v > 50 ? 'warning' : '', format: v => v.toFixed(1) + ' ms', chartKey: 'avg_latency' },
+    efuse: { getValue: m => m.efuse?.current, getClass: () => '', format: v => (v / 1000).toFixed(2) + ' A', chartKey: 'total_ma' }
 };
 
 function getMetricDisplay(metrics, key) {
@@ -123,12 +125,13 @@ function processMetricData(data, valueKey) {
 async function fetchSystemMetrics(system) {
     const { address, hostname, model, type, version } = system;
     const hours = getSelectedHours();
-    const result = { hostname, address, model: model || type || 'Unknown', version: version || '', watcherVersion: null, online: false, noWatcher: false, error: null, cpu: null, memory: null, bufferCache: null, disk: null, load: null, temperature: null, wireless: null, ping: null };
+    const result = { hostname, address, model: model || type || 'Unknown', version: version || '', watcherVersion: null, online: false, noWatcher: false, error: null, cpu: null, memory: null, bufferCache: null, disk: null, load: null, temperature: null, wireless: null, ping: null, efuse: null };
 
     try {
-        const [allData, versionData] = await Promise.all([
+        const [allData, versionData, efuseData] = await Promise.all([
             fetchJson(`/api/plugin/fpp-plugin-watcher/remote/metrics/all?host=${encodeURIComponent(address)}&hours=${hours}`, 12000),
-            fetchJson(`/api/plugin/fpp-plugin-watcher/remote/version?host=${encodeURIComponent(address)}`, 5000).catch(() => null)
+            fetchJson(`/api/plugin/fpp-plugin-watcher/remote/version?host=${encodeURIComponent(address)}`, 5000).catch(() => null),
+            fetchJson(`/api/plugin/fpp-plugin-watcher/remote/efuse/heatmap?host=${encodeURIComponent(address)}&hours=${hours}`, 8000).catch(() => null)
         ]);
 
         if (!allData.success) { result.error = 'API returned unsuccessful response'; return result; }
@@ -180,6 +183,24 @@ async function fetchSystemMetrics(system) {
             const valid = pingData.data.filter(d => d.avg_latency !== null);
             if (valid.length) {
                 result.ping = { current: valid.at(-1).avg_latency, average: valid.reduce((a, b) => a + b.avg_latency, 0) / valid.length, min: Math.min(...valid.map(d => d.min_latency)), max: Math.max(...valid.map(d => d.max_latency)), data: pingData.data, tier: pingData.tier_info?.label || '5-min averages' };
+            }
+        }
+
+        // eFuse total amperage
+        if (efuseData?.success && efuseData.totalHistory?.length) {
+            const valid = efuseData.totalHistory.filter(d => d.value !== null && d.value > 0);
+            if (valid.length) {
+                const latest = valid.at(-1);
+                const values = valid.map(d => d.value);
+                result.efuse = {
+                    current: latest.value,
+                    average: values.reduce((a, b) => a + b, 0) / values.length,
+                    peak: Math.max(...values),
+                    portCount: efuseData.portCount || 0,
+                    hardware: efuseData.hardware,
+                    data: efuseData.totalHistory.map(d => ({ timestamp: d.timestamp, total_ma: d.value, min: d.min, max: d.max })),
+                    tier: efuseData.tier_info?.label || '1-minute averages'
+                };
             }
         }
     } catch (e) {
@@ -234,14 +255,15 @@ function renderSystemCard(m, index) {
         const tooltip = k === 'bufferCache' ? ' title="Memory used by Linux to cache frequently accessed files. This memory is automatically released when needed - high usage is good!"' : '';
         return `<div class="metricItem" data-metric="${k}"${tooltip}><div class="metricLabel">${metricLabels[k]}${k === 'bufferCache' ? ' <i class="fas fa-info-circle" style="font-size:0.65rem;color:#6c757d;cursor:help;"></i>' : ''}</div><div class="metricValue ${d.class}">${d.value}</div></div>`;
     }).join('');
-    const optMetrics = [['temp', 'Temperature', m.temperature], ['wireless', 'WiFi Signal', m.wireless], ['ping', 'Ping Latency', m.ping]].filter(([,,v]) => v).map(([k, l]) => { const d = getMetricDisplay(m, k); return `<div class="metricItem" data-metric="${k}"><div class="metricLabel">${l}</div><div class="metricValue ${d.class}">${d.value}</div></div>`; }).join('');
+    const optMetrics = [['temp', 'Temperature', m.temperature], ['wireless', 'WiFi Signal', m.wireless], ['ping', 'Ping Latency', m.ping], ['efuse', 'Total Current', m.efuse]].filter(([,,v]) => v).map(([k, l]) => { const d = getMetricDisplay(m, k); return `<div class="metricItem" data-metric="${k}"><div class="metricLabel">${l}</div><div class="metricValue ${d.class}">${d.value}</div></div>`; }).join('');
 
     const chartWrappers = [
         `<div class="chartWrapper"><div class="miniChartTitle"><i class="fas fa-microchip"></i> CPU Usage</div><canvas id="cpuChart-${index}" height="150"></canvas></div>`,
         `<div class="chartWrapper"><div class="miniChartTitle"><i class="fas fa-memory"></i> Free Memory</div><canvas id="memoryChart-${index}" height="150"></canvas></div>`,
         m.temperature ? `<div class="chartWrapper"><div class="miniChartTitle"><i class="fas fa-thermometer-half"></i> Temperature</div><canvas id="tempChart-${index}" height="150"></canvas></div>` : '',
         m.wireless ? `<div class="chartWrapper"><div class="miniChartTitle"><i class="fas fa-wifi"></i> WiFi Signal</div><canvas id="wirelessChart-${index}" height="150"></canvas></div>` : '',
-        m.ping ? `<div class="chartWrapper"><div class="miniChartTitle"><i class="fas fa-network-wired"></i> Ping Latency</div><canvas id="pingChart-${index}" height="150"></canvas></div>` : ''
+        m.ping ? `<div class="chartWrapper"><div class="miniChartTitle"><i class="fas fa-network-wired"></i> Ping Latency</div><canvas id="pingChart-${index}" height="150"></canvas></div>` : '',
+        m.efuse ? `<div class="chartWrapper"><div class="miniChartTitle"><i class="fas fa-bolt"></i> Total Current</div><canvas id="efuseChart-${index}" height="150"></canvas></div>` : ''
     ].join('');
 
     return `<div class="systemCard" data-system="${index}">
@@ -260,7 +282,7 @@ function renderMiniChart(canvasId, data, label, colorKey, valueKey) {
     const isTemp = valueKey === 'temperature';
     const chartData = data.map(e => ({ x: e.timestamp * 1000, y: isTemp ? convertTemp(e[valueKey]) : e[valueKey] })).filter(d => d.y !== null);
     const color = CHART_COLORS[colorKey] || CHART_COLORS.purple;
-    const formatters = { cpu_usage: v => v.toFixed(1)+'%', free_mb: v => v.toFixed(0)+' MB', temperature: v => v.toFixed(1)+getTempUnit(useFahrenheit), signal_dbm: v => v.toFixed(0)+' dBm', avg_latency: v => v.toFixed(1)+' ms' };
+    const formatters = { cpu_usage: v => v.toFixed(1)+'%', free_mb: v => v.toFixed(0)+' MB', temperature: v => v.toFixed(1)+getTempUnit(useFahrenheit), signal_dbm: v => v.toFixed(0)+' dBm', avg_latency: v => v.toFixed(1)+' ms', total_ma: v => (v/1000).toFixed(2)+' A' };
     const formatValue = formatters[valueKey] || (v => v.toFixed(2));
 
     if (charts[canvasId]) {
@@ -298,6 +320,18 @@ function updateSummaryCards() {
         if (cpuAvg !== null) document.getElementById('avgCpu').textContent = cpuAvg.toFixed(1) + '%';
         if (memAvg !== null) document.getElementById('avgMemory').textContent = memAvg.toFixed(0) + ' MB';
         if (diskAvg !== null) document.getElementById('avgDisk').textContent = diskAvg.toFixed(1) + ' GB';
+
+        // eFuse summary - show card only if any systems have eFuse data
+        const efuseSystems = online.filter(s => s.efuse);
+        const efuseCard = document.getElementById('efuseSummaryCard');
+        if (efuseSystems.length > 0) {
+            const totalCurrent = efuseSystems.reduce((sum, s) => sum + (s.efuse.current || 0), 0);
+            efuseCard.style.display = '';
+            document.getElementById('totalEfuse').textContent = (totalCurrent / 1000).toFixed(2) + ' A';
+            document.getElementById('efuseSystems').textContent = `${efuseSystems.length} system${efuseSystems.length > 1 ? 's' : ''} with eFuse`;
+        } else {
+            efuseCard.style.display = 'none';
+        }
     }
 }
 
@@ -348,16 +382,16 @@ async function refreshAllSystems() {
             const card = container.querySelector(`[data-system="${index}"]`);
             if (card) {
                 // Destroy existing charts before replacing HTML (canvas elements will be new)
-                ['cpu', 'memory', 'temp', 'wireless', 'ping'].forEach(key => {
+                ['cpu', 'memory', 'temp', 'wireless', 'ping', 'efuse'].forEach(key => {
                     const chartKey = `${key}Chart-${index}`;
                     if (charts[chartKey]) { charts[chartKey].destroy(); delete charts[chartKey]; }
                 });
                 card.outerHTML = renderSystemCard(metrics, index);
                 if (metrics.online) {
-                    [['cpu', 'red', 'cpu_usage'], ['memory', 'purple', 'free_mb'], ['temp', 'orange', 'temperature'], ['wireless', 'teal', 'signal_dbm'], ['ping', 'indigo', 'avg_latency']]
+                    [['cpu', 'red', 'cpu_usage'], ['memory', 'purple', 'free_mb'], ['temp', 'orange', 'temperature'], ['wireless', 'teal', 'signal_dbm'], ['ping', 'indigo', 'avg_latency'], ['efuse', 'yellow', 'total_ma']]
                         .forEach(([key, color, field]) => {
-                            const data = key === 'cpu' ? metrics.cpu?.data : key === 'memory' ? metrics.memory?.data : key === 'temp' ? metrics.temperature?.data : key === 'wireless' ? metrics.wireless?.data : metrics.ping?.data;
-                            const label = key === 'cpu' ? 'CPU %' : key === 'memory' ? 'Memory MB' : key === 'temp' ? formatThermalZoneName(metrics.temperature?.friendlyName || 'Temp') + ' ' + getTempUnit(useFahrenheit) : key === 'wireless' ? 'Signal dBm' : 'Latency ms';
+                            const data = key === 'cpu' ? metrics.cpu?.data : key === 'memory' ? metrics.memory?.data : key === 'temp' ? metrics.temperature?.data : key === 'wireless' ? metrics.wireless?.data : key === 'ping' ? metrics.ping?.data : metrics.efuse?.data;
+                            const label = key === 'cpu' ? 'CPU %' : key === 'memory' ? 'Memory MB' : key === 'temp' ? formatThermalZoneName(metrics.temperature?.friendlyName || 'Temp') + ' ' + getTempUnit(useFahrenheit) : key === 'wireless' ? 'Signal dBm' : key === 'ping' ? 'Latency ms' : 'Amps';
                             if (data) renderMiniChart(`${key === 'temp' ? 'temp' : key}Chart-${index}`, data, label, color, field);
                         });
                 }

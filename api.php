@@ -184,6 +184,8 @@ function getEndpointsfpppluginwatcher() {
         ['method' => 'GET', 'endpoint' => 'remote/sysInfo', 'callback' => 'fpppluginWatcherRemoteSysInfo'],
         ['method' => 'GET', 'endpoint' => 'remote/metrics/all', 'callback' => 'fpppluginWatcherRemoteMetricsAll'],
         ['method' => 'GET', 'endpoint' => 'remote/fppd/status', 'callback' => 'fpppluginWatcherRemoteFppdStatus'],
+        ['method' => 'GET', 'endpoint' => 'remote/efuse/supported', 'callback' => 'fpppluginWatcherRemoteEfuseSupported'],
+        ['method' => 'GET', 'endpoint' => 'remote/efuse/heatmap', 'callback' => 'fpppluginWatcherRemoteEfuseHeatmap'],
 
         // Plugin updates
         ['method' => 'GET', 'endpoint' => 'update/check', 'callback' => 'fpppluginWatcherUpdateCheck'],
@@ -843,6 +845,31 @@ function fpppluginWatcherRemoteFppdStatus() {
         return apiError('Failed to fetch fppd status from remote host');
     }
     return apiSuccess(['data' => $result]);
+}
+
+// GET /api/plugin/fpp-plugin-watcher/remote/efuse/supported?host=x
+function fpppluginWatcherRemoteEfuseSupported() {
+    $host = getRequiredQueryParam('host');
+    if (!$host) return apiError('Missing host parameter');
+
+    $result = apiCall('GET', "http://{$host}/api/plugin/fpp-plugin-watcher/efuse/supported", [], true, WATCHER_TIMEOUT_STANDARD);
+    if ($result === false) {
+        return apiSuccess(['supported' => false, 'error' => 'Failed to fetch eFuse support from remote host']);
+    }
+    return apiSuccess($result);
+}
+
+// GET /api/plugin/fpp-plugin-watcher/remote/efuse/heatmap?host=x&hours=Y
+function fpppluginWatcherRemoteEfuseHeatmap() {
+    $host = getRequiredQueryParam('host');
+    if (!$host) return apiError('Missing host parameter');
+
+    $hours = getHoursParam();
+    $result = apiCall('GET', "http://{$host}/api/plugin/fpp-plugin-watcher/efuse/heatmap?hours={$hours}", [], true, WATCHER_TIMEOUT_LONG);
+    if ($result === false) {
+        return apiError('Failed to fetch eFuse heatmap from remote host');
+    }
+    return apiSuccess($result);
 }
 
 // GET /api/plugin/fpp-plugin-watcher/outputs/discrepancies
