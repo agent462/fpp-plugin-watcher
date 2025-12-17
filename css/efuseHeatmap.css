@@ -421,6 +421,10 @@
     border-radius: 8px;
     padding: 1.5rem;
     margin-bottom: 1.5rem;
+    position: relative;
+    min-height: 200px;
+    overflow: hidden;
+    isolation: isolate;
 }
 
 .efuseChartTitle {
@@ -470,15 +474,6 @@
     font-weight: normal;
     color: #6c757d;
 }
-
-/* Chart Loading Indicator */
-.efuseChartCard {
-    position: relative;
-    min-height: 200px;
-    overflow: hidden;
-    isolation: isolate;
-}
-
 
 /* Responsive - Tablet (768px) */
 @media (max-width: 768px) {

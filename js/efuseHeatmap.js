@@ -25,6 +25,7 @@
     const PORTS_PER_CHART = 16;
     const MAX_CHART_POINTS = 200; // Downsample to this many points per line
     const CONTROL_COOLDOWN_MS = 500; // Rate limiting for control actions
+    const AUTO_REFRESH_INTERVAL_MS = 10000; // 10s auto-refresh for current data
 
     let efuseCharts = {};
     let currentPortData = {};
@@ -1329,7 +1330,7 @@
                     loadPortHistory(selectedPort);
                 }
             }
-        }, 10000);
+        }, AUTO_REFRESH_INTERVAL_MS);
     }
 
     /**

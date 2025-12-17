@@ -17,6 +17,9 @@ include_once __DIR__ . '/../core/watcherCommon.php';
 define('EFUSE_HARDWARE_CACHE_TTL', 3600); // 1 hour - hardware doesn't change often
 define('EFUSE_HARDWARE_CACHE_FILE', WATCHEREFUSEDIR . '/hardware-cache.json');
 
+// Hardware timing constants
+define('EFUSE_RESET_DELAY_US', 100000); // 100ms delay for fuse reset (hardware-dependent)
+
 // FPP config file locations
 define('FPP_TMP_DIR', '/home/fpp/media/tmp');
 define('FPP_CONFIG_DIR', '/home/fpp/media/config');
@@ -748,7 +751,7 @@ function resetEfusePort($portName) {
     }
 
     // Brief delay to allow fuse to reset
-    usleep(100000); // 100ms
+    usleep(EFUSE_RESET_DELAY_US);
 
     $onResult = toggleEfusePort($portName, 'on');
     if (!$onResult['success']) {
@@ -827,48 +830,8 @@ function setAllEfusePorts($state) {
  * @return array ['success' => bool, 'resetCount' => int, 'ports' => array, 'message' => string]
  */
 function resetAllTrippedFuses() {
-    // Get all port statuses and find tripped ones
-    $trippedPorts = [];
-    $portsList = getFppdPortsCached();
-
-    if ($portsList === null) {
-        // Clear cache and try fresh
-        $portsData = @file_get_contents('http://127.0.0.1/api/fppd/ports');
-        if ($portsData === false) {
-            return [
-                'success' => false,
-                'error' => 'Could not get port status from fppd'
-            ];
-        }
-        $portsList = @json_decode($portsData, true);
-    }
-
-    if (!is_array($portsList)) {
-        return [
-            'success' => false,
-            'error' => 'Invalid response from fppd'
-        ];
-    }
-
-    // Find tripped ports
-    foreach ($portsList as $port) {
-        $name = $port['name'] ?? '';
-        if (empty($name)) continue;
-
-        // Check for smart receiver ports
-        if (isset($port['smartReceivers']) && $port['smartReceivers']) {
-            foreach (['A', 'B', 'C', 'D', 'E', 'F'] as $sub) {
-                if (isset($port[$sub]) && isset($port[$sub]['fuseBlown']) && $port[$sub]['fuseBlown']) {
-                    $trippedPorts[] = $name . '-' . $sub;
-                }
-            }
-        } else {
-            // Standard port - status === false means tripped
-            if (isset($port['status']) && $port['status'] === false) {
-                $trippedPorts[] = $name;
-            }
-        }
-    }
+    // Reuse getTrippedFuses() to find all tripped ports
+    $trippedPorts = getTrippedFuses();
 
     if (empty($trippedPorts)) {
         return [
@@ -983,7 +946,7 @@ function getPortStatus($portName) {
                 return [
                     'name' => $portName,
                     'enabled' => $port['enabled'] ?? false,
-                    'fuseTripped' => isset($port['status']) ? ($port['status'] === false) : false,
+                    'fuseTripped' => isset($port['status']) && $port['status'] === false,
                     'currentMa' => $port['ma'] ?? 0,
                     'isSmartReceiver' => false
                 ];

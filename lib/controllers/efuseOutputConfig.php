@@ -36,6 +36,48 @@ $_efuseOutputConfigCacheTime = 0;
 define('EFUSE_OUTPUT_CONFIG_CACHE_TTL', 60); // 1 minute
 
 /**
+ * Extract virtual string configuration from a port config
+ *
+ * @param array $portConfig Port configuration array
+ * @param bool $usePortFallback Use port-level config as fallback when no virtual strings
+ * @return array ['totalPixels' => int, 'protocol' => string, 'brightness' => int, 'descriptions' => array]
+ */
+function extractVirtualStringConfig($portConfig, $usePortFallback = false) {
+    $virtualStrings = $portConfig['virtualStrings'] ?? [];
+    $totalPixels = 0;
+    $protocol = 'ws2811';
+    $brightness = 100;
+    $descriptions = [];
+
+    if (!empty($virtualStrings)) {
+        foreach ($virtualStrings as $vs) {
+            $totalPixels += intval($vs['pixelCount'] ?? 0);
+            if (!empty($vs['description'])) {
+                $descriptions[] = $vs['description'];
+            }
+        }
+        // Use protocol and brightness from first virtual string
+        $protocol = strtolower($virtualStrings[0]['protocol'] ?? 'ws2811');
+        $brightness = intval($virtualStrings[0]['brightness'] ?? 100);
+    } elseif ($usePortFallback) {
+        // Fallback to port-level config
+        $totalPixels = intval($portConfig['pixelCount'] ?? 0);
+        $protocol = strtolower($portConfig['protocol'] ?? 'ws2811');
+        $brightness = intval($portConfig['brightness'] ?? 100);
+        if (!empty($portConfig['description'])) {
+            $descriptions[] = $portConfig['description'];
+        }
+    }
+
+    return [
+        'totalPixels' => $totalPixels,
+        'protocol' => $protocol,
+        'brightness' => $brightness,
+        'descriptions' => $descriptions
+    ];
+}
+
+/**
  * Get FPP channel output configuration for all ports
  * Only returns ports that have actual eFuse/current monitoring capability
  *
@@ -78,49 +120,26 @@ function getEfuseOutputConfig($forceRefresh = false) {
                     continue;
                 }
 
-                // Get virtual strings for this port (each can have different settings)
+                // Extract virtual string configuration (with fallback to port-level config)
+                $vsConfig = extractVirtualStringConfig($portConfig, true);
                 $virtualStrings = $portConfig['virtualStrings'] ?? [];
-                $totalPixels = 0;
-                $protocol = 'ws2811'; // default
-                $brightness = 100; // default
-                $descriptions = [];
-
-                if (!empty($virtualStrings)) {
-                    foreach ($virtualStrings as $vs) {
-                        $totalPixels += intval($vs['pixelCount'] ?? 0);
-                        if (!empty($vs['description'])) {
-                            $descriptions[] = $vs['description'];
-                        }
-                    }
-                    // Use protocol and brightness from first virtual string
-                    $protocol = strtolower($virtualStrings[0]['protocol'] ?? 'ws2811');
-                    $brightness = intval($virtualStrings[0]['brightness'] ?? 100);
-                } else {
-                    // Fallback to port-level config
-                    $totalPixels = intval($portConfig['pixelCount'] ?? 0);
-                    $protocol = strtolower($portConfig['protocol'] ?? 'ws2811');
-                    $brightness = intval($portConfig['brightness'] ?? 100);
-                    if (!empty($portConfig['description'])) {
-                        $descriptions[] = $portConfig['description'];
-                    }
-                }
 
                 // Calculate expected current
-                $expectedCurrent = estimatePortCurrent($totalPixels, $protocol);
+                $expectedCurrent = estimatePortCurrent($vsConfig['totalPixels'], $vsConfig['protocol']);
 
                 $result['ports'][$portName] = [
                     'portNumber' => $portNumber,
                     'portName' => $portName,
                     'outputType' => $outputType,
-                    'protocol' => $protocol,
-                    'brightness' => $brightness,
-                    'pixelCount' => $totalPixels,
+                    'protocol' => $vsConfig['protocol'],
+                    'brightness' => $vsConfig['brightness'],
+                    'pixelCount' => $vsConfig['totalPixels'],
                     'startChannel' => intval($portConfig['startChannel'] ?? $virtualStrings[0]['startChannel'] ?? 0),
                     'colorOrder' => $portConfig['colorOrder'] ?? $virtualStrings[0]['colorOrder'] ?? 'RGB',
-                    'description' => implode(', ', $descriptions),
+                    'description' => implode(', ', $vsConfig['descriptions']),
                     'expectedCurrentMa' => $expectedCurrent['typical'],
                     'maxCurrentMa' => $expectedCurrent['max'],
-                    'enabled' => !empty($totalPixels)
+                    'enabled' => !empty($vsConfig['totalPixels'])
                 ];
 
                 $result['totalPorts']++;
@@ -153,39 +172,25 @@ function getEfuseOutputConfig($forceRefresh = false) {
                         continue;
                     }
 
+                    // Extract virtual string configuration (no port-level fallback for BBB)
+                    $vsConfig = extractVirtualStringConfig($portConfig, false);
                     $virtualStrings = $portConfig['virtualStrings'] ?? [];
-                    $totalPixels = 0;
-                    $protocol = 'ws2811';
-                    $brightness = 100;
-                    $descriptions = [];
 
-                    foreach ($virtualStrings as $vs) {
-                        $totalPixels += intval($vs['pixelCount'] ?? 0);
-                        if (!empty($vs['description'])) {
-                            $descriptions[] = $vs['description'];
-                        }
-                    }
-
-                    if (!empty($virtualStrings)) {
-                        $protocol = strtolower($virtualStrings[0]['protocol'] ?? 'ws2811');
-                        $brightness = intval($virtualStrings[0]['brightness'] ?? 100);
-                    }
-
-                    $expectedCurrent = estimatePortCurrent($totalPixels, $protocol);
+                    $expectedCurrent = estimatePortCurrent($vsConfig['totalPixels'], $vsConfig['protocol']);
 
                     $result['ports'][$portName] = [
                         'portNumber' => $portNumber,
                         'portName' => $portName,
                         'outputType' => $type,
-                        'protocol' => $protocol,
-                        'brightness' => $brightness,
-                        'pixelCount' => $totalPixels,
+                        'protocol' => $vsConfig['protocol'],
+                        'brightness' => $vsConfig['brightness'],
+                        'pixelCount' => $vsConfig['totalPixels'],
                         'startChannel' => intval($virtualStrings[0]['startChannel'] ?? 0),
                         'colorOrder' => $virtualStrings[0]['colorOrder'] ?? 'RGB',
-                        'description' => implode(', ', $descriptions),
+                        'description' => implode(', ', $vsConfig['descriptions']),
                         'expectedCurrentMa' => $expectedCurrent['typical'],
                         'maxCurrentMa' => $expectedCurrent['max'],
-                        'enabled' => !empty($totalPixels)
+                        'enabled' => !empty($vsConfig['totalPixels'])
                     ];
 
                     $result['totalPorts']++;
@@ -358,33 +363,6 @@ function getPortFuseStatus() {
     }
 
     return $result;
-}
-
-/**
- * Get color for current reading based on amperage
- *
- * @param int $currentMa Current in milliamps
- * @return string CSS color value
- */
-function getEfuseCurrentColor($currentMa) {
-    // 0-6A gradient
-    if ($currentMa <= 0) {
-        return '#1a1a2e'; // Dark (off/zero)
-    } elseif ($currentMa < 500) {
-        return '#16213e'; // Cool blue
-    } elseif ($currentMa < 1000) {
-        return '#1e5128'; // Green
-    } elseif ($currentMa < 2000) {
-        return '#4e9f3d'; // Light green
-    } elseif ($currentMa < 3000) {
-        return '#ffc107'; // Yellow (warning)
-    } elseif ($currentMa < 4000) {
-        return '#fd7e14'; // Orange
-    } elseif ($currentMa < 5000) {
-        return '#dc3545'; // Red (high)
-    } else {
-        return '#c82333'; // Dark red (max/critical)
-    }
 }
 
 /**
