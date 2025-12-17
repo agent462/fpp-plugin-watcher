@@ -41,7 +41,7 @@ renderCommonJS();
             </div>
             <div class="infoBox">
                 <i class="fas fa-microchip"></i>
-                <strong>Supported Controllers:</strong> F4V2, F16V2, F4V3, F16V3, F48
+                <strong>Supported Controllers:</strong> F4V2, F16V2, F4V3, F16V3, F48, F16V4, F48V4, F16V5, F48V5, F32V5
             </div>
 
             <!-- Discovery Results -->

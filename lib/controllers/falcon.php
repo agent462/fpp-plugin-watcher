@@ -16,11 +16,19 @@ include_once __DIR__ . '/../core/watcherCommon.php';
 /**
  * Falcon Controller Product Codes
  */
+// V2/V3 Controllers (XML API)
 define('FALCON_F4V2_PRODUCT_CODE', 1);
 define('FALCON_F16V2_PRODUCT_CODE', 2);
 define('FALCON_F4V3_PRODUCT_CODE', 3);
 define('FALCON_F16V3_PRODUCT_CODE', 5);
 define('FALCON_F48_PRODUCT_CODE', 7);
+
+// V4/V5 Controllers (JSON API)
+define('FALCON_F16V4_PRODUCT_CODE', 128);
+define('FALCON_F48V4_PRODUCT_CODE', 129);
+define('FALCON_F16V5_PRODUCT_CODE', 130);
+define('FALCON_F48V5_PRODUCT_CODE', 131);
+define('FALCON_F32V5_PRODUCT_CODE', 132);
 
 /**
  * Falcon Controller Modes (from strings.xml cm attribute)
@@ -30,6 +38,16 @@ define('FALCON_MODE_E131', 0);
 define('FALCON_MODE_ZCPP', 16);
 define('FALCON_MODE_DDP', 64);
 define('FALCON_MODE_ARTNET', 128);
+
+/**
+ * V4/V5 Operating Modes (from JSON API O field)
+ */
+define('FALCON_V4_MODE_E131_ARTNET', 0);
+define('FALCON_V4_MODE_ZCPP', 1);
+define('FALCON_V4_MODE_DDP', 2);
+define('FALCON_V4_MODE_FPP_REMOTE', 3);
+define('FALCON_V4_MODE_FPP_MASTER', 4);
+define('FALCON_V4_MODE_FPP_PLAYER', 5);
 
 /**
  * Class FalconController
@@ -58,6 +76,9 @@ class FalconController
 
     /** @var int Cache TTL in seconds */
     private $cacheTTL;
+
+    /** @var bool|null Whether this is a V4/V5 controller (null = unknown) */
+    private $isV4 = null;
 
     /**
      * Constructor
@@ -174,6 +195,138 @@ class FalconController
     }
 
     /**
+     * Make an HTTP POST request with JSON body (for V4/V5 API)
+     *
+     * @param string $endpoint API endpoint path
+     * @param array $data Data to encode as JSON
+     * @return array|false Decoded JSON response or false on error
+     */
+    private function httpPostJson($endpoint, $data)
+    {
+        $url = $this->getBaseUrl() . $endpoint;
+        $jsonData = json_encode($data);
+
+        $ch = curl_init();
+        curl_setopt_array($ch, [
+            CURLOPT_URL => $url,
+            CURLOPT_RETURNTRANSFER => true,
+            CURLOPT_TIMEOUT => $this->timeout,
+            CURLOPT_CONNECTTIMEOUT => $this->timeout,
+            CURLOPT_POST => true,
+            CURLOPT_POSTFIELDS => $jsonData,
+            CURLOPT_HTTPHEADER => [
+                'Content-Type: application/json',
+                'Accept: application/json'
+            ]
+        ]);
+
+        $response = curl_exec($ch);
+        $httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+        $error = curl_error($ch);
+        curl_close($ch);
+
+        if ($response === false || !empty($error)) {
+            $this->lastError = "HTTP POST JSON failed: $error";
+            return false;
+        }
+
+        if ($httpCode !== 200) {
+            $this->lastError = "HTTP POST JSON returned status $httpCode";
+            return false;
+        }
+
+        $decoded = json_decode($response, true);
+        if ($decoded === null) {
+            $this->lastError = "JSON decode failed";
+            return false;
+        }
+
+        // Check API response code
+        if (isset($decoded['R']) && $decoded['R'] !== 200) {
+            $this->lastError = $decoded['E'] ?? "API error code {$decoded['R']}";
+            return false;
+        }
+
+        return $decoded;
+    }
+
+    /**
+     * Query V4/V5 API
+     *
+     * @param string $method API method (ST, SP, IN, etc.)
+     * @param int $batch Batch number (default 0)
+     * @return array|false Response parameters or false on error
+     */
+    private function queryV4Api($method, $batch = 0)
+    {
+        $request = [
+            'T' => 'Q',
+            'M' => $method,
+            'B' => $batch,
+            'E' => 0,
+            'I' => 0,
+            'P' => new \stdClass()
+        ];
+
+        $response = $this->httpPostJson('/api', $request);
+        if ($response === false) {
+            return false;
+        }
+
+        return $response['P'] ?? [];
+    }
+
+    /**
+     * Set V4/V5 API value
+     *
+     * @param string $method API method
+     * @param array $params Parameters to set
+     * @return array|false Response or false on error
+     */
+    private function setV4Api($method, $params)
+    {
+        $request = [
+            'T' => 'S',
+            'M' => $method,
+            'B' => 0,
+            'E' => 0,
+            'I' => 0,
+            'P' => $params
+        ];
+
+        return $this->httpPostJson('/api', $request);
+    }
+
+    /**
+     * Check if this is a V4/V5 controller (product code >= 128)
+     *
+     * @param int|null $productCode Optional product code to check
+     * @return bool True if V4/V5
+     */
+    public function isV4Controller($productCode = null)
+    {
+        if ($productCode !== null) {
+            return $productCode >= 128;
+        }
+
+        if ($this->isV4 !== null) {
+            return $this->isV4;
+        }
+
+        // Detect by checking status.xml product code
+        $response = $this->httpGet('/status.xml');
+        if ($response !== false) {
+            $xml = $this->parseXml($response);
+            if ($xml !== false && isset($xml->p)) {
+                $this->isV4 = ((int)$xml->p >= 128);
+                return $this->isV4;
+            }
+        }
+
+        return false;
+    }
+
+    /**
      * Parse XML response into SimpleXMLElement
      *
      * @param string $xml XML string
@@ -220,6 +373,7 @@ class FalconController
 
     /**
      * Get controller status (cached)
+     * Auto-detects V4/V5 controllers and uses appropriate API
      *
      * @param bool $forceRefresh Force cache refresh
      * @return array|false Status data or false on error
@@ -232,6 +386,7 @@ class FalconController
             return $this->statusCache;
         }
 
+        // First get basic status.xml to detect controller type
         $response = $this->httpGet('/status.xml');
         if ($response === false) {
             return false;
@@ -242,6 +397,27 @@ class FalconController
             return false;
         }
 
+        $productCode = (int)$xml->p;
+
+        // V4/V5 controllers (product code >= 128) use JSON API
+        if ($this->isV4Controller($productCode)) {
+            $this->isV4 = true;
+            return $this->getStatusV4($xml);
+        }
+
+        // V2/V3 controllers use XML API
+        $this->isV4 = false;
+        return $this->getStatusV2V3($xml);
+    }
+
+    /**
+     * Get status for V2/V3 controllers using XML API
+     *
+     * @param SimpleXMLElement $xml Parsed status.xml
+     * @return array|false Status data or false on error
+     */
+    private function getStatusV2V3($xml)
+    {
         $status = [
             'firmware_version' => (string)$xml->fv,
             'name' => trim((string)$xml->n),
@@ -264,6 +440,7 @@ class FalconController
             'pixels_bank0' => (int)$xml->k0,
             'pixels_bank1' => (int)$xml->k1,
             'pixels_bank2' => (int)$xml->k2,
+            'is_v4' => false,
         ];
 
         // Fetch the actual controller mode from strings.xml (cm attribute)
@@ -278,13 +455,142 @@ class FalconController
 
         // Add derived info
         $status['model'] = $this->getModelName($status['product_code']);
-        $status['mode_name'] = $this->getModeName($status['controller_mode']);
+        $status['mode_name'] = $this->getModeName($status['controller_mode'], false);
 
         // Cache the result
         $this->statusCache = $status;
         $this->statusCacheTime = time();
 
         return $status;
+    }
+
+    /**
+     * Get status for V4/V5 controllers using JSON API
+     *
+     * @param SimpleXMLElement $xml Parsed status.xml (for basic info)
+     * @return array|false Status data or false on error
+     */
+    private function getStatusV4($xml)
+    {
+        // Get comprehensive status from JSON API
+        $v4Status = $this->queryV4Api('ST');
+        if ($v4Status === false) {
+            // Fall back to basic XML info if JSON API fails
+            return $this->getStatusV4FromXml($xml);
+        }
+
+        // Map V4 API fields to standard status format
+        $status = [
+            'firmware_version' => $v4Status['V'] ?? (string)$xml->fv,
+            'name' => $v4Status['N'] ?? trim((string)$xml->n),
+            'product_code' => (int)$xml->p,
+            'address_mode' => $v4Status['A'] ?? 0,
+            'controller_mode' => $v4Status['O'] ?? 0,
+            'num_ports' => $v4Status['P'] ?? (int)$xml->np,
+            'num_strings' => $v4Status['S'] ?? (int)$xml->ns,
+            'uptime' => $this->formatUptime($v4Status['U'] ?? 0),
+            'time' => $v4Status['TM'] ?? '',
+            'date' => $v4Status['DT'] ?? '',
+            // Temperatures are in tenths of degrees
+            'temperature1' => ($v4Status['T1'] ?? 0) / 10,
+            'temperature2' => ($v4Status['T2'] ?? 0) / 10,
+            'temperature3' => ($v4Status['PT'] ?? 0) / 10, // Power temp as temp3
+            // Voltages are in tenths of volts
+            'voltage1' => sprintf('%.1fV', ($v4Status['V1'] ?? 0) / 10),
+            'voltage2' => sprintf('%.1fV', ($v4Status['V2'] ?? 0) / 10),
+            'fan_speed' => $v4Status['FN'] ?? 0,
+            'zcpp_frames' => 0,
+            'zcpp_sequence' => 0,
+            'pixels_bank0' => (int)$xml->k0,
+            'pixels_bank1' => (int)$xml->k1,
+            'pixels_bank2' => (int)($xml->k2 ?? 0),
+            'is_v4' => true,
+            // V4-specific fields
+            'board_mode' => $v4Status['B'] ?? 0,
+            'mac_address' => $v4Status['C'] ?? '',
+            'ip_address' => $v4Status['I'] ?? '',
+            'subnet_mask' => $v4Status['K'] ?? '',
+            'gateway' => $v4Status['G'] ?? '',
+            'dns' => $v4Status['D'] ?? '',
+            'universe_count' => $v4Status['UC'] ?? 0,
+            'firmware_build' => $v4Status['FW'] ?? 0,
+        ];
+
+        // Add derived info
+        $status['model'] = $this->getModelName($status['product_code']);
+        $status['mode_name'] = $this->getModeName($status['controller_mode'], true);
+
+        // Cache the result
+        $this->statusCache = $status;
+        $this->statusCacheTime = time();
+
+        return $status;
+    }
+
+    /**
+     * Get basic V4 status from XML when JSON API fails
+     *
+     * @param SimpleXMLElement $xml Parsed status.xml
+     * @return array Status data
+     */
+    private function getStatusV4FromXml($xml)
+    {
+        $status = [
+            'firmware_version' => (string)$xml->fv,
+            'name' => trim((string)$xml->n),
+            'product_code' => (int)$xml->p,
+            'address_mode' => 0,
+            'controller_mode' => 0,
+            'num_ports' => (int)$xml->np,
+            'num_strings' => (int)$xml->ns,
+            'uptime' => '',
+            'time' => '',
+            'date' => '',
+            'temperature1' => 0,
+            'temperature2' => 0,
+            'temperature3' => 0,
+            'voltage1' => '',
+            'voltage2' => '',
+            'fan_speed' => 0,
+            'zcpp_frames' => 0,
+            'zcpp_sequence' => 0,
+            'pixels_bank0' => (int)$xml->k0,
+            'pixels_bank1' => (int)$xml->k1,
+            'pixels_bank2' => (int)($xml->k2 ?? 0),
+            'is_v4' => true,
+        ];
+
+        $status['model'] = $this->getModelName($status['product_code']);
+        $status['mode_name'] = 'Unknown';
+
+        $this->statusCache = $status;
+        $this->statusCacheTime = time();
+
+        return $status;
+    }
+
+    /**
+     * Format uptime seconds into human-readable string
+     *
+     * @param int $seconds Uptime in seconds
+     * @return string Formatted uptime
+     */
+    private function formatUptime($seconds)
+    {
+        if ($seconds <= 0) {
+            return '';
+        }
+
+        $days = floor($seconds / 86400);
+        $hours = floor(($seconds % 86400) / 3600);
+        $minutes = floor(($seconds % 3600) / 60);
+
+        $parts = [];
+        if ($days > 0) $parts[] = "{$days}d";
+        if ($hours > 0) $parts[] = "{$hours}h";
+        if ($minutes > 0 || empty($parts)) $parts[] = "{$minutes}m";
+
+        return implode(' ', $parts);
     }
 
     /**
@@ -296,11 +602,18 @@ class FalconController
     public function getModelName($productCode)
     {
         $models = [
+            // V2/V3 Controllers
             FALCON_F4V2_PRODUCT_CODE => 'F4V2',
             FALCON_F16V2_PRODUCT_CODE => 'F16V2',
             FALCON_F4V3_PRODUCT_CODE => 'F4V3',
             FALCON_F16V3_PRODUCT_CODE => 'F16V3',
             FALCON_F48_PRODUCT_CODE => 'F48',
+            // V4/V5 Controllers
+            FALCON_F16V4_PRODUCT_CODE => 'F16V4',
+            FALCON_F48V4_PRODUCT_CODE => 'F48V4',
+            FALCON_F16V5_PRODUCT_CODE => 'F16V5',
+            FALCON_F48V5_PRODUCT_CODE => 'F48V5',
+            FALCON_F32V5_PRODUCT_CODE => 'F32V5',
         ];
         return $models[$productCode] ?? "Unknown ($productCode)";
     }
@@ -309,17 +622,30 @@ class FalconController
      * Get mode name from mode code
      *
      * @param int $modeCode Mode code
+     * @param bool $isV4 Whether this is a V4/V5 controller
      * @return string Mode name
      */
-    public function getModeName($modeCode)
+    public function getModeName($modeCode, $isV4 = false)
     {
-        // Known controller modes from strings.xml cm attribute
-        $modes = [
-            FALCON_MODE_E131 => 'E1.31',
-            FALCON_MODE_ZCPP => 'ZCPP',
-            FALCON_MODE_DDP => 'DDP',
-            FALCON_MODE_ARTNET => 'ArtNet',
-        ];
+        if ($isV4) {
+            // V4/V5 operating modes from JSON API O field
+            $modes = [
+                FALCON_V4_MODE_E131_ARTNET => 'E1.31/ArtNet',
+                FALCON_V4_MODE_ZCPP => 'ZCPP',
+                FALCON_V4_MODE_DDP => 'DDP',
+                FALCON_V4_MODE_FPP_REMOTE => 'FPP Remote',
+                FALCON_V4_MODE_FPP_MASTER => 'FPP Master',
+                FALCON_V4_MODE_FPP_PLAYER => 'FPP Player',
+            ];
+        } else {
+            // V2/V3 controller modes from strings.xml cm attribute
+            $modes = [
+                FALCON_MODE_E131 => 'E1.31',
+                FALCON_MODE_ZCPP => 'ZCPP',
+                FALCON_MODE_DDP => 'DDP',
+                FALCON_MODE_ARTNET => 'ArtNet',
+            ];
+        }
 
         return $modes[$modeCode] ?? "Unknown ($modeCode)";
     }
@@ -423,10 +749,30 @@ class FalconController
 
     /**
      * Get string port configuration
+     * Auto-detects V4/V5 and uses appropriate API
      *
      * @return array|false String data or false on error
      */
     public function getStrings()
+    {
+        // Detect controller version if not already known
+        if ($this->isV4 === null) {
+            $this->isV4Controller();
+        }
+
+        if ($this->isV4) {
+            return $this->getStringsV4();
+        }
+
+        return $this->getStringsV2V3();
+    }
+
+    /**
+     * Get string port configuration for V2/V3 controllers
+     *
+     * @return array|false String data or false on error
+     */
+    private function getStringsV2V3()
     {
         $response = $this->httpGet('/strings.xml');
         if ($response === false) {
@@ -451,6 +797,69 @@ class FalconController
             'test_enabled' => (int)$xml['t'],
             'test_mode' => (int)$xml['tm'],
             'strings' => $this->parseStrings($xml),
+            'is_v4' => false,
+        ];
+    }
+
+    /**
+     * Get string port configuration for V4/V5 controllers using JSON API
+     *
+     * @return array|false String data or false on error
+     */
+    private function getStringsV4()
+    {
+        $spData = $this->queryV4Api('SP');
+        if ($spData === false) {
+            return false;
+        }
+
+        $strings = [];
+        if (isset($spData['A']) && is_array($spData['A'])) {
+            foreach ($spData['A'] as $port) {
+                $strings[] = [
+                    'description' => $port['nm'] ?? '',
+                    'port' => $port['p'] ?? 0,
+                    'universe' => $port['u'] ?? 0,
+                    'universe_start' => $port['sc'] ?? 0,
+                    'absolute_start' => $port['s'] ?? 0,
+                    'pixel_count' => $port['n'] ?? 0,
+                    'group_count' => $port['gp'] ?? 1,
+                    'protocol' => $port['l'] ?? 0,
+                    'direction' => $port['r'] ?? 0,
+                    'color_order' => $port['o'] ?? 0,
+                    'null_pixels' => $port['ns'] ?? 0,
+                    'zig_zag' => $port['z'] ?? 0,
+                    'brightness' => $port['b'] ?? 100,
+                    'brightness_limit' => $port['bl'] ?? 0,
+                    'gamma' => $port['g'] ?? 10,
+                    'smart_remote' => $port['v'] ?? 0,
+                    'smart_remote_id' => 0,
+                    'enabled' => 1,
+                    // V4-specific fields
+                    'current' => $port['a'] ?? 0,
+                    'fuse_status' => $port['f'] ?? 0,
+                ];
+            }
+        }
+
+        // Get status for additional info
+        $status = $this->getStatus();
+        $productCode = $status['product_code'] ?? 0;
+
+        return [
+            'controller_mode' => $status['controller_mode'] ?? 0,
+            'direction' => 0,
+            'product_code' => $productCode,
+            'count' => count($strings),
+            'mode' => 0,
+            'address_mode' => $status['address_mode'] ?? 0,
+            'pixels_bank0' => $status['pixels_bank0'] ?? 0,
+            'pixels_bank1' => $status['pixels_bank1'] ?? 0,
+            'pixels_bank2' => $status['pixels_bank2'] ?? 0,
+            'test_enabled' => 0, // V4 test status retrieved separately
+            'test_mode' => 0,
+            'strings' => $strings,
+            'is_v4' => true,
         ];
     }
 
@@ -601,12 +1010,34 @@ class FalconController
 
     /**
      * Enable test mode
+     * Auto-detects V4/V5 and uses appropriate API
      *
      * @param int $testMode Test mode (0-7: 0=RGBW, 1=Red Ramp, 2=Green Ramp, 3=Blue Ramp, 4=White Ramp, 5=Color Wash, 6=White, 7=Chase)
      * @param bool $allPorts Enable test on all ports (default true)
      * @return bool Success
      */
     public function enableTest($testMode = 5, $allPorts = true)
+    {
+        // Detect controller version if not already known
+        if ($this->isV4 === null) {
+            $this->isV4Controller();
+        }
+
+        if ($this->isV4) {
+            return $this->enableTestV4($testMode, $allPorts);
+        }
+
+        return $this->enableTestV2V3($testMode, $allPorts);
+    }
+
+    /**
+     * Enable test mode for V2/V3 controllers
+     *
+     * @param int $testMode Test mode pattern
+     * @param bool $allPorts Enable on all ports
+     * @return bool Success
+     */
+    private function enableTestV2V3($testMode, $allPorts)
     {
         $data = [
             't' => 1,        // Enable test
@@ -615,7 +1046,7 @@ class FalconController
 
         if ($allPorts) {
             // Get string configuration to find all ports
-            $strings = $this->getStrings();
+            $strings = $this->getStringsV2V3();
             if ($strings !== false && !empty($strings['strings'])) {
                 // Enable each string port (e{index}=1)
                 foreach ($strings['strings'] as $index => $string) {
@@ -638,11 +1069,100 @@ class FalconController
     }
 
     /**
+     * Enable test mode for V4/V5 controllers using JSON API
+     *
+     * API format discovered from test.html web interface:
+     * - P.E: "Y" to enable, "N" to disable
+     * - P.Y: Test mode type (1=RGBW, 2=Red, 3=Green, 4=Blue, 5=White, 6=Color Wash, etc.)
+     * - P.S: Speed (default 20)
+     * - P.C: Color value (packed RGBW or mode-specific)
+     * - P.D: Display flag ("Y")
+     * - P.A: Array of per-port settings with P (port), R (row), S (state)
+     *
+     * @param int $testMode Test mode pattern (1-7)
+     * @param bool $allPorts Enable on all ports
+     * @return bool Success
+     */
+    private function enableTestV4($testMode, $allPorts)
+    {
+        // Get number of ports from status
+        $status = $this->getStatus();
+        $numPorts = $status['num_ports'] ?? 32;
+
+        // Build per-port array - enable all ports by default
+        $portArray = [];
+        for ($i = 0; $i < $numPorts; $i++) {
+            $portArray[] = [
+                'P' => $i,  // Port number
+                'R' => 0,   // Row (for matrix displays)
+                'S' => 0,   // State (0 = enabled for test)
+            ];
+        }
+
+        // Map test mode to Y value
+        // V4/V5 test modes: 1=RGBW, 2=Red Ramp, 3=Green Ramp, 4=Blue Ramp, 5=White Ramp, 6=Color Wash, 7=Chase
+        $testModeY = max(1, min(7, $testMode));
+
+        // Build request parameters
+        $params = [
+            'E' => 'Y',           // Enable test mode
+            'Y' => $testModeY,    // Test mode type
+            'S' => 20,            // Speed
+            'C' => 1073741824,    // Color value (default from web UI)
+            'D' => 'Y',           // Display flag
+            'A' => $portArray,    // Per-port settings
+        ];
+
+        // Build the full API request
+        $request = [
+            'T' => 'S',           // Set operation
+            'M' => 'TS',          // Test Settings method
+            'B' => 0,             // Batch number
+            'E' => $numPorts,     // Expected count (number of ports)
+            'I' => 0,             // Index
+            'P' => $params,       // Parameters
+        ];
+
+        $response = $this->httpPostJson('/api', $request);
+        if ($response === false) {
+            return false;
+        }
+
+        // Check if request was complete (F=1 means final batch)
+        if (isset($response['F']) && $response['F'] !== 1) {
+            $this->lastError = "Test mode request incomplete - try again";
+            return false;
+        }
+
+        return true;
+    }
+
+    /**
      * Disable test mode
+     * Auto-detects V4/V5 and uses appropriate API
      *
      * @return bool Success
      */
     public function disableTest()
+    {
+        // Detect controller version if not already known
+        if ($this->isV4 === null) {
+            $this->isV4Controller();
+        }
+
+        if ($this->isV4) {
+            return $this->disableTestV4();
+        }
+
+        return $this->disableTestV2V3();
+    }
+
+    /**
+     * Disable test mode for V2/V3 controllers
+     *
+     * @return bool Success
+     */
+    private function disableTestV2V3()
     {
         $data = [
             't' => 0,        // Disable test
@@ -650,7 +1170,7 @@ class FalconController
         ];
 
         // Get string configuration to disable all ports
-        $strings = $this->getStrings();
+        $strings = $this->getStringsV2V3();
         if ($strings !== false && !empty($strings['strings'])) {
             foreach ($strings['strings'] as $index => $string) {
                 $data['e' . $index] = 0;
@@ -670,13 +1190,80 @@ class FalconController
     }
 
     /**
+     * Disable test mode for V4/V5 controllers
+     *
+     * Uses same API format as enable but with E: "N" to disable
+     *
+     * @return bool Success
+     */
+    private function disableTestV4()
+    {
+        // Get number of ports from status
+        $status = $this->getStatus();
+        $numPorts = $status['num_ports'] ?? 32;
+
+        // Build per-port array
+        $portArray = [];
+        for ($i = 0; $i < $numPorts; $i++) {
+            $portArray[] = [
+                'P' => $i,
+                'R' => 0,
+                'S' => 0,
+            ];
+        }
+
+        // Build request parameters - same as enable but E: "N"
+        $params = [
+            'E' => 'N',           // Disable test mode
+            'Y' => 1,             // Test mode type (doesn't matter when disabling)
+            'S' => 20,            // Speed
+            'C' => 0,             // Color value
+            'D' => 'Y',           // Display flag
+            'A' => $portArray,    // Per-port settings
+        ];
+
+        // Build the full API request
+        $request = [
+            'T' => 'S',           // Set operation
+            'M' => 'TS',          // Test Settings method
+            'B' => 0,             // Batch number
+            'E' => $numPorts,     // Expected count
+            'I' => 0,             // Index
+            'P' => $params,       // Parameters
+        ];
+
+        $response = $this->httpPostJson('/api', $request);
+        if ($response === false) {
+            return false;
+        }
+
+        // Check if request was complete (F=1 means final batch)
+        if (isset($response['F']) && $response['F'] !== 1) {
+            $this->lastError = "Test mode disable request incomplete - try again";
+            return false;
+        }
+
+        return true;
+    }
+
+    /**
      * Get test mode status
+     * Auto-detects V4/V5 and uses appropriate API
      *
      * @return array|false Test status or false on error
      */
     public function getTestStatus()
     {
-        $strings = $this->getStrings();
+        // Detect controller version if not already known
+        if ($this->isV4 === null) {
+            $this->isV4Controller();
+        }
+
+        if ($this->isV4) {
+            return $this->getTestStatusV4();
+        }
+
+        $strings = $this->getStringsV2V3();
         if ($strings === false) {
             return false;
         }
@@ -684,6 +1271,40 @@ class FalconController
         return [
             'enabled' => $strings['test_enabled'] === 1,
             'mode' => $strings['test_mode'],
+        ];
+    }
+
+    /**
+     * Get test mode status for V4/V5 controllers
+     *
+     * The TS field in the ST (status) query response indicates test mode:
+     * - TS: 0 = test mode disabled
+     * - TS: 1-7 = test mode enabled with that mode number
+     *
+     * @return array Test status
+     */
+    private function getTestStatusV4()
+    {
+        // Query status to get TS field
+        $v4Status = $this->queryV4Api('ST');
+
+        if ($v4Status === false) {
+            // Return unknown status if query fails
+            return [
+                'enabled' => false,
+                'mode' => 0,
+                'is_v4' => true,
+                'note' => 'Unable to query test status',
+            ];
+        }
+
+        // TS field: 0 = disabled, 1-7 = test mode number
+        $tsValue = $v4Status['TS'] ?? 0;
+
+        return [
+            'enabled' => $tsValue > 0,
+            'mode' => $tsValue,
+            'is_v4' => true,
         ];
     }
 
@@ -749,11 +1370,30 @@ class FalconController
 
     /**
      * Reboot the controller
-     * Uses config.htm "Save and Reboot" with current network settings
+     * Auto-detects V4/V5 and uses appropriate API
      *
      * @return bool Success
      */
     public function reboot()
+    {
+        // Detect controller version if not already known
+        if ($this->isV4 === null) {
+            $this->isV4Controller();
+        }
+
+        if ($this->isV4) {
+            return $this->rebootV4();
+        }
+
+        return $this->rebootV2V3();
+    }
+
+    /**
+     * Reboot V2/V3 controller using config.htm "Save and Reboot"
+     *
+     * @return bool Success
+     */
+    private function rebootV2V3()
     {
         // Get current network config from config.htm
         $configHtml = $this->httpGet('/config.htm');
@@ -818,6 +1458,26 @@ class FalconController
 
         // 200, 302 (redirect after save), or 303 are all success
         return ($httpCode >= 200 && $httpCode < 400);
+    }
+
+    /**
+     * Reboot V4/V5 controller using JSON API
+     *
+     * @return bool Success
+     */
+    private function rebootV4()
+    {
+        // V4/V5 controllers can be rebooted via the RB (Reboot) API command
+        // or by setting RW (Reboot When) flag in status
+        $result = $this->setV4Api('RB', ['R' => 1]);
+
+        if ($result !== false) {
+            return true;
+        }
+
+        // If RB doesn't work, try setting RW flag via NE (Network/Ethernet) API
+        $this->lastError = "V4/V5 reboot not fully implemented - use controller web UI";
+        return false;
     }
 
     /**
@@ -1123,11 +1783,18 @@ class FalconController
 
         $productCode = (int)$parsed->p;
         $models = [
+            // V2/V3 Controllers
             FALCON_F4V2_PRODUCT_CODE => 'F4V2',
             FALCON_F16V2_PRODUCT_CODE => 'F16V2',
             FALCON_F4V3_PRODUCT_CODE => 'F4V3',
             FALCON_F16V3_PRODUCT_CODE => 'F16V3',
             FALCON_F48_PRODUCT_CODE => 'F48',
+            // V4/V5 Controllers
+            FALCON_F16V4_PRODUCT_CODE => 'F16V4',
+            FALCON_F48V4_PRODUCT_CODE => 'F48V4',
+            FALCON_F16V5_PRODUCT_CODE => 'F16V5',
+            FALCON_F48V5_PRODUCT_CODE => 'F48V5',
+            FALCON_F32V5_PRODUCT_CODE => 'F32V5',
         ];
 
         return [
