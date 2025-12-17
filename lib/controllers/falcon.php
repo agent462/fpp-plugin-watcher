@@ -599,7 +599,7 @@ class FalconController
      * @param int $productCode Product code
      * @return string Model name
      */
-    public function getModelName($productCode)
+    public static function getModelName($productCode)
     {
         $models = [
             // V2/V3 Controllers
@@ -1069,27 +1069,13 @@ class FalconController
     }
 
     /**
-     * Enable test mode for V4/V5 controllers using JSON API
+     * Build port array for V4/V5 test mode API
      *
-     * API format discovered from test.html web interface:
-     * - P.E: "Y" to enable, "N" to disable
-     * - P.Y: Test mode type (1=RGBW, 2=Red, 3=Green, 4=Blue, 5=White, 6=Color Wash, etc.)
-     * - P.S: Speed (default 20)
-     * - P.C: Color value (packed RGBW or mode-specific)
-     * - P.D: Display flag ("Y")
-     * - P.A: Array of per-port settings with P (port), R (row), S (state)
-     *
-     * @param int $testMode Test mode pattern (1-7)
-     * @param bool $allPorts Enable on all ports
-     * @return bool Success
+     * @param int $numPorts Number of ports
+     * @return array Port array for API request
      */
-    private function enableTestV4($testMode, $allPorts)
+    private function buildV4PortArray($numPorts)
     {
-        // Get number of ports from status
-        $status = $this->getStatus();
-        $numPorts = $status['num_ports'] ?? 32;
-
-        // Build per-port array - enable all ports by default
         $portArray = [];
         for ($i = 0; $i < $numPorts; $i++) {
             $portArray[] = [
@@ -1098,22 +1084,18 @@ class FalconController
                 'S' => 0,   // State (0 = enabled for test)
             ];
         }
+        return $portArray;
+    }
 
-        // Map test mode to Y value
-        // V4/V5 test modes: 1=RGBW, 2=Red Ramp, 3=Green Ramp, 4=Blue Ramp, 5=White Ramp, 6=Color Wash, 7=Chase
-        $testModeY = max(1, min(7, $testMode));
-
-        // Build request parameters
-        $params = [
-            'E' => 'Y',           // Enable test mode
-            'Y' => $testModeY,    // Test mode type
-            'S' => 20,            // Speed
-            'C' => 1073741824,    // Color value (default from web UI)
-            'D' => 'Y',           // Display flag
-            'A' => $portArray,    // Per-port settings
-        ];
-
-        // Build the full API request
+    /**
+     * Build and send V4/V5 test mode API request
+     *
+     * @param array $params Test parameters
+     * @param int $numPorts Number of ports
+     * @return bool Success
+     */
+    private function sendV4TestRequest($params, $numPorts)
+    {
         $request = [
             'T' => 'S',           // Set operation
             'M' => 'TS',          // Test Settings method
@@ -1135,6 +1117,41 @@ class FalconController
         }
 
         return true;
+    }
+
+    /**
+     * Enable test mode for V4/V5 controllers using JSON API
+     *
+     * API format discovered from test.html web interface:
+     * - P.E: "Y" to enable, "N" to disable
+     * - P.Y: Test mode type (1=RGBW, 2=Red, 3=Green, 4=Blue, 5=White, 6=Color Wash, etc.)
+     * - P.S: Speed (default 20)
+     * - P.C: Color value (packed RGBW or mode-specific)
+     * - P.D: Display flag ("Y")
+     * - P.A: Array of per-port settings with P (port), R (row), S (state)
+     *
+     * @param int $testMode Test mode pattern (1-7)
+     * @param bool $allPorts Enable on all ports
+     * @return bool Success
+     */
+    private function enableTestV4($testMode, $allPorts)
+    {
+        $status = $this->getStatus();
+        $numPorts = $status['num_ports'] ?? 32;
+
+        // V4/V5 test modes: 1=RGBW, 2=Red Ramp, 3=Green Ramp, 4=Blue Ramp, 5=White Ramp, 6=Color Wash, 7=Chase
+        $testModeY = max(1, min(7, $testMode));
+
+        $params = [
+            'E' => 'Y',                                // Enable test mode
+            'Y' => $testModeY,                         // Test mode type
+            'S' => 20,                                 // Speed
+            'C' => 1073741824,                         // Color value (default from web UI)
+            'D' => 'Y',                                // Display flag
+            'A' => $this->buildV4PortArray($numPorts), // Per-port settings
+        ];
+
+        return $this->sendV4TestRequest($params, $numPorts);
     }
 
     /**
@@ -1198,52 +1215,19 @@ class FalconController
      */
     private function disableTestV4()
     {
-        // Get number of ports from status
         $status = $this->getStatus();
         $numPorts = $status['num_ports'] ?? 32;
 
-        // Build per-port array
-        $portArray = [];
-        for ($i = 0; $i < $numPorts; $i++) {
-            $portArray[] = [
-                'P' => $i,
-                'R' => 0,
-                'S' => 0,
-            ];
-        }
-
-        // Build request parameters - same as enable but E: "N"
         $params = [
-            'E' => 'N',           // Disable test mode
-            'Y' => 1,             // Test mode type (doesn't matter when disabling)
-            'S' => 20,            // Speed
-            'C' => 0,             // Color value
-            'D' => 'Y',           // Display flag
-            'A' => $portArray,    // Per-port settings
+            'E' => 'N',                                // Disable test mode
+            'Y' => 1,                                  // Test mode type (doesn't matter when disabling)
+            'S' => 20,                                 // Speed
+            'C' => 0,                                  // Color value
+            'D' => 'Y',                                // Display flag
+            'A' => $this->buildV4PortArray($numPorts), // Per-port settings
         ];
 
-        // Build the full API request
-        $request = [
-            'T' => 'S',           // Set operation
-            'M' => 'TS',          // Test Settings method
-            'B' => 0,             // Batch number
-            'E' => $numPorts,     // Expected count
-            'I' => 0,             // Index
-            'P' => $params,       // Parameters
-        ];
-
-        $response = $this->httpPostJson('/api', $request);
-        if ($response === false) {
-            return false;
-        }
-
-        // Check if request was complete (F=1 means final batch)
-        if (isset($response['F']) && $response['F'] !== 1) {
-            $this->lastError = "Test mode disable request incomplete - try again";
-            return false;
-        }
-
-        return true;
+        return $this->sendV4TestRequest($params, $numPorts);
     }
 
     /**
@@ -1782,26 +1766,12 @@ class FalconController
         }
 
         $productCode = (int)$parsed->p;
-        $models = [
-            // V2/V3 Controllers
-            FALCON_F4V2_PRODUCT_CODE => 'F4V2',
-            FALCON_F16V2_PRODUCT_CODE => 'F16V2',
-            FALCON_F4V3_PRODUCT_CODE => 'F4V3',
-            FALCON_F16V3_PRODUCT_CODE => 'F16V3',
-            FALCON_F48_PRODUCT_CODE => 'F48',
-            // V4/V5 Controllers
-            FALCON_F16V4_PRODUCT_CODE => 'F16V4',
-            FALCON_F48V4_PRODUCT_CODE => 'F48V4',
-            FALCON_F16V5_PRODUCT_CODE => 'F16V5',
-            FALCON_F48V5_PRODUCT_CODE => 'F48V5',
-            FALCON_F32V5_PRODUCT_CODE => 'F32V5',
-        ];
 
         return [
             'firmware_version' => (string)$parsed->fv,
             'name' => trim((string)$parsed->n),
             'product_code' => $productCode,
-            'model' => $models[$productCode] ?? "Unknown ($productCode)",
+            'model' => self::getModelName($productCode),
         ];
     }
 }

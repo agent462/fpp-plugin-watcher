@@ -512,13 +512,17 @@ async function refreshController(index) {
 
         if (data.success && data.controllers?.length > 0) {
             controllers[index] = data.controllers[0];
-            card.replaceWith(createControllerCard(controllers[index], index, false));
+            const newCard = createControllerCard(controllers[index], index, false);
+            card.replaceWith(newCard);
+            return; // Card replaced, no need to reset opacity
         }
     } catch (error) {
         console.error('Error refreshing controller:', error);
     }
 
-    if (card) card.style.opacity = '1';
+    // Only reset opacity if card wasn't replaced
+    const currentCard = document.getElementById('controller-' + index);
+    if (currentCard) currentCard.style.opacity = '1';
 }
 
 // =============================================================================
@@ -612,7 +616,7 @@ async function discoverControllers() {
                                     ${c.model ? `<span style="color:#6c757d;font-size:0.875rem;">(${escapeHtml(c.model)})</span>` : ''}
                                     <br><small style="color:#6c757d;">${escapeHtml(c.ip)}${c.firmware ? ` - FW: ${escapeHtml(c.firmware)}` : ''}</small>
                                 </div>
-                                <button class="btn btn-sm btn-outline-primary" onclick="addDiscoveredController('${escapeHtml(c.ip)}')">
+                                <button class="btn btn-sm btn-outline-primary watcher-add-controller-btn" data-ip="${escapeHtml(c.ip)}">
                                     <i class="fas fa-plus"></i> Add
                                 </button>
                             </div>
@@ -624,6 +628,10 @@ async function discoverControllers() {
                         </button>
                     </div>
                 `;
+                // Attach click handlers using data attributes
+                listDiv.querySelectorAll('.watcher-add-controller-btn').forEach(btn => {
+                    btn.addEventListener('click', () => addDiscoveredController(btn.dataset.ip));
+                });
             } else if (data.success) {
                 listDiv.innerHTML = `<div style="text-align:center;padding:1rem;color:#6c757d;"><i class="fas fa-info-circle"></i> No Falcon controllers found on subnet ${escapeHtml(data.subnet)}</div>`;
             } else {
@@ -646,9 +654,8 @@ function addDiscoveredController(ip) {
 }
 
 function addAllDiscoveredControllers() {
-    document.querySelectorAll('#discoveryList button[onclick^="addDiscoveredController"]').forEach(btn => {
-        const match = btn.getAttribute('onclick').match(/addDiscoveredController\('([^']+)'\)/);
-        if (match) addDiscoveredController(match[1]);
+    document.querySelectorAll('#discoveryList .watcher-add-controller-btn').forEach(btn => {
+        if (btn.dataset.ip) addDiscoveredController(btn.dataset.ip);
     });
 }
 
@@ -671,5 +678,13 @@ document.addEventListener('DOMContentLoaded', async function() {
 
     loadAllControllers();
     autoRefreshInterval = setInterval(() => loadAllControllers(false), 30000);
+
+    // Cleanup auto-refresh on page unload to prevent memory leaks
+    window.addEventListener('beforeunload', () => {
+        if (autoRefreshInterval) {
+            clearInterval(autoRefreshInterval);
+            autoRefreshInterval = null;
+        }
+    });
 });
 </script>
