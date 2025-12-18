@@ -473,7 +473,7 @@ class EfuseCollector
             }
         }
 
-        $portConfig = getPortOutputConfig($portName);
+        $portConfig = \Watcher\Controllers\EfuseOutputConfig::getInstance()->getPortOutputConfig($portName);
 
         return [
             'success' => true,
@@ -505,7 +505,7 @@ class EfuseCollector
         $rollupData = $result['data'] ?? [];
         $tierInfo = $result['tier_info'] ?? null;
 
-        $outputConfig = getEfuseOutputConfig();
+        $outputConfig = \Watcher\Controllers\EfuseOutputConfig::getInstance()->getOutputConfig();
         $portNames = array_keys($outputConfig['ports']);
 
         // Build indexed lookup
@@ -579,7 +579,7 @@ class EfuseCollector
         return [
             'success' => true,
             'hours' => $hoursBack,
-            'hardware' => getEfuseHardwareSummary(),
+            'hardware' => \Watcher\Controllers\EfuseHardware::getInstance()->getHardwareSummary(),
             'portCount' => count($portNames),
             'ports' => $portNames,
             'outputConfig' => $outputConfig['ports'],

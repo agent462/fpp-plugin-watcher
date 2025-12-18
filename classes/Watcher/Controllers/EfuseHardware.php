@@ -954,4 +954,74 @@ class EfuseHardware
         $message = sprintf("CONTROL: %s on %s - %s", strtoupper($action), $target, $result);
         $this->logger->info($message);
     }
+
+    /**
+     * Get port current summary with labels and status
+     * Returns ALL configured ports, with current readings merged in
+     *
+     * @param array $currentReadings Port data [portName => mA value] (only non-zero values)
+     * @return array Port summary with labels, current, and status for ALL ports
+     */
+    public function getPortCurrentSummary(array $currentReadings): array
+    {
+        $outputConfig = \Watcher\Controllers\EfuseOutputConfig::getInstance()->getOutputConfig();
+        $summary = [];
+
+        // Iterate over all configured ports, not just ones with current readings
+        foreach ($outputConfig['ports'] as $portName => $portConfig) {
+            $mA = $currentReadings[$portName] ?? 0;
+            $label = $portConfig['label'] ?? $portConfig['description'] ?? $portName;
+
+            $summary[$portName] = [
+                'name' => $portName,
+                'label' => $label,
+                'currentMa' => $mA,
+                'currentA' => round($mA / 1000, 2),
+                'status' => $this->getPortStatus($portName),
+                'enabled' => $portConfig['enabled'] ?? false,
+                'pixelCount' => $portConfig['pixelCount'] ?? 0
+            ];
+        }
+
+        return $summary;
+    }
+
+    /**
+     * Calculate total current from all ports
+     *
+     * @param array $currentReadings Port data [portName => mA value] (only non-zero values)
+     * @return array Total current values
+     */
+    public function calculateTotalCurrent(array $currentReadings): array
+    {
+        $outputConfig = \Watcher\Controllers\EfuseOutputConfig::getInstance()->getOutputConfig();
+        $totalMa = 0;
+        $activePorts = 0;
+
+        // Sum current from readings
+        foreach ($currentReadings as $portName => $mA) {
+            if ($portName === '_total') {
+                continue;
+            }
+            $totalMa += $mA;
+            if ($mA > 0) {
+                $activePorts++;
+            }
+        }
+
+        return [
+            'totalMa' => $totalMa,
+            'totalA' => round($totalMa / 1000, 2),
+            'portCount' => count($outputConfig['ports']),
+            'activePorts' => $activePorts
+        ];
+    }
+
+    /**
+     * Alias for getHardwareSummary for backward compatibility
+     */
+    public function getSummary(): array
+    {
+        return $this->getHardwareSummary();
+    }
 }
