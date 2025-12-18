@@ -44,6 +44,14 @@ class Comparator
     }
 
     /**
+     * Reset singleton instance (useful for testing)
+     */
+    public static function resetInstance(): void
+    {
+        self::$instance = null;
+    }
+
+    /**
      * Fetch sync metrics from a remote host's watcher plugin
      */
     public function fetchRemoteSyncMetrics(string $address, int $timeout = self::TIMEOUT_STANDARD): ?array
@@ -90,7 +98,7 @@ class Comparator
             $combinedResults[$address] = [
                 'httpCode' => $result['http_code'],
                 'response' => $result['data'] ? json_encode($result['data']) : null,
-                'responseTime' => 0, // Not tracked in CurlMultiHandler
+                'responseTime' => $result['response_time'] ?? 0,
                 'hostname' => $hostnames[$address]
             ];
 

@@ -117,23 +117,23 @@ class SyncStatus
     }
 
     /**
-     * Format seconds since last seen into human-readable string
+     * Format seconds since last seen into human-readable string (short format)
      */
     public static function formatTimeSince(int $seconds): string
     {
         if ($seconds < 0) {
             return 'never';
         } elseif ($seconds < 60) {
-            return $seconds . ' sec ago';
+            return $seconds . 's';
         } elseif ($seconds < 3600) {
             $min = floor($seconds / 60);
-            return $min . ' min ago';
+            return $min . 'm';
         } elseif ($seconds < 86400) {
             $hr = floor($seconds / 3600);
-            return $hr . ' hr ago';
+            return $hr . 'h';
         } else {
             $days = floor($seconds / 86400);
-            return $days . ' day(s) ago';
+            return $days . 'd';
         }
     }
 
