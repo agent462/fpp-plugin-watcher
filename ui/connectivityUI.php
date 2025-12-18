@@ -1,5 +1,7 @@
 <?php
-include_once __DIR__ . '/../lib/ui/common.php';
+require_once __DIR__ . '/../classes/autoload.php';
+require_once __DIR__ . '/../classes/Watcher/UI/ViewHelpers.php';
+
 renderCSSIncludes(true);
 renderCommonJS();
 ?>

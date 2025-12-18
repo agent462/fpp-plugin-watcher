@@ -7,12 +7,15 @@
  * - Player vs remote comparison
  * - Real-time sync status and issues
  */
+require_once __DIR__ . '/../classes/autoload.php';
+require_once __DIR__ . '/../classes/Watcher/UI/ViewHelpers.php';
 include_once __DIR__ . '/../lib/core/config.php';
 include_once __DIR__ . '/../lib/core/watcherCommon.php';
-include_once __DIR__ . '/../lib/ui/common.php';
+
+use Watcher\Http\ApiClient;
 
 $config = readPluginConfig();
-$localSystem = apiCall('GET', 'http://127.0.0.1/api/fppd/status', [], true, 5) ?: [];
+$localSystem = ApiClient::getInstance()->get('http://127.0.0.1/api/fppd/status', 5) ?: [];
 
 // Get filtered remote systems (single source of truth for comparison)
 $remoteSystems = getMultiSyncRemoteSystems();

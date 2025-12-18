@@ -1,16 +1,17 @@
 #!/usr/bin/php
 <?php
+// Load class autoloader
+require_once __DIR__ . '/classes/autoload.php';
+
 // Core (watcherCommon.php loads fppSettings.php for $settings and WriteSettingToFile)
 include_once __DIR__ ."/lib/core/watcherCommon.php";
 include_once __DIR__ ."/lib/core/config.php";
 
-// Metrics
-include_once __DIR__ ."/lib/metrics/pingMetrics.php";
-include_once __DIR__ ."/lib/metrics/multiSyncPingMetrics.php";
-include_once __DIR__ ."/lib/metrics/networkQualityMetrics.php";
-
-// Controllers
-include_once __DIR__ ."/lib/controllers/networkAdapter.php";
+use Watcher\Metrics\MetricsStorage;
+use Watcher\Controllers\NetworkAdapter;
+use Watcher\Metrics\PingCollector;
+use Watcher\Metrics\MultiSyncPingCollector;
+use Watcher\Metrics\NetworkQualityCollector;
 
 $config = readPluginConfig(); // Load and prepare configuration
 
@@ -102,20 +103,23 @@ if ($config['networkAdapter'] === 'default') {
 // Keeps 24 hours of data for graphing plus 1 hour buffer
 define("WATCHERMETRICSRETENTIONSECONDS", 25 * 60 * 60);
 
+// Shared MetricsStorage instance for ping metrics
+$_connectivityMetricsStorage = new MetricsStorage();
+
 /**
  * Purge metrics log entries older than retention period
- * Delegates to shared function in rollupBase.php
  */
 function rotateMetricsFile() {
-    rotateRawMetricsFileGeneric(WATCHERPINGMETRICSFILE, WATCHERMETRICSRETENTIONSECONDS);
+    global $_connectivityMetricsStorage;
+    $_connectivityMetricsStorage->rotate(WATCHERPINGMETRICSFILE, WATCHERMETRICSRETENTIONSECONDS);
 }
 
 /**
  * Write multiple metrics entries in a single file operation
- * Delegates to shared function in rollupBase.php
  */
 function writeMetricsBatch($entries) {
-    return writeMetricsBatchGeneric(WATCHERPINGMETRICSFILE, $entries);
+    global $_connectivityMetricsStorage;
+    return $_connectivityMetricsStorage->writeBatch(WATCHERPINGMETRICSFILE, $entries);
 }
 
 // Function to check internet connectivity and capture ping statistics
@@ -228,7 +232,7 @@ while (true) {
         // Process rollups every 60 seconds (will handle all tiers internally)
         $rollupInterval = 60;
         if (($currentTime - $lastRollupCheck) >= $rollupInterval) {
-            processAllRollups();
+            PingCollector::getInstance()->processAllRollups();
             $lastRollupCheck = $currentTime;
         }
 
@@ -245,7 +249,7 @@ while (true) {
 
             // Ping multi-sync hosts at the configured interval
             if (!empty($cachedRemoteSystems) && ($currentTime - $lastMultiSyncCheck) >= $multiSyncCheckInterval) {
-                $pingResults = pingMultiSyncSystems($cachedRemoteSystems, $actualNetworkAdapter);
+                $pingResults = MultiSyncPingCollector::getInstance()->pingMultiSyncSystems($cachedRemoteSystems, $actualNetworkAdapter);
                 $successCount = count(array_filter($pingResults, fn($r) => $r['success']));
                 $lastMultiSyncCheck = $currentTime;
             }
@@ -253,32 +257,32 @@ while (true) {
             // Rotate multi-sync metrics file periodically
             $multiSyncRotationInterval = $config['metricsRotationInterval'] ?? 1800;
             if (($currentTime - $lastMultiSyncRotationCheck) >= $multiSyncRotationInterval) {
-                rotateMultiSyncMetricsFile();
+                MultiSyncPingCollector::getInstance()->rotateMetricsFile();
                 $lastMultiSyncRotationCheck = $currentTime;
             }
 
             // Process multi-sync rollups every 60 seconds
             if (($currentTime - $lastMultiSyncRollupCheck) >= $rollupInterval) {
-                processAllMultiSyncRollups();
+                MultiSyncPingCollector::getInstance()->processAllRollups();
                 $lastMultiSyncRollupCheck = $currentTime;
             }
 
             // Collect network quality metrics (latency, jitter, packet loss from comparison API)
             if (($currentTime - $lastNetworkQualityCheck) >= $networkQualityCheckInterval) {
-                collectNetworkQualityMetrics();
+                NetworkQualityCollector::getInstance()->collectMetrics();
                 $lastNetworkQualityCheck = $currentTime;
             }
 
             // Rotate network quality metrics file periodically
             $networkQualityRotationInterval = $config['metricsRotationInterval'] ?? 1800;
             if (($currentTime - $lastNetworkQualityRotationCheck) >= $networkQualityRotationInterval) {
-                rotateNetworkQualityMetricsFile();
+                NetworkQualityCollector::getInstance()->rotateMetricsFile();
                 $lastNetworkQualityRotationCheck = $currentTime;
             }
 
             // Process network quality rollups every 60 seconds
             if (($currentTime - $lastNetworkQualityRollupCheck) >= $rollupInterval) {
-                processAllNetworkQualityRollups();
+                NetworkQualityCollector::getInstance()->processAllRollups();
                 $lastNetworkQualityRollupCheck = $currentTime;
             }
         }
@@ -288,7 +292,7 @@ while (true) {
 
         if ($failureCount >= $config['maxFailures'] && !$hasResetAdapter) {
             logMessage("Maximum failures reached. Resetting network adapter...");
-            resetNetworkAdapter($actualNetworkAdapter);
+            NetworkAdapter::getInstance()->resetAdapter($actualNetworkAdapter);
             $hasResetAdapter = true;
             writeResetState($actualNetworkAdapter, 'Max failures reached');
             $failureCount = 0;

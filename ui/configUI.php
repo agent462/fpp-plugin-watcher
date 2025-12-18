@@ -7,7 +7,12 @@
 <?php
 include_once __DIR__ . "/../lib/core/watcherCommon.php";
 include_once __DIR__ . "/../lib/core/config.php";
-include_once __DIR__ . "/../lib/controllers/efuseHardware.php";
+
+// Load class autoloader
+require_once __DIR__ . '/../classes/autoload.php';
+
+use Watcher\Http\ApiClient;
+use Watcher\Controllers\EfuseHardware;
 
 $statusMessage = '';
 $statusType = '';
@@ -158,7 +163,7 @@ $gatewayInputValue = ($gatewaySuggestion && !$gatewayAlreadyConfigured) ? $gatew
 $isPlayerMode = isPlayerMode();
 
 // Detect eFuse hardware
-$efuseHardware = detectEfuseHardware();
+$efuseHardware = EfuseHardware::getInstance()->detectHardware();
 
 // Check for connectivity reset state
 $resetState = readResetState();
@@ -174,8 +179,7 @@ if (file_exists($pluginInfoPath)) {
 // Count remote systems for display
 $remoteSystemCount = 0;
 if ($isPlayerMode) {
-    include_once __DIR__ . '/../lib/core/apiCall.php';
-    $multiSyncData = apiCall('GET', 'http://127.0.0.1/api/fppd/multiSyncSystems', [], true, 5);
+    $multiSyncData = ApiClient::getInstance()->get('http://127.0.0.1/api/fppd/multiSyncSystems', 5);
     if ($multiSyncData && isset($multiSyncData['systems']) && is_array($multiSyncData['systems'])) {
         foreach ($multiSyncData['systems'] as $system) {
             if (empty($system['local']) && isset($system['fppModeString']) && $system['fppModeString'] === 'remote') {
@@ -479,7 +483,7 @@ if ($isPlayerMode) {
                 </div>
                 <div class="panelBody">
                     <div class="panelDesc" style="margin-bottom: 1rem;">
-                        Track per-port current draw with heatmap visualization. Detected hardware: <?php echo htmlspecialchars(getEfuseHardwareSummary()['typeLabel'] ?? 'Unknown'); ?>
+                        Track per-port current draw with heatmap visualization. Detected hardware: <?php echo htmlspecialchars(EfuseHardware::getInstance()->getSummary()['typeLabel'] ?? 'Unknown'); ?>
                         (<?php echo $efuseHardware['ports']; ?> ports). View trends in the eFuse Monitor dashboard.
                     </div>
                     <div id="efuseOptionsContainer" style="<?php echo empty($config['efuseMonitorEnabled']) ? 'display:none;' : ''; ?>">

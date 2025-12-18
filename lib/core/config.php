@@ -1,6 +1,8 @@
 <?php
 include_once __DIR__ . '/watcherCommon.php';
 
+use Watcher\Http\ApiClient;
+
 /**
  * Bootstrap default settings
  */
@@ -118,8 +120,6 @@ function prepareConfig($config) {
  * @return array - result with 'success' and 'messages' keys
  */
 function configureFppMqttSettings($enable) {
-    include_once __DIR__ . '/apiCall.php';
-
     $result = ['success' => true, 'messages' => []];
 
     if ($enable) {
@@ -141,11 +141,9 @@ function configureFppMqttSettings($enable) {
     }
 
     foreach ($mqttSettings as $settingName => $settingValue) {
-        $response = apiCall(
-            'PUT',
+        $response = ApiClient::getInstance()->put(
             "http://127.0.0.1/api/settings/{$settingName}",
             $settingValue,
-            true,
             5,
             ['Content-Type: text/plain']
         );

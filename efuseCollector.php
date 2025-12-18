@@ -11,10 +11,15 @@
  * @package fpp-plugin-watcher
  */
 
+// Load class autoloader
+require_once __DIR__ . '/classes/autoload.php';
+
 // Include required files (watcherCommon.php loads fppSettings.php for $settings)
 require_once __DIR__ . '/lib/core/watcherCommon.php';
 require_once __DIR__ . '/lib/core/config.php';
-require_once __DIR__ . '/lib/metrics/efuseMetrics.php';
+
+use Watcher\Metrics\EfuseCollector;
+use Watcher\Controllers\EfuseHardware;
 
 // Collection configuration (fixed values)
 define('EFUSE_ROLLUP_INTERVAL', 60);        // Process rollups every 60 seconds
@@ -53,7 +58,7 @@ function isEfuseEnabled() {
  * Check if compatible hardware is present
  */
 function hasEfuseHardware() {
-    $hardware = detectEfuseHardware();
+    $hardware = EfuseHardware::getInstance()->detectHardware();
     return $hardware['supported'];
 }
 
@@ -112,7 +117,7 @@ function runCollector() {
     efuseLog("eFuse Collector starting...");
 
     // Verify hardware on startup
-    $hardware = detectEfuseHardware();
+    $hardware = EfuseHardware::getInstance()->detectHardware();
     if (!$hardware['supported']) {
         efuseLog("ERROR: No compatible eFuse hardware detected. Exiting.");
         exit(1);
@@ -151,7 +156,7 @@ function runCollector() {
 
         // Collect eFuse data with error resilience
         try {
-            $reading = readEfuseData();
+            $reading = EfuseHardware::getInstance()->readEfuseData();
 
             if ($reading['success']) {
                 // Success - reset error state
@@ -174,7 +179,7 @@ function runCollector() {
                         }
                     }
 
-                    if (writeEfuseRawMetric($ports)) {
+                    if (EfuseCollector::getInstance()->writeRawMetric($ports)) {
                         $nonZeroSamples++;
                     }
                 }
@@ -206,7 +211,7 @@ function runCollector() {
             $lastRollupTime = $now;
 
             try {
-                processEfuseRollup();
+                EfuseCollector::getInstance()->processRollup();
             } catch (Exception $e) {
                 efuseLog("ERROR: Rollup processing failed: " . $e->getMessage());
             }

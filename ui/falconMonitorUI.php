@@ -2,8 +2,9 @@
 /**
  * Falcon Controller Monitor UI - Dashboard for Falcon pixel controllers
  */
+require_once __DIR__ . '/../classes/autoload.php';
+require_once __DIR__ . '/../classes/Watcher/UI/ViewHelpers.php';
 include_once __DIR__ . '/../lib/core/config.php';
-include_once __DIR__ . '/../lib/ui/common.php';
 
 $watcherConfig = readPluginConfig();
 $falconHosts = !empty($watcherConfig['falconControllers']) ? $watcherConfig['falconControllers'] : '';

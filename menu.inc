@@ -13,7 +13,11 @@
 
 # Check config for conditional menu entries
 include_once __DIR__ . '/lib/core/config.php';
-include_once __DIR__ . '/lib/controllers/efuseHardware.php';
+
+// Load class autoloader
+require_once __DIR__ . '/classes/autoload.php';
+use Watcher\Controllers\EfuseHardware;
+
 $watcherConfig = readPluginConfig();
 $showLocalMetricsMenu = !empty($watcherConfig['collectdEnabled']);
 $showConnectivityMenu = !empty($watcherConfig['connectivityCheckEnabled']);
@@ -22,7 +26,7 @@ $showMultiSyncPingMenu = !empty($watcherConfig['multiSyncPingEnabled']);
 $showFalconMonitorMenu = !empty($watcherConfig['falconMonitorEnabled']);
 $showControlUIMenu = !empty($watcherConfig['controlUIEnabled']);
 $showEventsMenu = !empty($watcherConfig['mqttMonitorEnabled']);
-$efuseHardware = detectEfuseHardware();
+$efuseHardware = EfuseHardware::getInstance()->detectHardware();
 $showEfuseMenu = !empty($watcherConfig['efuseMonitorEnabled']) && $efuseHardware['supported'];
 
 $menuEntries = Array(

@@ -7,9 +7,23 @@
  * Runs as a background process, started by postStart.sh when enabled.
  */
 
+// Load class autoloader
+require_once __DIR__ . '/classes/autoload.php';
+
+use Watcher\Utils\MqttEventLogger;
+
 include_once __DIR__ . "/lib/core/watcherCommon.php";
 include_once __DIR__ . "/lib/core/config.php";
-include_once __DIR__ . "/lib/utils/mqttEvents.php";
+
+// Event type constants (aliases for class constants)
+define('MQTT_EVENT_SEQ_START', MqttEventLogger::EVENT_SEQ_START);
+define('MQTT_EVENT_SEQ_STOP', MqttEventLogger::EVENT_SEQ_STOP);
+define('MQTT_EVENT_PL_START', MqttEventLogger::EVENT_PL_START);
+define('MQTT_EVENT_PL_STOP', MqttEventLogger::EVENT_PL_STOP);
+define('MQTT_EVENT_STATUS', MqttEventLogger::EVENT_STATUS);
+define('MQTT_EVENT_MEDIA_START', MqttEventLogger::EVENT_MEDIA_START);
+define('MQTT_EVENT_MEDIA_STOP', MqttEventLogger::EVENT_MEDIA_STOP);
+define('MQTT_EVENT_WARNING', MqttEventLogger::EVENT_WARNING);
 
 $config = readPluginConfig();
 
@@ -260,14 +274,14 @@ function processMqttMessage($topic, $payload) {
             // Log each warning as separate event
             foreach ($warnings as $warning) {
                 if (is_string($warning) && !empty($warning)) {
-                    writeMqttEvent($hostname, $eventType, $warning, null);
+                    MqttEventLogger::getInstance()->writeEvent($hostname, $eventType, $warning, null);
                 }
             }
         }
         return;
     }
 
-    writeMqttEvent($hostname, $eventType, $data, $duration);
+    MqttEventLogger::getInstance()->writeEvent($hostname, $eventType, $data, $duration);
 }
 
 /**
@@ -346,7 +360,7 @@ function runMqttSubscriber($host, $port, $user, $pass, $topics) {
         // Periodic rotation check
         $now = time();
         if (($now - $lastRotationCheck) >= $rotationInterval) {
-            rotateMqttEventsFile($config['mqttRetentionDays']);
+            MqttEventLogger::getInstance()->rotateEventsFile($config['mqttRetentionDays']);
             $lastRotationCheck = $now;
         }
 

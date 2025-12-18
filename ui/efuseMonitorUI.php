@@ -1,11 +1,13 @@
 <?php
+require_once __DIR__ . '/../classes/autoload.php';
+require_once __DIR__ . '/../classes/Watcher/UI/ViewHelpers.php';
 include_once __DIR__ . '/../lib/core/config.php';
 include_once __DIR__ . '/../lib/core/watcherCommon.php';
-include_once __DIR__ . '/../lib/ui/common.php';
-include_once __DIR__ . '/../lib/controllers/efuseHardware.php';
+
+use Watcher\Controllers\EfuseHardware;
 
 $config = readPluginConfig();
-$hardware = detectEfuseHardware();
+$hardware = EfuseHardware::getInstance()->detectHardware();
 $retentionDays = $config['efuseRetentionDays'] ?? 7;
 $collectionInterval = $config['efuseCollectionInterval'] ?? 5;
 

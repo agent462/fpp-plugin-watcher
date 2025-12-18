@@ -1,12 +1,15 @@
 <?php
 include_once __DIR__ . "/fppSettings.php";
 
-// API timeout constants (in seconds) - defined before apiCall.php include
+// Load class autoloader for Watcher classes
+require_once __DIR__ . '/../../classes/autoload.php';
+
+// API timeout constants (in seconds)
 define("WATCHER_TIMEOUT_STATUS", 2);    // Quick status checks (fppd/status, playback sync)
 define("WATCHER_TIMEOUT_STANDARD", 5);  // Standard API requests (info, version, plugins)
 define("WATCHER_TIMEOUT_LONG", 10);     // Longer operations (metrics/all, state changes)
 
-include_once __DIR__ . "/apiCall.php";
+use Watcher\Http\ApiClient;
 
 global $settings;
 
@@ -133,7 +136,7 @@ function logMessage($message, $file = WATCHERLOGFILE) {
 
 // Function to fetch network interfaces from FPP API
 function fetchWatcherNetworkInterfaces() {
-    $result = apiCall('GET', 'http://127.0.0.1/api/network/interface', [], true);
+    $result = ApiClient::getInstance()->get('http://127.0.0.1/api/network/interface');
 
     if ($result === false || !is_array($result)) {
         logMessage("Failed to retrieve network interfaces from FPP API");
@@ -279,7 +282,7 @@ function detectGatewayForInterface($interface) {
 
 // Check if this FPP instance is running in player mode
 function isPlayerMode() {
-    $result = apiCall('GET', 'http://127.0.0.1/api/fppd/status', [], true, 5);
+    $result = ApiClient::getInstance()->get('http://127.0.0.1/api/fppd/status', 5);
 
     if ($result === false || !isset($result['mode_name'])) {
         logMessage("isPlayerMode: Failed to determine mode from FPP status");
@@ -291,7 +294,7 @@ function isPlayerMode() {
 
 // Check if this FPP instance is running in remote mode with multi-sync active
 function isRemoteModeWithMultiSync() {
-    $result = apiCall('GET', 'http://127.0.0.1/api/fppd/status', [], true, 5);
+    $result = ApiClient::getInstance()->get('http://127.0.0.1/api/fppd/status', 5);
 
     if ($result === false || !isset($result['mode_name'])) {
         return false;
@@ -307,7 +310,7 @@ function isRemoteModeWithMultiSync() {
  * Filters out local systems and deduplicates by hostname
  */
 function getMultiSyncRemoteSystems() {
-    $multiSyncData = apiCall('GET', 'http://127.0.0.1/api/fppd/multiSyncSystems', [], true, 5);
+    $multiSyncData = ApiClient::getInstance()->get('http://127.0.0.1/api/fppd/multiSyncSystems', 5);
 
     if (!$multiSyncData || !isset($multiSyncData['systems']) || !is_array($multiSyncData['systems'])) {
         return [];
