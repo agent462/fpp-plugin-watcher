@@ -521,7 +521,8 @@ function fpppluginWatcherRemoteBulkStatus() {
 
 // GET /api/plugin/fpp-plugin-watcher/remote/bulk/updates
 function fpppluginWatcherRemoteBulkUpdates() {
-    return apiSuccess(RemoteControl::getInstance()->getBulkUpdates(getMultiSyncRemoteSystems()));
+    $latestWatcherVersion = UpdateChecker::getInstance()->getLatestWatcherVersion();
+    return apiSuccess(RemoteControl::getInstance()->getBulkUpdates(getMultiSyncRemoteSystems(), $latestWatcherVersion));
 }
 
 // GET /api/plugin/fpp-plugin-watcher/remote/status?host=x
@@ -578,7 +579,8 @@ function fpppluginWatcherRemotePlugins() {
 function fpppluginWatcherRemotePluginUpdates() {
     $host = getRequiredQueryParam('host');
     if (!$host) return apiError('Missing host parameter');
-    return apiSuccess(RemoteControl::getInstance()->checkPluginUpdates($host));
+    $latestWatcherVersion = UpdateChecker::getInstance()->getLatestWatcherVersion();
+    return apiSuccess(RemoteControl::getInstance()->checkPluginUpdates($host, $latestWatcherVersion));
 }
 
 // GET /api/plugin/fpp-plugin-watcher/remote/playback/sync
