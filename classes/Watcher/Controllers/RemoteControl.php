@@ -517,6 +517,197 @@ class RemoteControl
     }
 
     /**
+     * Get output configuration discrepancies
+     * Checks for issues like outputs to remote-mode systems and missing sequences
+     */
+    public function getOutputDiscrepancies(): array
+    {
+        $cacheFile = WATCHERLOGDIR . '/watcher-discrepancies-cache.json';
+        $cacheMaxAge = 60; // seconds
+
+        // Read config to check which issue checks are enabled
+        $config = readPluginConfig();
+        $checkOutputs = !empty($config['issueCheckOutputs']);
+        $checkSequences = !empty($config['issueCheckSequences']);
+
+        // If all checks are disabled, return empty result (no cache needed)
+        if (!$checkOutputs && !$checkSequences) {
+            return [
+                'success' => true,
+                'discrepancies' => [],
+                'remoteCount' => 0
+            ];
+        }
+
+        // Check cache
+        if (file_exists($cacheFile)) {
+            $cacheAge = time() - filemtime($cacheFile);
+            if ($cacheAge < $cacheMaxAge) {
+                $cached = json_decode(file_get_contents($cacheFile), true);
+                if ($cached && isset($cached['success'])) {
+                    // Filter cached results based on current config
+                    if (isset($cached['discrepancies']) && is_array($cached['discrepancies'])) {
+                        $cached['discrepancies'] = array_values(array_filter($cached['discrepancies'], function($d) use ($checkOutputs, $checkSequences) {
+                            if ($d['type'] === 'output_to_remote' && !$checkOutputs) return false;
+                            if ($d['type'] === 'missing_sequences' && !$checkSequences) return false;
+                            return true;
+                        }));
+                    }
+                    return $cached;
+                }
+            }
+        }
+
+        $discrepancies = [];
+
+        // Get remote systems
+        $remoteSystems = getMultiSyncRemoteSystems();
+        $remotesByIP = [];
+        foreach ($remoteSystems as $remote) {
+            if (!empty($remote['address'])) {
+                $remotesByIP[$remote['address']] = $remote;
+            }
+        }
+
+        // =========================================================================
+        // Check 1: Output configuration issues
+        // =========================================================================
+        if ($checkOutputs) {
+            $outputsData = $this->apiClient->get('http://127.0.0.1/api/channel/output/universeOutputs', WATCHER_TIMEOUT_STANDARD);
+
+            if ($outputsData && isset($outputsData['channelOutputs'])) {
+                // Build map of active outputs per remote IP
+                $activeOutputsByIP = [];
+                foreach ($outputsData['channelOutputs'] as $outputGroup) {
+                    if (!isset($outputGroup['universes']) || !is_array($outputGroup['universes'])) {
+                        continue;
+                    }
+                    foreach ($outputGroup['universes'] as $universe) {
+                        $address = $universe['address'] ?? '';
+                        $active = ($universe['active'] ?? 0) == 1;
+                        if (empty($address) || !filter_var($address, FILTER_VALIDATE_IP) || !$active) {
+                            continue;
+                        }
+                        if (!isset($activeOutputsByIP[$address])) {
+                            $activeOutputsByIP[$address] = [];
+                        }
+                        $activeOutputsByIP[$address][] = $universe;
+                    }
+                }
+
+                // Check for active outputs to systems in remote mode
+                foreach ($activeOutputsByIP as $ip => $outputs) {
+                    if (!isset($remotesByIP[$ip])) {
+                        continue;
+                    }
+                    $remote = $remotesByIP[$ip];
+                    $remoteMode = $remote['fppModeString'] ?? '';
+                    $hostname = $remote['hostname'] ?? $ip;
+
+                    if ($remoteMode === 'remote') {
+                        foreach ($outputs as $output) {
+                            $discrepancies[] = [
+                                'type' => 'output_to_remote',
+                                'severity' => 'warning',
+                                'address' => $ip,
+                                'hostname' => $hostname,
+                                'description' => $output['description'] ?? '',
+                                'startChannel' => $output['startChannel'] ?? 0,
+                                'channelCount' => $output['channelCount'] ?? 0,
+                                'message' => "Output enabled to {$hostname} but it's in remote mode (receives via multisync)"
+                            ];
+                        }
+                    }
+                }
+            }
+        }
+
+        // =========================================================================
+        // Check 2: Missing sequences on remote systems
+        // =========================================================================
+        if ($checkSequences) {
+            $localSequences = $this->apiClient->get('http://127.0.0.1/api/sequence', WATCHER_TIMEOUT_STANDARD);
+
+            if ($localSequences && is_array($localSequences) && count($localSequences) > 0 && count($remoteSystems) > 0) {
+                // Build set of local sequence filenames
+                $localSeqSet = [];
+                foreach ($localSequences as $seq) {
+                    $name = is_array($seq) ? ($seq['Name'] ?? '') : $seq;
+                    if (!empty($name)) {
+                        $localSeqSet[$name] = true;
+                    }
+                }
+
+                // Fetch sequences from remotes in parallel using CurlMultiHandler
+                $handler = new CurlMultiHandler(WATCHER_TIMEOUT_STATUS);
+                $hostnames = [];
+
+                foreach ($remoteSystems as $system) {
+                    $address = $system['address'];
+                    $handler->addRequest($address, "http://{$address}/api/sequence");
+                    $hostnames[$address] = $system['hostname'];
+                }
+
+                $results = $handler->execute();
+
+                // Collect results and check for missing sequences
+                foreach ($results as $address => $result) {
+                    if (!$result['success'] || !$result['data']) {
+                        continue; // Skip offline/unreachable remotes
+                    }
+
+                    $remoteSequences = $result['data'];
+                    if (!is_array($remoteSequences)) {
+                        continue;
+                    }
+
+                    // Build set of remote sequence filenames
+                    $remoteSeqSet = [];
+                    foreach ($remoteSequences as $seq) {
+                        $name = is_array($seq) ? ($seq['Name'] ?? '') : $seq;
+                        if (!empty($name)) {
+                            $remoteSeqSet[$name] = true;
+                        }
+                    }
+
+                    // Find sequences on player that are missing from this remote
+                    $missingSequences = [];
+                    foreach ($localSeqSet as $seqName => $_) {
+                        if (!isset($remoteSeqSet[$seqName])) {
+                            $missingSequences[] = $seqName;
+                        }
+                    }
+
+                    if (count($missingSequences) > 0) {
+                        $hostname = $hostnames[$address] ?: $address;
+                        $count = count($missingSequences);
+                        $discrepancies[] = [
+                            'type' => 'missing_sequences',
+                            'severity' => 'warning',
+                            'address' => $address,
+                            'hostname' => $hostname,
+                            'sequences' => $missingSequences,
+                            'message' => "{$count} sequence" . ($count > 1 ? 's' : '') . " missing from {$hostname}"
+                        ];
+                    }
+                }
+            }
+        }
+
+        $result = [
+            'success' => true,
+            'discrepancies' => $discrepancies,
+            'remoteCount' => count($remoteSystems)
+        ];
+
+        // Cache the result
+        file_put_contents($cacheFile, json_encode($result));
+        ensureFppOwnership($cacheFile);
+
+        return $result;
+    }
+
+    /**
      * Bulk fetch update data from all remote hosts in parallel
      */
     public function getBulkUpdates(array $remoteSystems, ?string $latestWatcherVersion = null): array

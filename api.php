@@ -666,7 +666,8 @@ function fpppluginWatcherFPPRelease() {
 
 // GET /api/plugin/fpp-plugin-watcher/plugins/updates
 function fpppluginWatcherLocalPluginUpdates() {
-    return apiSuccess(checkRemotePluginUpdates('127.0.0.1'));
+    $latestWatcherVersion = UpdateChecker::getInstance()->getLatestWatcherVersion();
+    return apiSuccess(RemoteControl::getInstance()->checkPluginUpdates('127.0.0.1', $latestWatcherVersion));
 }
 
 // POST /api/plugin/fpp-plugin-watcher/remote/fpp/upgrade
@@ -867,7 +868,7 @@ function fpppluginWatcherRemoteEfuseHeatmap() {
 
 // GET /api/plugin/fpp-plugin-watcher/outputs/discrepancies
 function fpppluginWatcherOutputDiscrepancies() {
-    return apiSuccess(getOutputDiscrepancies());
+    return apiSuccess(RemoteControl::getInstance()->getOutputDiscrepancies());
 }
 
 // GET /api/plugin/fpp-plugin-watcher/mqtt/events
