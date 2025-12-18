@@ -1241,6 +1241,6 @@ function fpppluginWatcherEfusePortsResetAll() {
         return apiError('No compatible eFuse hardware detected', 404);
     }
 
-    $result = EfuseHardware::getInstance()->resetAllTripped();
+    $result = EfuseHardware::getInstance()->resetAllTrippedFuses();
     return apiSuccess($result);
 }

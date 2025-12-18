@@ -971,13 +971,18 @@ class EfuseHardware
         foreach ($outputConfig['ports'] as $portName => $portConfig) {
             $mA = $currentReadings[$portName] ?? 0;
             $label = $portConfig['label'] ?? $portConfig['description'] ?? $portName;
+            $portStatus = $this->getPortStatus($portName);
 
             $summary[$portName] = [
                 'name' => $portName,
                 'label' => $label,
                 'currentMa' => $mA,
                 'currentA' => round($mA / 1000, 2),
-                'status' => $this->getPortStatus($portName),
+                'status' => $portStatus,
+                // Flatten key status fields for JS compatibility
+                'portEnabled' => $portStatus['enabled'] ?? true,
+                'fuseTripped' => $portStatus['fuseTripped'] ?? false,
+                // Output config fields
                 'enabled' => $portConfig['enabled'] ?? false,
                 'pixelCount' => $portConfig['pixelCount'] ?? 0
             ];
