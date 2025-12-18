@@ -1,0 +1,42 @@
+{
+    "ping_metrics": [
+        {"timestamp": 1700000000, "latency": 15.5, "success": true, "hostname": "gateway"},
+        {"timestamp": 1700000060, "latency": 18.2, "success": true, "hostname": "gateway"},
+        {"timestamp": 1700000120, "latency": 12.8, "success": true, "hostname": "gateway"},
+        {"timestamp": 1700000180, "latency": null, "success": false, "hostname": "gateway"},
+        {"timestamp": 1700000240, "latency": 22.1, "success": true, "hostname": "gateway"}
+    ],
+    "efuse_readings": {
+        "Port 1": {"current": 2.45, "enabled": true, "tripped": false},
+        "Port 2": {"current": 3.12, "enabled": true, "tripped": false},
+        "Port 3": {"current": 0.00, "enabled": false, "tripped": false},
+        "Port 4": {"current": 5.67, "enabled": true, "tripped": false},
+        "Port 5": {"current": 0.00, "enabled": true, "tripped": true},
+        "Port 6": {"current": 1.89, "enabled": true, "tripped": false},
+        "Port 7": {"current": 4.23, "enabled": true, "tripped": false},
+        "Port 8": {"current": 2.78, "enabled": true, "tripped": false}
+    },
+    "multisync_hosts": [
+        {"hostname": "player1", "address": "192.168.1.101", "mode": "player"},
+        {"hostname": "player2", "address": "192.168.1.102", "mode": "player"},
+        {"hostname": "remote1", "address": "192.168.1.201", "mode": "remote"}
+    ],
+    "falcon_status_v4": {
+        "p": 128,
+        "v": "1.50",
+        "n": "Falcon-F16V4",
+        "i": "192.168.1.50",
+        "m": "255.255.255.0",
+        "g": "192.168.1.1",
+        "t": [45.5, 42.3],
+        "vt": [12.1, 5.0]
+    },
+    "falcon_status_v3": {
+        "p": 5,
+        "v": "2.xx",
+        "n": "F16V3",
+        "i": "192.168.1.51",
+        "m": "255.255.255.0",
+        "g": "192.168.1.1"
+    }
+}

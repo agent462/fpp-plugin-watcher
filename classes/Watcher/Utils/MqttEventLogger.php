@@ -56,7 +56,7 @@ class MqttEventLogger
             self::EVENT_SEQ_STOP => 'Sequence Stop',
             self::EVENT_PL_START => 'Playlist Start',
             self::EVENT_PL_STOP => 'Playlist Stop',
-            self::EVENT_STATUS => 'Status Update',
+            self::EVENT_STATUS => 'Status',
             self::EVENT_MEDIA_START => 'Media Start',
             self::EVENT_MEDIA_STOP => 'Media Stop',
             self::EVENT_WARNING => 'Warning'

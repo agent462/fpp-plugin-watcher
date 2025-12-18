@@ -1376,12 +1376,31 @@ class FalconController
      */
     public static function isValidHost(string $host): bool
     {
-        // Check for valid IP
+        // Reject empty strings and strings with only whitespace
+        if (trim($host) === '') {
+            return false;
+        }
+
+        // Reject if contains whitespace
+        if (preg_match('/\s/', $host)) {
+            return false;
+        }
+
+        // Check for valid IP (IPv4 or IPv6)
         if (filter_var($host, FILTER_VALIDATE_IP)) {
             return true;
         }
 
+        // Reject if it looks like an invalid IP format
+        // (e.g., '192.168.1.', '1.1.1', '256.256.256.256', '01.01.01.01')
+        if (preg_match('/^[\d.]+$/', $host)) {
+            // If it's all digits and dots but failed FILTER_VALIDATE_IP, it's invalid
+            return false;
+        }
+
         // Check for valid hostname
+        // Must start/end with alphanumeric, can contain hyphens in the middle
+        // Can have multiple labels separated by dots
         return (bool)preg_match('/^[a-zA-Z0-9]([a-zA-Z0-9\-]{0,61}[a-zA-Z0-9])?(\.[a-zA-Z0-9]([a-zA-Z0-9\-]{0,61}[a-zA-Z0-9])?)*$/', $host);
     }
 
@@ -1390,7 +1409,21 @@ class FalconController
      */
     public static function isValidSubnet(string $subnet): bool
     {
-        return (bool)preg_match('/^\d{1,3}\.\d{1,3}\.\d{1,3}$/', $subnet);
+        // Must match basic format: three octets separated by dots
+        if (!preg_match('/^\d{1,3}\.\d{1,3}\.\d{1,3}$/', $subnet)) {
+            return false;
+        }
+
+        // Validate each octet is 0-255
+        $octets = explode('.', $subnet);
+        foreach ($octets as $octet) {
+            $value = (int)$octet;
+            if ($value < 0 || $value > 255) {
+                return false;
+            }
+        }
+
+        return true;
     }
 
     /**

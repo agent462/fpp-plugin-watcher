@@ -1,0 +1,60 @@
+{
+    "status": 0,
+    "status_name": "idle",
+    "mode": 2,
+    "mode_name": "player",
+    "fppd": "running",
+    "volume": 75,
+    "MQTT": {
+        "configured": true,
+        "connected": true
+    },
+    "current_sequence": "",
+    "current_song": "",
+    "current_playlist": {
+        "playlist": "",
+        "type": "",
+        "index": "0",
+        "count": "0"
+    },
+    "seconds_played": "0",
+    "seconds_remaining": "0",
+    "time_elapsed": "00:00",
+    "time_remaining": "00:00",
+    "repeat_mode": "0",
+    "uuid": "FPP-12345678",
+    "bridging": false,
+    "multisync": true,
+    "hostname": "fpptest",
+    "sensors": [
+        {
+            "label": "CPU Temp",
+            "value": 45.2,
+            "valueStr": "45.2 C",
+            "formatted": "45.2\u00b0C"
+        }
+    ],
+    "interfaces": {
+        "eth0": {
+            "label": "eth0",
+            "ip": "192.168.1.100",
+            "active": true
+        },
+        "wlan0": {
+            "label": "wlan0",
+            "ip": "192.168.1.101",
+            "active": false
+        }
+    },
+    "uptime": "1 day, 5:23:45",
+    "uptimeTotalSeconds": 105825,
+    "uptimeSeconds": 45,
+    "uptimeMinutes": 23,
+    "uptimeHours": 5,
+    "uptimeDays": 1,
+    "advancedView": false,
+    "version": "7.4",
+    "branch": "master",
+    "majorVersion": 7,
+    "minorVersion": 4
+}
