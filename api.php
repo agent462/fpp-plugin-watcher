@@ -77,10 +77,29 @@ function getRequiredJsonField($field) {
  */
 function getJsonBody() {
     static $jsonBody = null;
-    if ($jsonBody === null) {
-        $jsonBody = json_decode(file_get_contents('php://input'), true) ?: [];
+    static $parseError = false;
+
+    if ($jsonBody === null && !$parseError) {
+        $input = file_get_contents('php://input');
+        if (!empty($input)) {
+            $jsonBody = json_decode($input, true);
+            if (json_last_error() !== JSON_ERROR_NONE) {
+                $parseError = true;
+                $jsonBody = null;
+            }
+        } else {
+            $jsonBody = [];
+        }
     }
-    return $jsonBody;
+    return $jsonBody ?? [];
+}
+
+/**
+ * Check if JSON parsing failed
+ */
+function hasJsonParseError() {
+    getJsonBody(); // Ensure parsing attempted
+    return json_last_error() !== JSON_ERROR_NONE;
 }
 
 /**
@@ -101,6 +120,32 @@ function apiSuccess($data = []) {
         $data['success'] = true;
     }
     return json($data);
+}
+
+/**
+ * Proxy a GET request to a remote host's API
+ *
+ * @param string $path API path (e.g., 'system/status')
+ * @param int $timeout Timeout constant
+ * @param bool $wrapInData Whether to wrap response in 'data' key
+ * @param array|null $fallback Optional fallback response on failure (returns success with this data instead of error)
+ * @return array API response
+ */
+function proxyRemoteGet($path, $timeout = WATCHER_TIMEOUT_STANDARD, $wrapInData = false, $fallback = null) {
+    $host = getRequiredQueryParam('host');
+    if (!$host) return apiError('Missing host parameter');
+
+    $result = ApiClient::getInstance()->get("http://{$host}/{$path}", $timeout);
+    if ($result === false) {
+        if ($fallback !== null) {
+            return apiSuccess($fallback);
+        }
+        // Extract a friendly name from the path for the error message
+        $pathName = str_replace(['api/', 'plugin/fpp-plugin-watcher/'], '', $path);
+        return apiError("Failed to fetch {$pathName} from remote host");
+    }
+
+    return apiSuccess($wrapInData ? ['data' => $result] : $result);
 }
 
 // --- Endpoint Registration ---
@@ -229,7 +274,7 @@ function getEndpointsfpppluginwatcher() {
 }
 
 // GET /api/plugin/fpp-plugin-watcher/version
-function fpppluginwatcherVersion() {
+function fpppluginWatcherVersion() {
     return apiSuccess(['version' => WATCHERVERSION]);
 }
 
@@ -239,27 +284,27 @@ function fpppluginWatcherPingRaw() {
 }
 
 // GET /api/plugin/fpp-plugin-watcher/metrics/memory/free
-function fpppluginwatcherMemoryFree() {
+function fpppluginWatcherMemoryFree() {
     return apiSuccess(SystemMetrics::getInstance()->getMemoryFreeMetrics(getHoursParam()));
 }
 
 // GET /api/plugin/fpp-plugin-watcher/metrics/disk/free
-function fpppluginwatcherDiskFree() {
+function fpppluginWatcherDiskFree() {
     return apiSuccess(SystemMetrics::getInstance()->getDiskFreeMetrics(getHoursParam()));
 }
 
 // GET /api/plugin/fpp-plugin-watcher/metrics/cpu/average
-function fpppluginwatcherCPUAverage() {
+function fpppluginWatcherCPUAverage() {
     return apiSuccess(SystemMetrics::getInstance()->getCPUAverageMetrics(getHoursParam()));
 }
 
 // GET /api/plugin/fpp-plugin-watcher/metrics/load/average
-function fpppluginwatcherLoadAverage() {
+function fpppluginWatcherLoadAverage() {
     return apiSuccess(SystemMetrics::getInstance()->getLoadAverageMetrics(getHoursParam()));
 }
 
 // GET /api/plugin/fpp-plugin-watcher/metrics/interface/bandwidth
-function fpppluginwatcherInterfaceBandwidth() {
+function fpppluginWatcherInterfaceBandwidth() {
     $interface = isset($_GET['interface']) ? $_GET['interface'] : 'eth0';
     if (!preg_match('/^[a-zA-Z0-9\-\.]+$/', $interface)) {
         return apiError('Invalid interface name');
@@ -268,7 +313,7 @@ function fpppluginwatcherInterfaceBandwidth() {
 }
 
 // GET /api/plugin/fpp-plugin-watcher/metrics/interface/list
-function fpppluginwatcherInterfaceList() {
+function fpppluginWatcherInterfaceList() {
     $interfaces = SystemMetrics::getInstance()->getNetworkInterfaces();
     return apiSuccess([
         'count' => count($interfaces),
@@ -277,17 +322,17 @@ function fpppluginwatcherInterfaceList() {
 }
 
 // GET /api/plugin/fpp-plugin-watcher/metrics/ping/rollup
-function fpppluginwatcherPingRollup() {
+function fpppluginWatcherPingRollup() {
     return apiSuccess(PingCollector::getInstance()->getMetrics(getHoursParam()));
 }
 
 // GET /api/plugin/fpp-plugin-watcher/metrics/ping/rollup/tiers
-function fpppluginwatcherPingRollupTiers() {
+function fpppluginWatcherPingRollupTiers() {
     return apiSuccess(['tiers' => PingCollector::getInstance()->getRollupTiersInfo()]);
 }
 
 // GET /api/plugin/fpp-plugin-watcher/metrics/ping/rollup/:tier
-function fpppluginwatcherPingRollupTier() {
+function fpppluginWatcherPingRollupTier() {
     global $urlParts;
     $tier = isset($urlParts[5]) ? $urlParts[5] : '1min';
     $hoursBack = getHoursParam();
@@ -314,12 +359,12 @@ function fpppluginWatcherMultiSyncPingRollupTiers() {
 }
 
 // GET /api/plugin/fpp-plugin-watcher/metrics/thermal
-function fpppluginwatcherThermal() {
+function fpppluginWatcherThermal() {
     return apiSuccess(SystemMetrics::getInstance()->getThermalMetrics(getHoursParam()));
 }
 
 // GET /api/plugin/fpp-plugin-watcher/metrics/thermal/zones
-function fpppluginwatcherThermalZones() {
+function fpppluginWatcherThermalZones() {
     $zones = SystemMetrics::getInstance()->getThermalZones();
     return apiSuccess([
         'count' => count($zones),
@@ -328,12 +373,12 @@ function fpppluginwatcherThermalZones() {
 }
 
 // GET /api/plugin/fpp-plugin-watcher/metrics/wireless
-function fpppluginwatcherWireless() {
+function fpppluginWatcherWireless() {
     return apiSuccess(SystemMetrics::getInstance()->getWirelessMetrics(getHoursParam()));
 }
 
 // GET /api/plugin/fpp-plugin-watcher/metrics/wireless/interfaces
-function fpppluginwatcherWirelessInterfaces() {
+function fpppluginWatcherWirelessInterfaces() {
     $interfaces = SystemMetrics::getInstance()->getWirelessInterfaces();
     return apiSuccess([
         'count' => count($interfaces),
@@ -342,7 +387,7 @@ function fpppluginwatcherWirelessInterfaces() {
 }
 
 // GET /api/plugin/fpp-plugin-watcher/metrics/all
-function fpppluginwatcherMetricsAll() {
+function fpppluginWatcherMetricsAll() {
     $hours = getHoursParam();
     $systemMetrics = SystemMetrics::getInstance();
     return apiSuccess([
@@ -358,7 +403,7 @@ function fpppluginwatcherMetricsAll() {
 }
 
 // GET /api/plugin/fpp-plugin-watcher/falcon/status
-function fpppluginwatcherFalconStatus() {
+function fpppluginWatcherFalconStatus() {
     $config = readPluginConfig();
     $hostsString = isset($_GET['host']) ? $_GET['host'] : ($config['falconControllers'] ?? '');
 
@@ -373,7 +418,7 @@ function fpppluginwatcherFalconStatus() {
 }
 
 // POST /api/plugin/fpp-plugin-watcher/falcon/config
-function fpppluginwatcherFalconConfigSave() {
+function fpppluginWatcherFalconConfigSave() {
     $input = json_decode(file_get_contents('php://input'), true);
 
     if (!isset($input['hosts'])) {
@@ -401,13 +446,13 @@ function fpppluginwatcherFalconConfigSave() {
 }
 
 // GET /api/plugin/fpp-plugin-watcher/falcon/config
-function fpppluginwatcherFalconConfigGet() {
+function fpppluginWatcherFalconConfigGet() {
     $config = readPluginConfig();
     return apiSuccess(['hosts' => $config['falconControllers'] ?? '']);
 }
 
 // POST /api/plugin/fpp-plugin-watcher/falcon/test
-function fpppluginwatcherFalconTest() {
+function fpppluginWatcherFalconTest() {
     $input = json_decode(file_get_contents('php://input'), true);
 
     if (!isset($input['host'])) {
@@ -449,7 +494,7 @@ function fpppluginwatcherFalconTest() {
 }
 
 // POST /api/plugin/fpp-plugin-watcher/falcon/reboot
-function fpppluginwatcherFalconReboot() {
+function fpppluginWatcherFalconReboot() {
     $input = json_decode(file_get_contents('php://input'), true);
 
     if (!isset($input['host'])) {
@@ -481,7 +526,7 @@ function fpppluginwatcherFalconReboot() {
 }
 
 // GET /api/plugin/fpp-plugin-watcher/falcon/discover
-function fpppluginwatcherFalconDiscover() {
+function fpppluginWatcherFalconDiscover() {
     $subnet = isset($_GET['subnet']) ? trim($_GET['subnet']) : FalconController::autoDetectSubnet();
 
     if (empty($subnet)) {
@@ -763,12 +808,7 @@ function fpppluginWatcherConnectivityReload() {
 
 // GET /api/plugin/fpp-plugin-watcher/remote/connectivity/state?host=x
 function fpppluginWatcherRemoteConnectivityState() {
-    $host = getRequiredQueryParam('host');
-    if (!$host) return apiError('Missing host parameter');
-
-    $result = ApiClient::getInstance()->get("http://{$host}/api/plugin/fpp-plugin-watcher/connectivity/state", WATCHER_TIMEOUT_STANDARD);
-    if ($result === false) return apiError('Failed to fetch connectivity state from remote host');
-    return apiSuccess($result);
+    return proxyRemoteGet('api/plugin/fpp-plugin-watcher/connectivity/state');
 }
 
 // POST /api/plugin/fpp-plugin-watcher/remote/connectivity/state/clear
@@ -784,88 +824,44 @@ function fpppluginWatcherRemoteConnectivityStateClear() {
 
 // GET /api/plugin/fpp-plugin-watcher/remote/version?host=x
 function fpppluginWatcherRemoteVersion() {
-    $host = getRequiredQueryParam('host');
-    if (!$host) return apiError('Missing host parameter');
-
-    $result = ApiClient::getInstance()->get("http://{$host}/api/plugin/fpp-plugin-watcher/version", WATCHER_TIMEOUT_STANDARD);
-    if ($result === false) {
-        return apiError('Failed to fetch version from remote host');
-    }
-    return apiSuccess($result);
+    return proxyRemoteGet('api/plugin/fpp-plugin-watcher/version');
 }
 
 // GET /api/plugin/fpp-plugin-watcher/remote/sysStatus?host=x
 function fpppluginWatcherRemoteSysStatus() {
-    $host = getRequiredQueryParam('host');
-    if (!$host) return apiError('Missing host parameter');
-
-    $result = ApiClient::getInstance()->get("http://{$host}/api/system/status", WATCHER_TIMEOUT_STANDARD);
-    if ($result === false) {
-        return apiError('Failed to fetch system status from remote host');
-    }
-    return apiSuccess(['data' => $result]);
+    return proxyRemoteGet('api/system/status', WATCHER_TIMEOUT_STANDARD, true);
 }
 
 // GET /api/plugin/fpp-plugin-watcher/remote/sysInfo?host=x
 function fpppluginWatcherRemoteSysInfo() {
-    $host = getRequiredQueryParam('host');
-    if (!$host) return apiError('Missing host parameter');
-
-    $result = ApiClient::getInstance()->get("http://{$host}/api/system/info", WATCHER_TIMEOUT_STANDARD);
-    if ($result === false) {
-        return apiError('Failed to fetch system info from remote host');
-    }
-    return apiSuccess(['data' => $result]);
+    return proxyRemoteGet('api/system/info', WATCHER_TIMEOUT_STANDARD, true);
 }
 
 // GET /api/plugin/fpp-plugin-watcher/remote/metrics/all?host=x&hours=Y
 function fpppluginWatcherRemoteMetricsAll() {
-    $host = getRequiredQueryParam('host');
-    if (!$host) return apiError('Missing host parameter');
-
     $hours = getHoursParam();
-    $result = ApiClient::getInstance()->get("http://{$host}/api/plugin/fpp-plugin-watcher/metrics/all?hours={$hours}", WATCHER_TIMEOUT_LONG);
-    if ($result === false) {
-        return apiError('Failed to fetch metrics from remote host');
-    }
-    return apiSuccess($result);
+    return proxyRemoteGet("api/plugin/fpp-plugin-watcher/metrics/all?hours={$hours}", WATCHER_TIMEOUT_LONG);
 }
 
 // GET /api/plugin/fpp-plugin-watcher/remote/fppd/status?host=x
 function fpppluginWatcherRemoteFppdStatus() {
-    $host = getRequiredQueryParam('host');
-    if (!$host) return apiError('Missing host parameter');
-
-    $result = ApiClient::getInstance()->get("http://{$host}/api/fppd/status", WATCHER_TIMEOUT_STANDARD);
-    if ($result === false) {
-        return apiError('Failed to fetch fppd status from remote host');
-    }
-    return apiSuccess(['data' => $result]);
+    return proxyRemoteGet('api/fppd/status', WATCHER_TIMEOUT_STANDARD, true);
 }
 
 // GET /api/plugin/fpp-plugin-watcher/remote/efuse/supported?host=x
 function fpppluginWatcherRemoteEfuseSupported() {
-    $host = getRequiredQueryParam('host');
-    if (!$host) return apiError('Missing host parameter');
-
-    $result = ApiClient::getInstance()->get("http://{$host}/api/plugin/fpp-plugin-watcher/efuse/supported", WATCHER_TIMEOUT_STANDARD);
-    if ($result === false) {
-        return apiSuccess(['supported' => false, 'error' => 'Failed to fetch eFuse support from remote host']);
-    }
-    return apiSuccess($result);
+    return proxyRemoteGet(
+        'api/plugin/fpp-plugin-watcher/efuse/supported',
+        WATCHER_TIMEOUT_STANDARD,
+        false,
+        ['supported' => false, 'error' => 'Failed to fetch eFuse support from remote host']
+    );
 }
 
 // GET /api/plugin/fpp-plugin-watcher/remote/efuse/heatmap?host=x&hours=Y
 function fpppluginWatcherRemoteEfuseHeatmap() {
-    $host = getRequiredQueryParam('host');
-    if (!$host) return apiError('Missing host parameter');
-
     $hours = getHoursParam();
-    $result = ApiClient::getInstance()->get("http://{$host}/api/plugin/fpp-plugin-watcher/efuse/heatmap?hours={$hours}", WATCHER_TIMEOUT_LONG);
-    if ($result === false) {
-        return apiError('Failed to fetch eFuse heatmap from remote host');
-    }
-    return apiSuccess($result);
+    return proxyRemoteGet("api/plugin/fpp-plugin-watcher/efuse/heatmap?hours={$hours}", WATCHER_TIMEOUT_LONG);
 }
 
 // GET /api/plugin/fpp-plugin-watcher/outputs/discrepancies

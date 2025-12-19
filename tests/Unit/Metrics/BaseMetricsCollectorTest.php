@@ -333,12 +333,28 @@ class BaseMetricsCollectorTest extends TestCase
 
     public function testGetMetricsSelectsCorrectTier(): void
     {
-        $result = $this->collector->getMetrics(1);
-        if ($result['success'] && isset($result['tier_info'])) {
-            $this->assertEquals('1min', $result['tier_info']['tier']);
-        } else {
-            $this->markTestSkipped('No tier_info returned - file does not exist');
+        // Create a 1min rollup file with test data
+        $rollupFile = $this->dataDir . '/1min.log';
+        $now = time();
+        $entries = [];
+
+        // Create entries within the last hour
+        for ($i = 0; $i < 5; $i++) {
+            $timestamp = $now - (60 * $i) - 30; // Stagger by 1 minute
+            $dateStr = date('Y-m-d H:i:s', $timestamp);
+            $entry = json_encode(['timestamp' => $timestamp, 'count' => $i + 1]);
+            $entries[] = "[{$dateStr}] {$entry}";
         }
+
+        file_put_contents($rollupFile, implode("\n", $entries) . "\n");
+
+        $result = $this->collector->getMetrics(1);
+
+        $this->assertTrue($result['success']);
+        $this->assertArrayHasKey('tier_info', $result);
+        $this->assertEquals('1min', $result['tier_info']['tier']);
+        $this->assertEquals(60, $result['tier_info']['interval']);
+        $this->assertEquals('1-minute averages', $result['tier_info']['label']);
     }
 
     // =================================================================
