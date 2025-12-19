@@ -629,4 +629,633 @@ class RollupProcessorTest extends TestCase
         $result = RollupProcessor::formatDuration(172800);
         $this->assertEquals('2 days', $result);
     }
+
+    // =========================================================================
+    // Additional Edge Case Tests for Data Aggregation
+    // =========================================================================
+
+    public function testAggregateLatenciesUnsortedInput(): void
+    {
+        // Verify that unsorted input still produces correct results
+        $latencies = [50.0, 10.0, 40.0, 20.0, 30.0];
+        $result = $this->processor->aggregateLatencies($latencies);
+
+        $this->assertEquals(10.0, $result['latency_min']);
+        $this->assertEquals(50.0, $result['latency_max']);
+        $this->assertEquals(30.0, $result['latency_avg']);
+    }
+
+    public function testAggregateLatenciesWithDuplicates(): void
+    {
+        $latencies = [20.0, 20.0, 20.0, 50.0, 50.0];
+        $result = $this->processor->aggregateLatencies($latencies);
+
+        $this->assertEquals(20.0, $result['latency_min']);
+        $this->assertEquals(50.0, $result['latency_max']);
+        $this->assertEquals(32.0, $result['latency_avg']);
+    }
+
+    public function testAggregateLatenciesP95WithTwoValues(): void
+    {
+        $latencies = [10.0, 100.0];
+        $result = $this->processor->aggregateLatencies($latencies);
+
+        // P95 index: ceil(2 * 0.95) - 1 = ceil(1.9) - 1 = 2 - 1 = 1
+        $this->assertEquals(100.0, $result['latency_p95']);
+    }
+
+    public function testAggregateLatenciesP95WithThreeValues(): void
+    {
+        $latencies = [10.0, 50.0, 100.0];
+        $result = $this->processor->aggregateLatencies($latencies);
+
+        // P95 index: ceil(3 * 0.95) - 1 = ceil(2.85) - 1 = 3 - 1 = 2
+        $this->assertEquals(100.0, $result['latency_p95']);
+    }
+
+    public function testAggregateLatenciesP95WithTenValues(): void
+    {
+        $latencies = [1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0, 10.0];
+        $result = $this->processor->aggregateLatencies($latencies);
+
+        // P95 index: ceil(10 * 0.95) - 1 = ceil(9.5) - 1 = 10 - 1 = 9
+        $this->assertEquals(10.0, $result['latency_p95']);
+    }
+
+    public function testAggregateLatenciesWithNegativeValues(): void
+    {
+        // Edge case: negative values (shouldn't happen but test robustness)
+        $latencies = [-10.0, 0.0, 10.0];
+        $result = $this->processor->aggregateLatencies($latencies);
+
+        $this->assertEquals(-10.0, $result['latency_min']);
+        $this->assertEquals(10.0, $result['latency_max']);
+        $this->assertEquals(0.0, $result['latency_avg']);
+    }
+
+    public function testAggregateLatenciesWithVeryLargeValues(): void
+    {
+        $latencies = [1000000.0, 2000000.0, 3000000.0];
+        $result = $this->processor->aggregateLatencies($latencies);
+
+        $this->assertEquals(1000000.0, $result['latency_min']);
+        $this->assertEquals(3000000.0, $result['latency_max']);
+        $this->assertEquals(2000000.0, $result['latency_avg']);
+    }
+
+    public function testAggregateLatenciesWithVerySmallValues(): void
+    {
+        $latencies = [0.001, 0.002, 0.003];
+        $result = $this->processor->aggregateLatencies($latencies, 3);
+
+        $this->assertEquals(0.001, $result['latency_min']);
+        $this->assertEquals(0.003, $result['latency_max']);
+        $this->assertEquals(0.002, $result['latency_avg']);
+    }
+
+    // =========================================================================
+    // Jitter Calculation Edge Cases
+    // =========================================================================
+
+    public function testCalculateJitterFromLatencyArrayWithTwoSamples(): void
+    {
+        $latencies = [50.0, 60.0];
+        $result = $this->processor->calculateJitterFromLatencyArray($latencies);
+
+        $this->assertNotNull($result);
+        // J = 0 + (|60-50| - 0) / 16 = 0.625
+        $this->assertEquals(0.63, $result['avg']);
+        $this->assertEquals(0.63, $result['max']);
+    }
+
+    public function testCalculateJitterFromLatencyArrayHighVariance(): void
+    {
+        // Large swings in latency should produce high jitter
+        $latencies = [10.0, 100.0, 10.0, 100.0, 10.0];
+        $result = $this->processor->calculateJitterFromLatencyArray($latencies);
+
+        $this->assertGreaterThan(5.0, $result['max']);
+    }
+
+    public function testCalculateJitterRFC3550ZeroDifference(): void
+    {
+        $state = [];
+        $this->processor->calculateJitterRFC3550('host1', 50.0, $state);
+        $jitter = $this->processor->calculateJitterRFC3550('host1', 50.0, $state);
+
+        // Same latency twice = 0 difference = no jitter increase
+        $this->assertEquals(0.0, $jitter);
+    }
+
+    public function testCalculateJitterRFC3550DecreasingJitter(): void
+    {
+        $state = [];
+
+        // First sample
+        $this->processor->calculateJitterRFC3550('host1', 50.0, $state);
+
+        // Large difference causes high jitter
+        $this->processor->calculateJitterRFC3550('host1', 100.0, $state);
+
+        // Consecutive same values should decrease jitter over time
+        for ($i = 0; $i < 20; $i++) {
+            $jitter = $this->processor->calculateJitterRFC3550('host1', 100.0, $state);
+        }
+
+        // Jitter should decay toward 0 with stable latency
+        $this->assertLessThan(1.0, $jitter);
+    }
+
+    // =========================================================================
+    // Rotate Rollup File Tests
+    // =========================================================================
+
+    public function testRotateRollupFileNonexistentFile(): void
+    {
+        // Should not throw error for nonexistent file
+        $this->processor->rotateRollupFile('/nonexistent/file.log', 3600);
+        $this->assertTrue(true); // No exception thrown
+    }
+
+    public function testRotateRollupFileSmallFile(): void
+    {
+        $rollupFile = $this->testTmpDir . '/small_rollup.log';
+        $now = time();
+
+        // Create a small file (under 1MB threshold)
+        $content = "[" . date('Y-m-d H:i:s', $now) . "] " . json_encode(['timestamp' => $now]) . "\n";
+        file_put_contents($rollupFile, $content);
+
+        $sizeBefore = filesize($rollupFile);
+        $this->processor->rotateRollupFile($rollupFile, 3600);
+
+        // File should be unchanged (under 1MB threshold)
+        $this->assertEquals($sizeBefore, filesize($rollupFile));
+    }
+
+    public function testRotateRollupFileLargeFileRemovesOldEntries(): void
+    {
+        $rollupFile = $this->testTmpDir . '/large_rollup.log';
+        $now = time();
+        $twoHoursAgo = $now - 7200;
+        $recentTime = $now - 60;
+
+        // Create a file larger than 1MB with old and new entries
+        $fp = fopen($rollupFile, 'w');
+
+        // Add many old entries to exceed 1MB
+        for ($i = 0; $i < 10000; $i++) {
+            $line = "[" . date('Y-m-d H:i:s', $twoHoursAgo) . "] " .
+                json_encode(['timestamp' => $twoHoursAgo, 'data' => str_repeat('x', 100)]) . "\n";
+            fwrite($fp, $line);
+        }
+
+        // Add some recent entries
+        for ($i = 0; $i < 100; $i++) {
+            $line = "[" . date('Y-m-d H:i:s', $recentTime) . "] " .
+                json_encode(['timestamp' => $recentTime, 'data' => 'recent']) . "\n";
+            fwrite($fp, $line);
+        }
+
+        fclose($fp);
+        clearstatcache(true, $rollupFile);
+        $sizeBefore = filesize($rollupFile);
+
+        // Rotate with 1 hour retention
+        $this->processor->rotateRollupFile($rollupFile, 3600);
+
+        clearstatcache(true, $rollupFile);
+        $sizeAfter = filesize($rollupFile);
+
+        // File should be smaller after removing old entries
+        $this->assertLessThan($sizeBefore, $sizeAfter);
+
+        // Verify only recent entries remain
+        $remaining = file_get_contents($rollupFile);
+        $this->assertStringContainsString('"data":"recent"', $remaining);
+    }
+
+    public function testRotateRollupFileAllEntriesExpired(): void
+    {
+        $rollupFile = $this->testTmpDir . '/old_rollup.log';
+        $twoHoursAgo = time() - 7200;
+
+        // Create a large file with only old entries
+        $fp = fopen($rollupFile, 'w');
+        for ($i = 0; $i < 10000; $i++) {
+            $line = "[" . date('Y-m-d H:i:s', $twoHoursAgo) . "] " .
+                json_encode(['timestamp' => $twoHoursAgo, 'data' => str_repeat('x', 100)]) . "\n";
+            fwrite($fp, $line);
+        }
+        fclose($fp);
+
+        clearstatcache(true, $rollupFile);
+
+        // Rotate with 1 hour retention - all entries should be removed
+        $this->processor->rotateRollupFile($rollupFile, 3600);
+
+        clearstatcache(true, $rollupFile);
+
+        // File should be empty
+        $this->assertEquals(0, filesize($rollupFile));
+    }
+
+    // =========================================================================
+    // State Management Edge Cases
+    // =========================================================================
+
+    public function testGetStateBackfillsMissingFields(): void
+    {
+        $stateFile = $this->testTmpDir . '/partial_state.json';
+
+        // Write state with missing fields within a tier
+        $state = [
+            '1min' => ['last_processed' => 1000]
+            // Missing: last_bucket_end, last_rollup
+        ];
+        file_put_contents($stateFile, json_encode($state));
+
+        $loaded = $this->processor->getState($stateFile);
+
+        // Should backfill missing fields
+        $this->assertArrayHasKey('last_bucket_end', $loaded['1min']);
+        $this->assertArrayHasKey('last_rollup', $loaded['1min']);
+        $this->assertEquals(0, $loaded['1min']['last_bucket_end']);
+    }
+
+    public function testGetStateWithEmptyJsonObject(): void
+    {
+        $stateFile = $this->testTmpDir . '/empty_state.json';
+        file_put_contents($stateFile, '{}');
+
+        $loaded = $this->processor->getState($stateFile);
+
+        // Should rebuild with all tiers
+        $this->assertArrayHasKey('1min', $loaded);
+        $this->assertArrayHasKey('5min', $loaded);
+        $this->assertArrayHasKey('30min', $loaded);
+        $this->assertArrayHasKey('2hour', $loaded);
+    }
+
+    public function testGetStateWithEmptyArray(): void
+    {
+        $stateFile = $this->testTmpDir . '/array_state.json';
+        file_put_contents($stateFile, '[]');
+
+        $loaded = $this->processor->getState($stateFile);
+
+        // Empty array is truthy but not associative - should rebuild
+        $this->assertArrayHasKey('1min', $loaded);
+    }
+
+    public function testGetStateWithNullContent(): void
+    {
+        $stateFile = $this->testTmpDir . '/null_state.json';
+        file_put_contents($stateFile, 'null');
+
+        $loaded = $this->processor->getState($stateFile);
+
+        // null decodes to null, should rebuild
+        $this->assertArrayHasKey('1min', $loaded);
+    }
+
+    public function testSaveStatePrettyPrints(): void
+    {
+        $stateFile = $this->testTmpDir . '/pretty_state.json';
+        $state = ['1min' => ['last_processed' => 1000]];
+
+        $this->processor->saveState($stateFile, $state);
+
+        $content = file_get_contents($stateFile);
+        // JSON_PRETTY_PRINT adds newlines
+        $this->assertStringContainsString("\n", $content);
+    }
+
+    // =========================================================================
+    // Read Rollup Data Edge Cases
+    // =========================================================================
+
+    public function testReadRollupDataWithDefaultTimeRange(): void
+    {
+        $rollupFile = $this->testTmpDir . '/rollup.log';
+        $now = time();
+
+        // Write entry within default retention period
+        $content = "[" . date('Y-m-d H:i:s', $now - 100) . "] " .
+            json_encode(['timestamp' => $now - 100, 'value' => 'test']) . "\n";
+        file_put_contents($rollupFile, $content);
+
+        // Pass null for start/end time - should use tier defaults
+        $result = $this->processor->readRollupData($rollupFile, '1min', null, null);
+
+        $this->assertTrue($result['success']);
+        $this->assertCount(1, $result['data']);
+    }
+
+    public function testReadRollupDataWithInvalidTier(): void
+    {
+        $rollupFile = $this->testTmpDir . '/rollup.log';
+        $now = time();
+
+        $content = "[" . date('Y-m-d H:i:s', $now) . "] " .
+            json_encode(['timestamp' => $now]) . "\n";
+        file_put_contents($rollupFile, $content);
+
+        // Invalid tier should fall back to 24-hour default
+        $result = $this->processor->readRollupData($rollupFile, 'invalid_tier', null, null);
+
+        $this->assertTrue($result['success']);
+    }
+
+    public function testReadRollupDataMalformedJsonLines(): void
+    {
+        $rollupFile = $this->testTmpDir . '/malformed.log';
+        $now = time();
+
+        // Mix of valid and invalid lines
+        $content = "[" . date('Y-m-d H:i:s', $now) . "] " . json_encode(['timestamp' => $now, 'valid' => true]) . "\n";
+        $content .= "[" . date('Y-m-d H:i:s', $now) . "] not valid json\n";
+        $content .= "[" . date('Y-m-d H:i:s', $now) . "] " . json_encode(['timestamp' => $now, 'also_valid' => true]) . "\n";
+        $content .= "completely malformed line\n";
+        file_put_contents($rollupFile, $content);
+
+        $result = $this->processor->readRollupData($rollupFile, '1min', $now - 60, $now + 60);
+
+        // Should only return valid entries
+        $this->assertTrue($result['success']);
+        $this->assertCount(2, $result['data']);
+    }
+
+    public function testReadRollupDataMissingTimestamp(): void
+    {
+        $rollupFile = $this->testTmpDir . '/no_timestamp.log';
+        $now = time();
+
+        // Entry without timestamp field
+        $content = "[" . date('Y-m-d H:i:s', $now) . "] " . json_encode(['value' => 'no timestamp']) . "\n";
+        $content .= "[" . date('Y-m-d H:i:s', $now) . "] " . json_encode(['timestamp' => $now, 'value' => 'has timestamp']) . "\n";
+        file_put_contents($rollupFile, $content);
+
+        $result = $this->processor->readRollupData($rollupFile, '1min', $now - 60, $now + 60);
+
+        // Only entry with timestamp should be returned
+        $this->assertTrue($result['success']);
+        $this->assertCount(1, $result['data']);
+        $this->assertEquals('has timestamp', $result['data'][0]['value']);
+    }
+
+    public function testReadRollupDataSortsResults(): void
+    {
+        $rollupFile = $this->testTmpDir . '/unsorted.log';
+        $now = time();
+
+        // Write entries in reverse order
+        $content = "";
+        for ($i = 5; $i >= 1; $i--) {
+            $ts = $now - ($i * 60);
+            $content .= "[" . date('Y-m-d H:i:s', $ts) . "] " . json_encode(['timestamp' => $ts, 'order' => $i]) . "\n";
+        }
+        file_put_contents($rollupFile, $content);
+
+        $result = $this->processor->readRollupData($rollupFile, '1min', $now - 400, $now);
+
+        // Results should be sorted by timestamp ascending
+        $this->assertTrue($result['success']);
+        $prevTimestamp = 0;
+        foreach ($result['data'] as $entry) {
+            $this->assertGreaterThan($prevTimestamp, $entry['timestamp']);
+            $prevTimestamp = $entry['timestamp'];
+        }
+    }
+
+    public function testReadRollupDataReturnsPeriodInfo(): void
+    {
+        $rollupFile = $this->testTmpDir . '/period.log';
+        $now = time();
+        $startTime = $now - 3600;
+
+        $content = "[" . date('Y-m-d H:i:s', $now) . "] " . json_encode(['timestamp' => $now]) . "\n";
+        file_put_contents($rollupFile, $content);
+
+        $result = $this->processor->readRollupData($rollupFile, '1min', $startTime, $now);
+
+        $this->assertTrue($result['success']);
+        $this->assertArrayHasKey('period', $result);
+        $this->assertEquals($startTime, $result['period']['start']);
+        $this->assertEquals($now, $result['period']['end']);
+    }
+
+    // =========================================================================
+    // Quality Rating Edge Cases
+    // =========================================================================
+
+    public function testGetQualityRatingZeroValue(): void
+    {
+        $result = $this->processor->getQualityRating(0.0, 50, 100, 250);
+        $this->assertEquals('good', $result);
+    }
+
+    public function testGetQualityRatingNegativeValue(): void
+    {
+        // Negative values should still be 'good' (below threshold)
+        $result = $this->processor->getQualityRating(-10.0, 50, 100, 250);
+        $this->assertEquals('good', $result);
+    }
+
+    public function testGetQualityRatingExactlyAtCriticalThreshold(): void
+    {
+        // At exactly the poor threshold = critical
+        $result = $this->processor->getQualityRating(250.0, 50, 100, 250);
+        $this->assertEquals('critical', $result);
+    }
+
+    public function testGetQualityRatingVeryHighValue(): void
+    {
+        $result = $this->processor->getQualityRating(10000.0, 50, 100, 250);
+        $this->assertEquals('critical', $result);
+    }
+
+    public function testGetOverallQualityRatingWithAllCritical(): void
+    {
+        $result = $this->processor->getOverallQualityRating('critical', 'critical', 'critical');
+        $this->assertEquals('critical', $result);
+    }
+
+    public function testGetOverallQualityRatingWithMixedBadRatings(): void
+    {
+        // Critical should always win over poor
+        $result = $this->processor->getOverallQualityRating('poor', 'critical', 'fair');
+        $this->assertEquals('critical', $result);
+    }
+
+    // =========================================================================
+    // Tier Selection Edge Cases
+    // =========================================================================
+
+    public function testGetBestTierForZeroHours(): void
+    {
+        $result = $this->processor->getBestTierForHours(0);
+        $this->assertEquals('1min', $result);
+    }
+
+    public function testGetBestTierForNegativeHours(): void
+    {
+        // Negative hours should return finest granularity
+        $result = $this->processor->getBestTierForHours(-5);
+        $this->assertEquals('1min', $result);
+    }
+
+    public function testGetBestTierForVeryLargeHours(): void
+    {
+        $result = $this->processor->getBestTierForHours(8760); // 1 year
+        $this->assertEquals('2hour', $result);
+    }
+
+    // =========================================================================
+    // Append Rollup Entries Edge Cases
+    // =========================================================================
+
+    public function testAppendRollupEntriesEmptyArray(): void
+    {
+        $rollupFile = $this->testTmpDir . '/empty_append.log';
+
+        $result = $this->processor->appendRollupEntries($rollupFile, []);
+
+        $this->assertTrue($result);
+        // File should be created but empty
+        $this->assertFileExists($rollupFile);
+        $this->assertEquals(0, filesize($rollupFile));
+    }
+
+    public function testAppendRollupEntriesWithSpecialCharacters(): void
+    {
+        $rollupFile = $this->testTmpDir . '/special.log';
+        $entries = [
+            ['timestamp' => time(), 'message' => 'Test with "quotes" and \\backslashes'],
+            ['timestamp' => time(), 'message' => 'Test with unicode: 日本語'],
+        ];
+
+        $result = $this->processor->appendRollupEntries($rollupFile, $entries);
+
+        $this->assertTrue($result);
+        $content = file_get_contents($rollupFile);
+        $this->assertStringContainsString('quotes', $content);
+        // json_encode escapes unicode by default, so check for escaped form
+        $this->assertStringContainsString('\u65e5\u672c\u8a9e', $content);
+    }
+
+    public function testAppendRollupEntriesWithNestedData(): void
+    {
+        $rollupFile = $this->testTmpDir . '/nested.log';
+        $entries = [
+            [
+                'timestamp' => time(),
+                'nested' => [
+                    'level1' => [
+                        'level2' => 'deep value'
+                    ]
+                ],
+                'array' => [1, 2, 3]
+            ]
+        ];
+
+        $result = $this->processor->appendRollupEntries($rollupFile, $entries);
+
+        $this->assertTrue($result);
+        $content = file_get_contents($rollupFile);
+        $this->assertStringContainsString('deep value', $content);
+    }
+
+    // =========================================================================
+    // Custom Tier Configuration Tests
+    // =========================================================================
+
+    public function testCustomTiersAffectGetState(): void
+    {
+        $customTiers = [
+            'fast' => ['interval' => 30, 'retention' => 3600, 'label' => 'Fast'],
+            'slow' => ['interval' => 3600, 'retention' => 86400, 'label' => 'Slow'],
+        ];
+        $processor = new RollupProcessor($customTiers);
+        $stateFile = $this->testTmpDir . '/custom_state.json';
+
+        $state = $processor->getState($stateFile);
+
+        $this->assertArrayHasKey('fast', $state);
+        $this->assertArrayHasKey('slow', $state);
+        $this->assertArrayNotHasKey('1min', $state);
+    }
+
+    public function testEmptyCustomTiers(): void
+    {
+        $processor = new RollupProcessor([]);
+        $stateFile = $this->testTmpDir . '/no_tier_state.json';
+
+        $state = $processor->getState($stateFile);
+
+        // Should have empty state
+        $this->assertEmpty($state);
+    }
+
+    // =========================================================================
+    // Formatting Edge Cases
+    // =========================================================================
+
+    public function testFormatIntervalExactlyOneMinute(): void
+    {
+        $result = RollupProcessor::formatInterval(60);
+        $this->assertEquals('1 minutes', $result);
+    }
+
+    public function testFormatIntervalExactlyOneHour(): void
+    {
+        $result = RollupProcessor::formatInterval(3600);
+        $this->assertEquals('1 hours', $result);
+    }
+
+    public function testFormatDurationExactlyOneHour(): void
+    {
+        $result = RollupProcessor::formatDuration(3600);
+        $this->assertEquals('1 hours', $result);
+    }
+
+    public function testFormatDurationExactlyOneDay(): void
+    {
+        $result = RollupProcessor::formatDuration(86400);
+        $this->assertEquals('1 days', $result);
+    }
+
+    public function testFormatIntervalZeroSeconds(): void
+    {
+        $result = RollupProcessor::formatInterval(0);
+        $this->assertEquals('0 seconds', $result);
+    }
+
+    // =========================================================================
+    // getTiersInfo Edge Cases
+    // =========================================================================
+
+    public function testGetTiersInfoWithNonexistentDirectory(): void
+    {
+        $getFilePath = fn($tier) => '/nonexistent/path/' . $tier . '.log';
+
+        $info = $this->processor->getTiersInfo($getFilePath);
+
+        foreach ($info as $tier => $tierInfo) {
+            $this->assertFalse($tierInfo['file_exists']);
+            $this->assertEquals(0, $tierInfo['file_size']);
+        }
+    }
+
+    public function testGetTiersInfoHasCorrectLabels(): void
+    {
+        $getFilePath = fn($tier) => $this->testTmpDir . '/' . $tier . '.log';
+
+        $info = $this->processor->getTiersInfo($getFilePath);
+
+        $this->assertEquals('1-minute averages', $info['1min']['label']);
+        $this->assertEquals('5-minute averages', $info['5min']['label']);
+        $this->assertEquals('30-minute averages', $info['30min']['label']);
+        $this->assertEquals('2-hour averages', $info['2hour']['label']);
+    }
 }

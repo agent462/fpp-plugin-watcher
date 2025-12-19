@@ -87,6 +87,11 @@ class MetricsPipelineTest extends TestCase
         };
 
         // Process 1-minute tier
+        // First, set last_rollup to past time so the interval check passes
+        $state = $this->processor->getState($this->stateFile);
+        $state['1min']['last_rollup'] = 0;  // Allow immediate processing
+        $this->processor->saveState($this->stateFile, $state);
+
         $tiers = $this->processor->getTiers();
         $this->processor->processTier(
             '1min',

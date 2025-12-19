@@ -4,8 +4,19 @@ to_delete/
 **/.DS_Store
 *.md
 .*/*
+
 # Keep README.md
 !README.md
+
 # Build artifacts
 *.o
 *.so
+tests/coverage-html/
+
+# PHPUnit
+.phpunit.result.cache
+.phpunit.cache/
+phpunit.phar
+phpunit-*.phar
+phpunit
+phpunit.xml.backup

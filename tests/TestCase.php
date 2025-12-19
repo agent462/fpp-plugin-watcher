@@ -14,6 +14,7 @@ use Watcher\Core\Logger;
 use Watcher\Core\FileManager;
 use Watcher\Core\Settings;
 use Watcher\MultiSync\Comparator;
+use Watcher\Metrics\SystemMetrics;
 
 abstract class TestCase extends PHPUnitTestCase
 {
@@ -89,6 +90,7 @@ abstract class TestCase extends PHPUnitTestCase
         FileManager::resetInstance();
         Settings::resetInstance();
         Comparator::resetInstance();
+        SystemMetrics::resetInstance();
     }
 
     /**

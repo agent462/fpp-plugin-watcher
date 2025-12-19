@@ -414,4 +414,413 @@ class ApiEndpointTest extends TestCase
             'Interface bandwidth should return array or false'
         );
     }
+
+    // =========================================================================
+    // Falcon Controller Endpoints
+    // =========================================================================
+
+    public function testFalconStatusEndpoint(): void
+    {
+        $result = $this->client->get("{$this->baseUrl}/falcon/status");
+
+        if ($result === false) {
+            $this->markTestSkipped('Falcon status endpoint not responding');
+        }
+
+        $this->assertIsArray($result);
+        $this->assertArrayHasKey('success', $result);
+    }
+
+    public function testFalconConfigGetEndpoint(): void
+    {
+        $result = $this->client->get("{$this->baseUrl}/falcon/config");
+
+        if ($result === false) {
+            $this->markTestSkipped('Falcon config endpoint not responding');
+        }
+
+        $this->assertIsArray($result);
+        $this->assertArrayHasKey('success', $result);
+    }
+
+    // =========================================================================
+    // Network Quality Endpoints
+    // =========================================================================
+
+    public function testNetworkQualityCurrentEndpoint(): void
+    {
+        $result = $this->client->get("{$this->baseUrl}/metrics/network-quality/current");
+
+        if ($result === false) {
+            $this->markTestSkipped('Network quality current endpoint not responding');
+        }
+
+        $this->assertIsArray($result);
+        $this->assertArrayHasKey('success', $result);
+    }
+
+    public function testNetworkQualityHistoryEndpoint(): void
+    {
+        $result = $this->client->get("{$this->baseUrl}/metrics/network-quality/history?hours=6");
+
+        if ($result === false) {
+            $this->markTestSkipped('Network quality history endpoint not responding');
+        }
+
+        $this->assertIsArray($result);
+        $this->assertArrayHasKey('success', $result);
+    }
+
+    // =========================================================================
+    // MultiSync Ping Endpoints
+    // =========================================================================
+
+    public function testMultiSyncPingRawEndpoint(): void
+    {
+        $result = $this->client->get("{$this->baseUrl}/metrics/multisync/ping/raw");
+
+        if ($result === false) {
+            $this->markTestSkipped('MultiSync ping raw endpoint not responding');
+        }
+
+        $this->assertIsArray($result);
+        $this->assertArrayHasKey('success', $result);
+    }
+
+    public function testMultiSyncPingRollupEndpoint(): void
+    {
+        $result = $this->client->get("{$this->baseUrl}/metrics/multisync/ping/rollup");
+
+        if ($result === false) {
+            $this->markTestSkipped('MultiSync ping rollup endpoint not responding');
+        }
+
+        $this->assertIsArray($result);
+        $this->assertArrayHasKey('success', $result);
+    }
+
+    public function testMultiSyncPingRollupTiersEndpoint(): void
+    {
+        $result = $this->client->get("{$this->baseUrl}/metrics/multisync/ping/rollup/tiers");
+
+        if ($result === false) {
+            $this->markTestSkipped('MultiSync ping rollup tiers endpoint not responding');
+        }
+
+        $this->assertIsArray($result);
+        $this->assertArrayHasKey('tiers', $result);
+    }
+
+    // =========================================================================
+    // Remote Bulk Endpoints
+    // =========================================================================
+
+    public function testRemoteBulkStatusEndpoint(): void
+    {
+        $result = $this->client->get("{$this->baseUrl}/remote/bulk/status");
+
+        if ($result === false) {
+            $this->markTestSkipped('Remote bulk status endpoint not responding');
+        }
+
+        $this->assertIsArray($result);
+        $this->assertArrayHasKey('success', $result);
+    }
+
+    public function testRemoteBulkUpdatesEndpoint(): void
+    {
+        $result = $this->client->get("{$this->baseUrl}/remote/bulk/updates", 15);
+
+        if ($result === false) {
+            $this->markTestSkipped('Remote bulk updates endpoint not responding');
+        }
+
+        $this->assertIsArray($result);
+        $this->assertArrayHasKey('success', $result);
+    }
+
+    // =========================================================================
+    // MQTT Endpoints
+    // =========================================================================
+
+    public function testMqttEventsEndpoint(): void
+    {
+        $result = $this->client->get("{$this->baseUrl}/mqtt/events?hours=24");
+
+        if ($result === false) {
+            $this->markTestSkipped('MQTT events endpoint not responding');
+        }
+
+        $this->assertIsArray($result);
+        $this->assertArrayHasKey('success', $result);
+    }
+
+    public function testMqttStatsEndpoint(): void
+    {
+        $result = $this->client->get("{$this->baseUrl}/mqtt/stats?hours=24");
+
+        if ($result === false) {
+            $this->markTestSkipped('MQTT stats endpoint not responding');
+        }
+
+        $this->assertIsArray($result);
+        $this->assertArrayHasKey('success', $result);
+    }
+
+    public function testMqttHostsEndpoint(): void
+    {
+        $result = $this->client->get("{$this->baseUrl}/mqtt/hosts");
+
+        if ($result === false) {
+            $this->markTestSkipped('MQTT hosts endpoint not responding');
+        }
+
+        $this->assertIsArray($result);
+        $this->assertArrayHasKey('success', $result);
+        $this->assertArrayHasKey('count', $result);
+        $this->assertArrayHasKey('hosts', $result);
+    }
+
+    // =========================================================================
+    // Wireless Endpoints
+    // =========================================================================
+
+    public function testWirelessMetricsEndpoint(): void
+    {
+        $result = $this->client->get("{$this->baseUrl}/metrics/wireless");
+
+        if ($result === false) {
+            $this->markTestSkipped('Wireless metrics endpoint not responding');
+        }
+
+        $this->assertIsArray($result);
+        $this->assertArrayHasKey('success', $result);
+    }
+
+    public function testWirelessInterfacesEndpoint(): void
+    {
+        $result = $this->client->get("{$this->baseUrl}/metrics/wireless/interfaces");
+
+        if ($result === false) {
+            $this->markTestSkipped('Wireless interfaces endpoint not responding');
+        }
+
+        $this->assertIsArray($result);
+        $this->assertArrayHasKey('count', $result);
+        $this->assertArrayHasKey('interfaces', $result);
+    }
+
+    // =========================================================================
+    // Additional eFuse Endpoints
+    // =========================================================================
+
+    public function testEfuseConfigEndpoint(): void
+    {
+        $result = $this->client->get("{$this->baseUrl}/efuse/config");
+
+        if ($result === false) {
+            $this->markTestSkipped('eFuse config endpoint not responding');
+        }
+
+        $this->assertIsArray($result);
+        $this->assertArrayHasKey('success', $result);
+    }
+
+    // =========================================================================
+    // Plugin Updates Endpoints
+    // =========================================================================
+
+    public function testLocalPluginUpdatesEndpoint(): void
+    {
+        $result = $this->client->get("{$this->baseUrl}/plugins/updates", 15);
+
+        if ($result === false) {
+            $this->markTestSkipped('Local plugin updates endpoint not responding');
+        }
+
+        $this->assertIsArray($result);
+        $this->assertArrayHasKey('success', $result);
+    }
+
+    // =========================================================================
+    // Playback Sync Endpoint
+    // =========================================================================
+
+    public function testRemotePlaybackSyncEndpoint(): void
+    {
+        $result = $this->client->get("{$this->baseUrl}/remote/playback/sync");
+
+        if ($result === false) {
+            $this->markTestSkipped('Playback sync endpoint not responding');
+        }
+
+        $this->assertIsArray($result);
+        $this->assertArrayHasKey('success', $result);
+        // Should have local and remotes keys
+        $this->assertArrayHasKey('local', $result);
+        $this->assertArrayHasKey('remotes', $result);
+    }
+
+    // =========================================================================
+    // Clock Drift Endpoint
+    // =========================================================================
+
+    public function testMultiSyncClockDriftEndpoint(): void
+    {
+        $result = $this->client->get("{$this->baseUrl}/multisync/clock-drift");
+
+        if ($result === false) {
+            $this->markTestSkipped('Clock drift endpoint not responding');
+        }
+
+        $this->assertIsArray($result);
+        $this->assertArrayHasKey('success', $result);
+    }
+
+    // =========================================================================
+    // Output Discrepancies Endpoint
+    // =========================================================================
+
+    public function testOutputDiscrepanciesEndpoint(): void
+    {
+        $result = $this->client->get("{$this->baseUrl}/outputs/discrepancies");
+
+        if ($result === false) {
+            $this->markTestSkipped('Output discrepancies endpoint not responding');
+        }
+
+        $this->assertIsArray($result);
+        $this->assertArrayHasKey('success', $result);
+    }
+
+    // =========================================================================
+    // Collectd Config Endpoint
+    // =========================================================================
+
+    public function testCollectdConfigEndpoint(): void
+    {
+        $result = $this->client->get("{$this->baseUrl}/config/collectd");
+
+        // This may return false if collectd config doesn't exist
+        if ($result === false) {
+            $this->markTestSkipped('Collectd config endpoint not responding or config not found');
+        }
+
+        $this->assertIsArray($result);
+    }
+
+    // =========================================================================
+    // Parameter Validation Tests
+    // =========================================================================
+
+    public function testRemoteStatusWithoutHostReturnsError(): void
+    {
+        $result = $this->client->get("{$this->baseUrl}/remote/status");
+
+        // Should return error without host parameter
+        // Could return false (HTTP error) or error response
+        $this->assertTrue(
+            $result === false ||
+            (is_array($result) && isset($result['success']) && $result['success'] === false),
+            'Remote status without host should return error'
+        );
+    }
+
+    public function testNetworkQualityHostWithoutAddressReturnsError(): void
+    {
+        $result = $this->client->get("{$this->baseUrl}/metrics/network-quality/host");
+
+        // Should return error without address parameter
+        $this->assertTrue(
+            $result === false ||
+            (is_array($result) && isset($result['success']) && $result['success'] === false),
+            'Network quality host without address should return error'
+        );
+    }
+
+    public function testPingCheckWithoutIpsReturnsError(): void
+    {
+        $result = $this->client->get("{$this->baseUrl}/ping/check");
+
+        // Should return error without ips parameter
+        $this->assertTrue(
+            $result === false ||
+            (is_array($result) && isset($result['success']) && $result['success'] === false),
+            'Ping check without ips should return error'
+        );
+    }
+
+    public function testMultiSyncComparisonHostWithInvalidAddressReturnsError(): void
+    {
+        $result = $this->client->get("{$this->baseUrl}/multisync/comparison/host?address=not-an-ip");
+
+        // Should return error with invalid IP
+        $this->assertTrue(
+            $result === false ||
+            (is_array($result) && isset($result['success']) && $result['success'] === false),
+            'Comparison host with invalid IP should return error'
+        );
+    }
+
+    // =========================================================================
+    // Hours Parameter Validation Tests
+    // =========================================================================
+
+    public function testHoursParameterClampsToMinimum(): void
+    {
+        // Test with hours=0 (should be clamped to 1)
+        $result = $this->client->get("{$this->baseUrl}/metrics/ping/rollup?hours=0");
+
+        if ($result === false) {
+            $this->markTestSkipped('Ping rollup endpoint not responding');
+        }
+
+        // Should still return valid response
+        $this->assertIsArray($result);
+        $this->assertArrayHasKey('success', $result);
+    }
+
+    public function testHoursParameterClampsToMaximum(): void
+    {
+        // Test with hours=9999 (should be clamped to 2160)
+        $result = $this->client->get("{$this->baseUrl}/metrics/ping/rollup?hours=9999");
+
+        if ($result === false) {
+            $this->markTestSkipped('Ping rollup endpoint not responding');
+        }
+
+        // Should still return valid response
+        $this->assertIsArray($result);
+        $this->assertArrayHasKey('success', $result);
+    }
+
+    public function testHoursParameterHandlesNonNumeric(): void
+    {
+        // Test with non-numeric hours
+        $result = $this->client->get("{$this->baseUrl}/metrics/ping/rollup?hours=abc");
+
+        if ($result === false) {
+            $this->markTestSkipped('Ping rollup endpoint not responding');
+        }
+
+        // Should still return valid response (will use minimum)
+        $this->assertIsArray($result);
+        $this->assertArrayHasKey('success', $result);
+    }
+
+    // =========================================================================
+    // Ping Rollup Tier Endpoint
+    // =========================================================================
+
+    public function testPingRollupTierEndpoint(): void
+    {
+        $result = $this->client->get("{$this->baseUrl}/metrics/ping/rollup/1min");
+
+        if ($result === false) {
+            $this->markTestSkipped('Ping rollup tier endpoint not responding');
+        }
+
+        $this->assertIsArray($result);
+        $this->assertArrayHasKey('success', $result);
+    }
 }

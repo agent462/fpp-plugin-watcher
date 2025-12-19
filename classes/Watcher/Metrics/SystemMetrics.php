@@ -51,6 +51,14 @@ class SystemMetrics
     }
 
     /**
+     * Reset singleton instance (useful for testing)
+     */
+    public static function resetInstance(): void
+    {
+        self::$instance = null;
+    }
+
+    /**
      * Fetch ping metrics from the last N hours
      */
     public function getPingMetrics(int $hoursBack = 24): array

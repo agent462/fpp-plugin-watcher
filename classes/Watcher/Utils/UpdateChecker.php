@@ -89,25 +89,14 @@ class UpdateChecker
     public function getLatestFPPRelease(): ?array
     {
         // Check cache first
-        $cacheData = null;
-        if (file_exists(self::FPP_RELEASE_CACHE_FILE)) {
-            $cacheData = json_decode(file_get_contents(self::FPP_RELEASE_CACHE_FILE), true);
-            if ($cacheData && isset($cacheData['timestamp']) &&
-                (time() - $cacheData['timestamp']) < self::FPP_RELEASE_CACHE_TTL) {
-                return $cacheData['release'];
-            }
+        $cacheData = $this->readCacheFile();
+        if ($cacheData && isset($cacheData['timestamp']) &&
+            (time() - $cacheData['timestamp']) < self::FPP_RELEASE_CACHE_TTL) {
+            return $cacheData['release'] ?? null;
         }
 
         // Fetch from GitHub
-        $ctx = stream_context_create([
-            'http' => [
-                'method' => 'GET',
-                'header' => "User-Agent: FPP-Watcher-Plugin\r\n",
-                'timeout' => 10
-            ]
-        ]);
-
-        $response = @file_get_contents(self::FPP_RELEASES_URL, false, $ctx);
+        $response = $this->fetchUrl(self::FPP_RELEASES_URL, 10);
         if ($response === false) {
             // Return cached data if available, even if expired
             if ($cacheData && isset($cacheData['release'])) {
@@ -124,7 +113,7 @@ class UpdateChecker
         // Find the latest stable (non-prerelease, non-draft) release
         $latestRelease = null;
         foreach ($releases as $release) {
-            if (!$release['prerelease'] && !$release['draft']) {
+            if (!($release['prerelease'] ?? true) && !($release['draft'] ?? true)) {
                 $latestRelease = [
                     'tag' => $release['tag_name'],
                     'version' => ltrim($release['tag_name'], 'v'),
@@ -142,10 +131,59 @@ class UpdateChecker
                 'timestamp' => time(),
                 'release' => $latestRelease
             ];
-            @file_put_contents(self::FPP_RELEASE_CACHE_FILE, json_encode($cacheData));
+            $this->writeCacheFile($cacheData);
         }
 
         return $latestRelease;
+    }
+
+    /**
+     * Read the FPP release cache file
+     *
+     * @return array|null Cache data or null if not available
+     */
+    protected function readCacheFile(): ?array
+    {
+        if (!file_exists(self::FPP_RELEASE_CACHE_FILE)) {
+            return null;
+        }
+        $content = @file_get_contents(self::FPP_RELEASE_CACHE_FILE);
+        if ($content === false) {
+            return null;
+        }
+        $data = json_decode($content, true);
+        return is_array($data) ? $data : null;
+    }
+
+    /**
+     * Write the FPP release cache file
+     *
+     * @param array $data Cache data to write
+     * @return bool True on success
+     */
+    protected function writeCacheFile(array $data): bool
+    {
+        return @file_put_contents(self::FPP_RELEASE_CACHE_FILE, json_encode($data)) !== false;
+    }
+
+    /**
+     * Fetch a URL with timeout
+     *
+     * @param string $url URL to fetch
+     * @param int $timeout Timeout in seconds
+     * @return string|false Response body or false on failure
+     */
+    protected function fetchUrl(string $url, int $timeout = 10)
+    {
+        $ctx = stream_context_create([
+            'http' => [
+                'method' => 'GET',
+                'header' => "User-Agent: FPP-Watcher-Plugin\r\n",
+                'timeout' => $timeout
+            ]
+        ]);
+
+        return @file_get_contents($url, false, $ctx);
     }
 
     /**
