@@ -25,11 +25,12 @@
     const PORTS_PER_CHART = 16;
     const MAX_CHART_POINTS = 200; // Downsample to this many points per line
     const CONTROL_COOLDOWN_MS = 500; // Rate limiting for control actions
-    const AUTO_REFRESH_INTERVAL_MS = 10000; // 10s auto-refresh for current data
+    const AUTO_REFRESH_INTERVAL_MS = 3000; // 3s auto-refresh for current data
 
     let efuseCharts = {};
     let currentPortData = {};
     let selectedPort = null;
+    let selectedPortConfig = null;  // Cached config for selected port
     let refreshInterval = null;
     let chartSkeletonsCreated = false;
     let lastControlAction = 0;
@@ -497,9 +498,12 @@
     function updatePortDetailControls(portData) {
         // Controls are now rendered as part of updatePortOutputConfig
         // This function is called to refresh after API operations
-        // Re-render the output config to update control state
+        // Merge with cached config to preserve protocol/brightness/etc
         if (portData) {
-            updatePortOutputConfig(portData);
+            const mergedData = selectedPortConfig
+                ? { ...portData, ...selectedPortConfig }
+                : portData;
+            updatePortOutputConfig(mergedData);
         }
     }
 
@@ -902,11 +906,8 @@
         // Show panel
         panel.style.display = 'block';
 
-        // Load port history
+        // Load port history (also updates output config with merged data)
         await loadPortHistory(portName);
-
-        // Load output config
-        updatePortOutputConfig(portData);
     }
 
     /**
@@ -941,6 +942,16 @@
 
             // Update chart
             updatePortHistoryChart(data);
+
+            // Update output config with data from history response
+            if (data.config) {
+                // Cache config for selected port
+                selectedPortConfig = data.config;
+                const portData = currentPortData[portName] || {};
+                // Merge config into port data for display
+                const mergedData = { ...portData, ...data.config };
+                updatePortOutputConfig(mergedData);
+            }
 
         } catch (error) {
             console.error('Error loading port history:', error);
@@ -1279,6 +1290,7 @@
             panel.style.display = 'none';
         }
         selectedPort = null;
+        selectedPortConfig = null;
     }
 
     /**

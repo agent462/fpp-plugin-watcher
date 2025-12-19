@@ -459,6 +459,8 @@ class EfuseCollector extends BaseMetricsCollector
             $startTime = intval(floor($startTime / $interval) * $interval);
             $endTime = intval(floor($endTime / $interval) * $interval);
         }
+        // Subtract 2 intervals from end to avoid incomplete current buckets
+        $endTime = $endTime - (2 * $interval);
 
         $history = [];
         for ($ts = $startTime; $ts <= $endTime; $ts += $interval) {

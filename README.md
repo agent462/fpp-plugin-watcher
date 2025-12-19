@@ -120,7 +120,7 @@ Watcher runs several background daemons managed by FPP:
 ### Data Storage
 
 Metrics are stored in `/home/fpp/media/plugin-data/fpp-plugin-watcher/`:
-- Ping metrics with automatic rollup (1min, 5min, 15min, 1hour tiers)
+- Ping metrics with automatic rollup (1min, 5min, 30min, 2hour tiers)
 - Multi-sync ping metrics per remote host
 - eFuse current readings and heatmap data
 - MQTT events log

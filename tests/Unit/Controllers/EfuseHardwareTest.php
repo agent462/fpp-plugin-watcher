@@ -298,13 +298,13 @@ class EfuseHardwareTest extends TestCase
 
         $this->assertIsArray($result);
         $this->assertArrayHasKey('totalMa', $result);
-        $this->assertArrayHasKey('totalA', $result);
+        $this->assertArrayHasKey('totalAmps', $result);
         $this->assertArrayHasKey('portCount', $result);
-        $this->assertArrayHasKey('activePorts', $result);
+        $this->assertArrayHasKey('activePortCount', $result);
 
         $this->assertEquals(0, $result['totalMa']);
-        $this->assertEquals(0.0, $result['totalA']);
-        $this->assertEquals(0, $result['activePorts']);
+        $this->assertEquals(0.0, $result['totalAmps']);
+        $this->assertEquals(0, $result['activePortCount']);
     }
 
     public function testCalculateTotalCurrentWithSampleData(): void
@@ -319,8 +319,8 @@ class EfuseHardwareTest extends TestCase
 
         $this->assertIsArray($result);
         $this->assertEquals(7000, $result['totalMa']);
-        $this->assertEquals(7.0, $result['totalA']);
-        $this->assertEquals(3, $result['activePorts']);
+        $this->assertEquals(7.0, $result['totalAmps']);
+        $this->assertEquals(3, $result['activePortCount']);
     }
 
     public function testCalculateTotalCurrentIgnoresTotalKey(): void
@@ -347,7 +347,7 @@ class EfuseHardwareTest extends TestCase
         $result = $this->hardware->calculateTotalCurrent($readings);
 
         $this->assertEquals(0, $result['totalMa']);
-        $this->assertEquals(0, $result['activePorts']);
+        $this->assertEquals(0, $result['activePortCount']);
     }
 
     public function testCalculateTotalCurrentWithMixedValues(): void
@@ -362,7 +362,7 @@ class EfuseHardwareTest extends TestCase
         $result = $this->hardware->calculateTotalCurrent($readings);
 
         $this->assertEquals(3000, $result['totalMa']);
-        $this->assertEquals(2, $result['activePorts']);
+        $this->assertEquals(2, $result['activePortCount']);
     }
 
     public function testCalculateTotalCurrentRoundsCorrectly(): void
@@ -375,19 +375,19 @@ class EfuseHardwareTest extends TestCase
         $result = $this->hardware->calculateTotalCurrent($readings);
 
         $this->assertEquals(6912, $result['totalMa']);
-        $this->assertEquals(6.91, $result['totalA']); // Should round to 2 decimal places
+        $this->assertEquals(6.91, $result['totalAmps']); // Should round to 2 decimal places
     }
 
     /**
      * @dataProvider currentCalculationProvider
      */
-    public function testCalculateTotalCurrentDataProvider(array $readings, int $expectedMa, float $expectedA, int $expectedActive): void
+    public function testCalculateTotalCurrentDataProvider(array $readings, int $expectedMa, float $expectedAmps, int $expectedActive): void
     {
         $result = $this->hardware->calculateTotalCurrent($readings);
 
         $this->assertEquals($expectedMa, $result['totalMa']);
-        $this->assertEquals($expectedA, $result['totalA']);
-        $this->assertEquals($expectedActive, $result['activePorts']);
+        $this->assertEquals($expectedAmps, $result['totalAmps']);
+        $this->assertEquals($expectedActive, $result['activePortCount']);
     }
 
     public static function currentCalculationProvider(): array
@@ -427,6 +427,100 @@ class EfuseHardwareTest extends TestCase
         $result = $this->hardware->getPortCurrentSummary([]);
 
         $this->assertIsArray($result);
+    }
+
+    public function testGetPortCurrentSummaryReturnsExpectedFields(): void
+    {
+        // Get output config to know what ports are configured
+        $outputConfig = \Watcher\Controllers\EfuseOutputConfig::getInstance()->getOutputConfig();
+
+        if (empty($outputConfig['ports'])) {
+            $this->markTestSkipped('No configured ports to test');
+        }
+
+        $portName = array_key_first($outputConfig['ports']);
+        $readings = [$portName => 1500];
+
+        $result = $this->hardware->getPortCurrentSummary($readings);
+
+        $this->assertIsArray($result);
+        $this->assertArrayHasKey($portName, $result);
+
+        $portData = $result[$portName];
+
+        // Core fields
+        $this->assertArrayHasKey('name', $portData);
+        $this->assertArrayHasKey('label', $portData);
+        $this->assertArrayHasKey('currentMa', $portData);
+        $this->assertArrayHasKey('currentA', $portData);
+        $this->assertArrayHasKey('status', $portData);
+        $this->assertArrayHasKey('portEnabled', $portData);
+        $this->assertArrayHasKey('fuseTripped', $portData);
+        $this->assertArrayHasKey('enabled', $portData);
+        $this->assertArrayHasKey('pixelCount', $portData);
+
+        // Expected current fields (CRITICAL - these were missing before fix)
+        $this->assertArrayHasKey('expectedCurrentMa', $portData, 'expectedCurrentMa field is required for UI');
+        $this->assertArrayHasKey('maxCurrentMa', $portData, 'maxCurrentMa field is required for UI');
+
+        // Output config fields (needed for port detail panel)
+        $this->assertArrayHasKey('protocol', $portData, 'protocol field is required for output config display');
+        $this->assertArrayHasKey('brightness', $portData, 'brightness field is required for output config display');
+        $this->assertArrayHasKey('colorOrder', $portData, 'colorOrder field is required for output config display');
+        $this->assertArrayHasKey('description', $portData, 'description field is required for output config display');
+    }
+
+    public function testGetPortCurrentSummaryCurrentValues(): void
+    {
+        $outputConfig = \Watcher\Controllers\EfuseOutputConfig::getInstance()->getOutputConfig();
+
+        if (empty($outputConfig['ports'])) {
+            $this->markTestSkipped('No configured ports to test');
+        }
+
+        $portName = array_key_first($outputConfig['ports']);
+        $readings = [$portName => 2500];
+
+        $result = $this->hardware->getPortCurrentSummary($readings);
+        $portData = $result[$portName];
+
+        $this->assertEquals(2500, $portData['currentMa']);
+        $this->assertEquals(2.5, $portData['currentA']);
+    }
+
+    public function testGetPortCurrentSummaryExpectedCurrentIsCalculated(): void
+    {
+        $outputConfig = \Watcher\Controllers\EfuseOutputConfig::getInstance()->getOutputConfig();
+
+        if (empty($outputConfig['ports'])) {
+            $this->markTestSkipped('No configured ports to test');
+        }
+
+        $portName = array_key_first($outputConfig['ports']);
+        $portConfig = $outputConfig['ports'][$portName];
+
+        // Skip if port has no pixels configured
+        if (empty($portConfig['pixelCount'])) {
+            $this->markTestSkipped('Port has no pixels configured');
+        }
+
+        $readings = [$portName => 1000];
+        $result = $this->hardware->getPortCurrentSummary($readings);
+        $portData = $result[$portName];
+
+        // expectedCurrentMa should match the output config
+        $this->assertEquals(
+            $portConfig['expectedCurrentMa'],
+            $portData['expectedCurrentMa'],
+            'expectedCurrentMa should come from output config'
+        );
+
+        // maxCurrentMa should match the output config
+        $this->assertEquals(
+            $portConfig['maxCurrentMa'],
+            $portData['maxCurrentMa'],
+            'maxCurrentMa should come from output config'
+        );
     }
 
     // =========================================================================
@@ -883,8 +977,8 @@ class EfuseHardwareTest extends TestCase
 
         $this->assertIsArray($result);
         $this->assertArrayHasKey('totalMa', $result);
-        $this->assertArrayHasKey('totalA', $result);
-        $this->assertArrayHasKey('activePorts', $result);
+        $this->assertArrayHasKey('totalAmps', $result);
+        $this->assertArrayHasKey('activePortCount', $result);
     }
 
     // =========================================================================
@@ -991,8 +1085,8 @@ class EfuseHardwareTest extends TestCase
         $result = $this->hardware->calculateTotalCurrent($readings);
 
         $this->assertEquals(24000, $result['totalMa']);
-        $this->assertEquals(24.0, $result['totalA']);
-        $this->assertEquals(4, $result['activePorts']);
+        $this->assertEquals(24.0, $result['totalAmps']);
+        $this->assertEquals(4, $result['activePortCount']);
     }
 
     public function testCalculateTotalCurrentWithSmallValues(): void
@@ -1006,8 +1100,8 @@ class EfuseHardwareTest extends TestCase
         $result = $this->hardware->calculateTotalCurrent($readings);
 
         $this->assertEquals(6, $result['totalMa']);
-        $this->assertEquals(0.01, $result['totalA']); // Rounded
-        $this->assertEquals(3, $result['activePorts']);
+        $this->assertEquals(0.01, $result['totalAmps']); // Rounded
+        $this->assertEquals(3, $result['activePortCount']);
     }
 
     // =========================================================================

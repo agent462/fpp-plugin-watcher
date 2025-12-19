@@ -984,7 +984,13 @@ class EfuseHardware
                 'fuseTripped' => $portStatus['fuseTripped'] ?? false,
                 // Output config fields
                 'enabled' => $portConfig['enabled'] ?? false,
-                'pixelCount' => $portConfig['pixelCount'] ?? 0
+                'pixelCount' => $portConfig['pixelCount'] ?? 0,
+                'expectedCurrentMa' => $portConfig['expectedCurrentMa'] ?? 0,
+                'maxCurrentMa' => $portConfig['maxCurrentMa'] ?? 0,
+                'protocol' => $portConfig['protocol'] ?? null,
+                'brightness' => $portConfig['brightness'] ?? null,
+                'colorOrder' => $portConfig['colorOrder'] ?? null,
+                'description' => $portConfig['description'] ?? null
             ];
         }
 
@@ -1016,9 +1022,9 @@ class EfuseHardware
 
         return [
             'totalMa' => $totalMa,
-            'totalA' => round($totalMa / 1000, 2),
+            'totalAmps' => round($totalMa / 1000, 2),
             'portCount' => count($outputConfig['ports']),
-            'activePorts' => $activePorts
+            'activePortCount' => $activePorts
         ];
     }
 
