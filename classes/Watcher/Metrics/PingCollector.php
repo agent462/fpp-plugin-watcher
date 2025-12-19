@@ -11,27 +11,17 @@ use Watcher\Core\Logger;
  * Handles RRD-style rollup of ping metrics into multiple time resolutions
  * for efficient long-term storage and querying.
  */
-class PingCollector
+class PingCollector extends BaseMetricsCollector
 {
     private const STATE_FILE_SUFFIX = '/rollup-state.json';
 
-    private static ?self $instance = null;
-    private RollupProcessor $rollup;
-    private MetricsStorage $storage;
-    private Logger $logger;
-    private string $dataDir;
-    private string $metricsFile;
+    protected static ?self $instance = null;
 
-    private function __construct(
-        ?RollupProcessor $rollup = null,
-        ?MetricsStorage $storage = null,
-        ?Logger $logger = null
-    ) {
-        $this->rollup = $rollup ?? new RollupProcessor();
-        $this->storage = $storage ?? new MetricsStorage();
-        $this->logger = $logger ?? Logger::getInstance();
-
-        // Use centralized data directory constant if available
+    /**
+     * Initialize data directory and metrics file paths
+     */
+    protected function initializePaths(): void
+    {
         $this->dataDir = defined('WATCHERPINGDIR')
             ? WATCHERPINGDIR
             : '/home/fpp/media/logs/watcher-data/ping';
@@ -40,49 +30,12 @@ class PingCollector
             : '/home/fpp/media/logs/fpp-plugin-watcher-ping-metrics.log';
     }
 
-    public static function getInstance(): self
-    {
-        return self::$instance ??= new self();
-    }
-
     /**
-     * Get rollup file path for a specific tier
+     * Get state file suffix
      */
-    public function getRollupFilePath(string $tier): string
+    protected function getStateFileSuffix(): string
     {
-        return $this->dataDir . "/{$tier}.log";
-    }
-
-    /**
-     * Get state file path
-     */
-    public function getStateFilePath(): string
-    {
-        return $this->dataDir . self::STATE_FILE_SUFFIX;
-    }
-
-    /**
-     * Get or initialize rollup state
-     */
-    public function getRollupState(): array
-    {
-        return $this->rollup->getState($this->getStateFilePath());
-    }
-
-    /**
-     * Save rollup state to disk
-     */
-    public function saveRollupState(array $state): bool
-    {
-        return $this->rollup->saveState($this->getStateFilePath(), $state);
-    }
-
-    /**
-     * Read raw ping metrics from the metrics file
-     */
-    public function readRawMetrics(int $sinceTimestamp = 0): array
-    {
-        return $this->storage->read($this->metricsFile, $sinceTimestamp);
+        return self::STATE_FILE_SUFFIX;
     }
 
     /**
@@ -164,110 +117,5 @@ class PingCollector
             'period_start' => $bucketStart,
             'period_end' => $bucketStart + $interval
         ], $aggregated);
-    }
-
-    /**
-     * Process rollup for a specific tier
-     */
-    public function processRollupTier(string $tier, array $tierConfig): void
-    {
-        $self = $this;
-        $this->rollup->processTier(
-            $tier,
-            $tierConfig,
-            $this->getStateFilePath(),
-            $this->metricsFile,
-            fn($t) => $self->getRollupFilePath($t),
-            fn($metrics, $start, $interval) => $self->aggregateForRollup($metrics, $start, $interval)
-        );
-    }
-
-    /**
-     * Append rollup entries to a rollup file
-     */
-    public function appendRollupEntries(string $rollupFile, array $entries): bool
-    {
-        return $this->rollup->appendRollupEntries($rollupFile, $entries);
-    }
-
-    /**
-     * Process all rollup tiers
-     */
-    public function processAllRollups(): void
-    {
-        foreach ($this->rollup->getTiers() as $tier => $config) {
-            try {
-                $this->processRollupTier($tier, $config);
-            } catch (\Exception $e) {
-                $this->logger->error("ERROR processing rollup tier {$tier}: " . $e->getMessage());
-            }
-        }
-    }
-
-    /**
-     * Read rollup data from a specific tier
-     */
-    public function readRollupData(string $tier, ?int $startTime = null, ?int $endTime = null): array
-    {
-        $rollupFile = $this->getRollupFilePath($tier);
-        return $this->rollup->readRollupData($rollupFile, $tier, $startTime, $endTime);
-    }
-
-    /**
-     * Get the best rollup tier for a given time range
-     */
-    public function getBestRollupTier(int $hoursBack): string
-    {
-        return $this->rollup->getBestTierForHours($hoursBack);
-    }
-
-    /**
-     * Get ping metrics with automatic tier selection
-     */
-    public function getMetrics(int $hoursBack = 24): array
-    {
-        $endTime = time();
-        $startTime = $endTime - ($hoursBack * 3600);
-
-        $tier = $this->getBestRollupTier($hoursBack);
-        $tiers = $this->rollup->getTiers();
-        $tierConfig = $tiers[$tier];
-
-        $result = $this->readRollupData($tier, $startTime, $endTime);
-
-        if ($result['success']) {
-            $result['tier_info'] = [
-                'tier' => $tier,
-                'interval' => $tierConfig['interval'],
-                'label' => $tierConfig['label']
-            ];
-        }
-
-        return $result;
-    }
-
-    /**
-     * Get available rollup tiers information
-     */
-    public function getRollupTiersInfo(): array
-    {
-        $self = $this;
-        return $this->rollup->getTiersInfo(fn($t) => $self->getRollupFilePath($t));
-    }
-
-    /**
-     * Get the RollupProcessor instance
-     */
-    public function getRollupProcessor(): RollupProcessor
-    {
-        return $this->rollup;
-    }
-
-    /**
-     * Get the MetricsStorage instance
-     */
-    public function getMetricsStorage(): MetricsStorage
-    {
-        return $this->storage;
     }
 }

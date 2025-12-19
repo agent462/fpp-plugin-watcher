@@ -39,35 +39,37 @@ class TestableEfuseCollector extends EfuseCollector
         $this->testRawFile = $rawFile;
         $this->testStateFile = $stateFile;
 
-        // Use reflection to set parent private properties
-        $parent = new \ReflectionClass(EfuseCollector::class);
+        // Use reflection to set parent properties
+        // Note: dataDir and metricsFile are inherited from BaseMetricsCollector
+        $baseClass = new \ReflectionClass(\Watcher\Metrics\BaseMetricsCollector::class);
+        $efuseClass = new \ReflectionClass(EfuseCollector::class);
 
-        $dataDirProp = $parent->getProperty('dataDir');
+        $dataDirProp = $baseClass->getProperty('dataDir');
         $dataDirProp->setAccessible(true);
         $dataDirProp->setValue($this, $dataDir);
 
-        $rawFileProp = $parent->getProperty('rawFile');
-        $rawFileProp->setAccessible(true);
-        $rawFileProp->setValue($this, $rawFile);
+        $metricsFileProp = $baseClass->getProperty('metricsFile');
+        $metricsFileProp->setAccessible(true);
+        $metricsFileProp->setValue($this, $rawFile);
 
-        $stateFileProp = $parent->getProperty('stateFile');
+        $stateFileProp = $efuseClass->getProperty('stateFile');
         $stateFileProp->setAccessible(true);
         $stateFileProp->setValue($this, $stateFile);
 
-        $storageProp = $parent->getProperty('storage');
+        $storageProp = $baseClass->getProperty('storage');
         $storageProp->setAccessible(true);
         $storageProp->setValue($this, $storage ?? new MetricsStorage());
 
-        $loggerProp = $parent->getProperty('logger');
+        $loggerProp = $baseClass->getProperty('logger');
         $loggerProp->setAccessible(true);
         $loggerProp->setValue($this, $logger ?? Logger::getInstance());
 
-        $fileManagerProp = $parent->getProperty('fileManager');
+        $fileManagerProp = $efuseClass->getProperty('fileManager');
         $fileManagerProp->setAccessible(true);
         $fileManagerProp->setValue($this, $fileManager ?? FileManager::getInstance());
 
         if ($rollup !== null) {
-            $rollupProp = $parent->getProperty('rollup');
+            $rollupProp = $baseClass->getProperty('rollup');
             $rollupProp->setAccessible(true);
             $rollupProp->setValue($this, $rollup);
         }

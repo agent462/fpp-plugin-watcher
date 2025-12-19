@@ -14,56 +14,33 @@ use Watcher\Http\ApiClient;
  * - Round-trip latency (HTTP API response time)
  * - Jitter (latency variance using RFC 3550 algorithm)
  */
-class NetworkQualityCollector
+class NetworkQualityCollector extends BaseMetricsCollector
 {
     private const STATE_FILE_SUFFIX = '/rollup-state.json';
     private const METRICS_RETENTION_SECONDS = 25 * 60 * 60; // 25 hours
     private const EXPECTED_SYNC_RATE_PER_SECOND = 40;
 
-    private static ?self $instance = null;
-    private RollupProcessor $rollup;
-    private MetricsStorage $storage;
-    private Logger $logger;
-    private string $dataDir;
-    private string $metricsFile;
+    protected static ?self $instance = null;
     private array $jitterState = [];
     private array $sequenceStepTimeCache = [];
 
-    private function __construct(
-        ?RollupProcessor $rollup = null,
-        ?MetricsStorage $storage = null,
-        ?Logger $logger = null
-    ) {
-        $this->rollup = $rollup ?? new RollupProcessor();
-        $this->storage = $storage ?? new MetricsStorage();
-        $this->logger = $logger ?? Logger::getInstance();
-
-        // Use centralized data directory constant if available
+    /**
+     * Initialize data directory and metrics file paths
+     */
+    protected function initializePaths(): void
+    {
         $this->dataDir = defined('WATCHERNETWORKQUALITYDIR')
             ? WATCHERNETWORKQUALITYDIR
             : '/home/fpp/media/logs/watcher-data/network-quality';
         $this->metricsFile = $this->dataDir . '/raw.log';
     }
 
-    public static function getInstance(): self
-    {
-        return self::$instance ??= new self();
-    }
-
     /**
-     * Get rollup file path for a specific tier
+     * Get state file suffix
      */
-    public function getRollupFilePath(string $tier): string
+    protected function getStateFileSuffix(): string
     {
-        return $this->dataDir . "/{$tier}.log";
-    }
-
-    /**
-     * Get state file path
-     */
-    public function getStateFilePath(): string
-    {
-        return $this->dataDir . self::STATE_FILE_SUFFIX;
+        return self::STATE_FILE_SUFFIX;
     }
 
     /**
@@ -233,14 +210,6 @@ class NetworkQualityCollector
     public function writeMetrics(array $entries): bool
     {
         return $this->storage->writeBatch($this->metricsFile, $entries);
-    }
-
-    /**
-     * Read raw network quality metrics
-     */
-    public function readRawMetrics(int $sinceTimestamp = 0): array
-    {
-        return $this->storage->read($this->metricsFile, $sinceTimestamp);
     }
 
     /**
@@ -474,53 +443,7 @@ class NetworkQualityCollector
     }
 
     /**
-     * Get or initialize rollup state
-     */
-    public function getRollupState(): array
-    {
-        return $this->rollup->getState($this->getStateFilePath());
-    }
-
-    /**
-     * Save rollup state
-     */
-    public function saveRollupState(array $state): bool
-    {
-        return $this->rollup->saveState($this->getStateFilePath(), $state);
-    }
-
-    /**
-     * Process rollup for a specific tier
-     */
-    public function processRollupTier(string $tier, array $tierConfig): void
-    {
-        $self = $this;
-        $this->rollup->processTier(
-            $tier,
-            $tierConfig,
-            $this->getStateFilePath(),
-            $this->metricsFile,
-            fn($t) => $self->getRollupFilePath($t),
-            fn($metrics, $start, $interval) => $self->aggregateForRollup($metrics, $start, $interval)
-        );
-    }
-
-    /**
-     * Process all rollup tiers
-     */
-    public function processAllRollups(): void
-    {
-        foreach ($this->rollup->getTiers() as $tier => $config) {
-            try {
-                $this->processRollupTier($tier, $config);
-            } catch (\Exception $e) {
-                $this->logger->error("ERROR processing network quality rollup tier {$tier}: " . $e->getMessage());
-            }
-        }
-    }
-
-    /**
-     * Read rollup data from a specific tier
+     * Read rollup data from a specific tier with optional hostname filtering
      */
     public function readRollupData(string $tier, ?int $startTime = null, ?int $endTime = null, ?string $hostname = null): array
     {
@@ -545,14 +468,6 @@ class NetworkQualityCollector
         }
 
         return $result;
-    }
-
-    /**
-     * Get the best rollup tier for a given time range
-     */
-    public function getBestRollupTier(int $hoursBack): string
-    {
-        return $this->rollup->getBestTierForHours($hoursBack);
     }
 
     /**
@@ -853,35 +768,10 @@ class NetworkQualityCollector
     }
 
     /**
-     * Get rollup tier information
-     */
-    public function getRollupTiersInfo(): array
-    {
-        $self = $this;
-        return $this->rollup->getTiersInfo(fn($t) => $self->getRollupFilePath($t));
-    }
-
-    /**
      * Rotate raw metrics file
      */
     public function rotateMetricsFile(): void
     {
         $this->storage->rotate($this->metricsFile, self::METRICS_RETENTION_SECONDS);
-    }
-
-    /**
-     * Get the RollupProcessor instance
-     */
-    public function getRollupProcessor(): RollupProcessor
-    {
-        return $this->rollup;
-    }
-
-    /**
-     * Get the MetricsStorage instance
-     */
-    public function getMetricsStorage(): MetricsStorage
-    {
-        return $this->storage;
     }
 }

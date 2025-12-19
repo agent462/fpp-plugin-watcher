@@ -12,23 +12,21 @@ use Watcher\Core\FileManager;
  * Handles storage of eFuse current readings with time-based rollup aggregation.
  * Raw data is collected every 5 seconds and rolled up to 1-minute averages.
  */
-class EfuseCollector
+class EfuseCollector extends BaseMetricsCollector
 {
     private const STATE_FILE_SUFFIX = '/rollup-state.json';
     private const RAW_RETENTION = 21600; // 6 hours
     private const DEFAULT_RETENTION_DAYS = 7;
 
-    private static ?self $instance = null;
-    private ?RollupProcessor $rollup = null;
-    private MetricsStorage $storage;
-    private Logger $logger;
+    protected static ?self $instance = null;
     private FileManager $fileManager;
-    private string $dataDir;
-    private string $rawFile;
     private string $stateFile;
     private ?int $retentionDays = null;
 
-    private function __construct(
+    /**
+     * Override constructor for additional FileManager dependency and lazy rollup initialization
+     */
+    protected function __construct(
         ?RollupProcessor $rollup = null,
         ?MetricsStorage $storage = null,
         ?Logger $logger = null,
@@ -38,26 +36,44 @@ class EfuseCollector
         $this->logger = $logger ?? Logger::getInstance();
         $this->fileManager = $fileManager ?? FileManager::getInstance();
 
-        // Use centralized data directory constant if available
-        $this->dataDir = defined('WATCHEREFUSEDIR')
-            ? WATCHEREFUSEDIR
-            : '/home/fpp/media/logs/watcher-data/efuse';
-        $this->rawFile = defined('WATCHEREFUSERAWFILE')
-            ? WATCHEREFUSERAWFILE
-            : $this->dataDir . '/raw.log';
-        $this->stateFile = defined('WATCHEREFUSEROLLUPSTATEFILE')
-            ? WATCHEREFUSEROLLUPSTATEFILE
-            : $this->dataDir . self::STATE_FILE_SUFFIX;
+        $this->initializePaths();
 
-        // If a rollup processor was provided, use it
+        // Lazy initialization of rollup processor (with custom tiers)
         if ($rollup !== null) {
             $this->rollup = $rollup;
         }
     }
 
-    public static function getInstance(): self
+    /**
+     * Initialize data directory and metrics file paths
+     */
+    protected function initializePaths(): void
     {
-        return self::$instance ??= new self();
+        $this->dataDir = defined('WATCHEREFUSEDIR')
+            ? WATCHEREFUSEDIR
+            : '/home/fpp/media/logs/watcher-data/efuse';
+        $this->metricsFile = defined('WATCHEREFUSERAWFILE')
+            ? WATCHEREFUSERAWFILE
+            : $this->dataDir . '/raw.log';
+        $this->stateFile = defined('WATCHEREFUSEROLLUPSTATEFILE')
+            ? WATCHEREFUSEROLLUPSTATEFILE
+            : $this->dataDir . self::STATE_FILE_SUFFIX;
+    }
+
+    /**
+     * Get state file suffix
+     */
+    protected function getStateFileSuffix(): string
+    {
+        return self::STATE_FILE_SUFFIX;
+    }
+
+    /**
+     * Override getStateFilePath to use the stored property
+     */
+    public function getStateFilePath(): string
+    {
+        return $this->stateFile;
     }
 
     /**
@@ -65,7 +81,7 @@ class EfuseCollector
      */
     public function getRollupProcessor(): RollupProcessor
     {
-        if ($this->rollup === null) {
+        if (!isset($this->rollup)) {
             $this->rollup = new RollupProcessor($this->getTiers());
         }
         return $this->rollup;
@@ -110,22 +126,6 @@ class EfuseCollector
     }
 
     /**
-     * Get rollup file path for a specific tier
-     */
-    public function getRollupFilePath(string $tier): string
-    {
-        return $this->dataDir . "/{$tier}.log";
-    }
-
-    /**
-     * Get state file path
-     */
-    public function getStateFilePath(): string
-    {
-        return $this->stateFile;
-    }
-
-    /**
      * Select best tier for requested time range
      */
     public function getBestTierForHours(int $hours): string
@@ -160,11 +160,11 @@ class EfuseCollector
         $timestamp = date('Y-m-d H:i:s');
         $jsonData = json_encode($entry);
 
-        $fp = @fopen($this->rawFile, 'a');
+        $fp = @fopen($this->metricsFile, 'a');
         if (!$fp) {
             // Ensure directory exists
             ensureDataDirectories();
-            $fp = @fopen($this->rawFile, 'a');
+            $fp = @fopen($this->metricsFile, 'a');
             if (!$fp) {
                 $this->logger->error("Unable to open eFuse raw metrics file for writing");
                 return false;
@@ -180,7 +180,7 @@ class EfuseCollector
         }
 
         fclose($fp);
-        $this->fileManager->ensureFppOwnership($this->rawFile);
+        $this->fileManager->ensureFppOwnership($this->metricsFile);
 
         return $success;
     }
@@ -199,7 +199,7 @@ class EfuseCollector
             };
         }
 
-        return readJsonLinesFile($this->rawFile, $sinceTimestamp, $filterFn);
+        return readJsonLinesFile($this->metricsFile, $sinceTimestamp, $filterFn);
     }
 
     /**
@@ -214,7 +214,7 @@ class EfuseCollector
         foreach ($tiers as $tierName => $tierConfig) {
             // Determine source: raw data for 1min, previous tier for higher tiers
             if ($tierName === '1min') {
-                $sourceFile = $this->rawFile;
+                $sourceFile = $this->metricsFile;
             } else {
                 // Higher tiers aggregate from the previous tier
                 $tierOrder = array_keys($tiers);
@@ -234,12 +234,14 @@ class EfuseCollector
         }
 
         // Rotate the raw file
-        $this->storage->rotate($this->rawFile, self::RAW_RETENTION);
+        $this->storage->rotate($this->metricsFile, self::RAW_RETENTION);
     }
 
     /**
      * Aggregate eFuse metrics for a time bucket
      * Handles both raw metrics (port value is integer) and rollup metrics (port value is object)
+     *
+     * This method is aliased as aggregateForRollup for interface compatibility
      */
     public function aggregateBucket(array $metrics, int $bucketStart, int $interval): ?array
     {
@@ -302,6 +304,14 @@ class EfuseCollector
             'interval' => $interval,
             'ports' => $aggregatedPorts
         ];
+    }
+
+    /**
+     * Aggregation function for rollup processing (interface compatibility)
+     */
+    public function aggregateForRollup(array $bucketMetrics, int $bucketStart, int $interval): ?array
+    {
+        return $this->aggregateBucket($bucketMetrics, $bucketStart, $interval);
     }
 
     /**
@@ -636,13 +646,5 @@ class EfuseCollector
             'collectionInterval' => $config['efuseCollectionInterval'] ?? 5,
             'retentionDays' => $config['efuseRetentionDays'] ?? self::DEFAULT_RETENTION_DAYS
         ];
-    }
-
-    /**
-     * Get the MetricsStorage instance
-     */
-    public function getMetricsStorage(): MetricsStorage
-    {
-        return $this->storage;
     }
 }

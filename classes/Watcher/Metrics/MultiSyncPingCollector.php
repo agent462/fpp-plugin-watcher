@@ -12,29 +12,19 @@ use Watcher\Core\Logger;
  * metrics in a similar format to the connectivity check ping metrics.
  * Metrics are stored per-host for historical analysis.
  */
-class MultiSyncPingCollector
+class MultiSyncPingCollector extends BaseMetricsCollector
 {
     private const STATE_FILE_SUFFIX = '/rollup-state.json';
     private const METRICS_RETENTION_SECONDS = 25 * 60 * 60; // 25 hours
 
-    private static ?self $instance = null;
-    private RollupProcessor $rollup;
-    private MetricsStorage $storage;
-    private Logger $logger;
-    private string $dataDir;
-    private string $metricsFile;
+    protected static ?self $instance = null;
     private array $jitterState = [];
 
-    private function __construct(
-        ?RollupProcessor $rollup = null,
-        ?MetricsStorage $storage = null,
-        ?Logger $logger = null
-    ) {
-        $this->rollup = $rollup ?? new RollupProcessor();
-        $this->storage = $storage ?? new MetricsStorage();
-        $this->logger = $logger ?? Logger::getInstance();
-
-        // Use centralized data directory constant if available
+    /**
+     * Initialize data directory and metrics file paths
+     */
+    protected function initializePaths(): void
+    {
         $this->dataDir = defined('WATCHERMULTISYNCPINGDIR')
             ? WATCHERMULTISYNCPINGDIR
             : '/home/fpp/media/logs/watcher-data/multisync-ping';
@@ -43,25 +33,12 @@ class MultiSyncPingCollector
             : '/home/fpp/media/logs/fpp-plugin-watcher-multisync-ping-metrics.log';
     }
 
-    public static function getInstance(): self
-    {
-        return self::$instance ??= new self();
-    }
-
     /**
-     * Get rollup file path for a specific tier
+     * Get state file suffix
      */
-    public function getRollupFilePath(string $tier): string
+    protected function getStateFileSuffix(): string
     {
-        return $this->dataDir . "/{$tier}.log";
-    }
-
-    /**
-     * Get state file path
-     */
-    public function getStateFilePath(): string
-    {
-        return $this->dataDir . self::STATE_FILE_SUFFIX;
+        return self::STATE_FILE_SUFFIX;
     }
 
     /**
@@ -156,30 +133,6 @@ class MultiSyncPingCollector
     public function rotateMetricsFile(): void
     {
         $this->storage->rotate($this->metricsFile, self::METRICS_RETENTION_SECONDS);
-    }
-
-    /**
-     * Get or initialize rollup state
-     */
-    public function getRollupState(): array
-    {
-        return $this->rollup->getState($this->getStateFilePath());
-    }
-
-    /**
-     * Save rollup state to disk
-     */
-    public function saveRollupState(array $state): bool
-    {
-        return $this->rollup->saveState($this->getStateFilePath(), $state);
-    }
-
-    /**
-     * Read raw multi-sync ping metrics from the metrics file
-     */
-    public function readRawMetrics(int $sinceTimestamp = 0): array
-    {
-        return $this->storage->read($this->metricsFile, $sinceTimestamp);
     }
 
     /**
@@ -281,37 +234,7 @@ class MultiSyncPingCollector
     }
 
     /**
-     * Process rollup for a specific tier
-     */
-    public function processRollupTier(string $tier, array $tierConfig): void
-    {
-        $self = $this;
-        $this->rollup->processTier(
-            $tier,
-            $tierConfig,
-            $this->getStateFilePath(),
-            $this->metricsFile,
-            fn($t) => $self->getRollupFilePath($t),
-            fn($metrics, $start, $interval) => $self->aggregateForRollup($metrics, $start, $interval)
-        );
-    }
-
-    /**
-     * Process all rollup tiers
-     */
-    public function processAllRollups(): void
-    {
-        foreach ($this->rollup->getTiers() as $tier => $config) {
-            try {
-                $this->processRollupTier($tier, $config);
-            } catch (\Exception $e) {
-                $this->logger->error("ERROR processing multi-sync rollup tier {$tier}: " . $e->getMessage());
-            }
-        }
-    }
-
-    /**
-     * Read rollup data from a specific tier
+     * Read rollup data from a specific tier with optional hostname filtering
      */
     public function readRollupData(string $tier, ?int $startTime = null, ?int $endTime = null, ?string $hostname = null): array
     {
@@ -337,14 +260,6 @@ class MultiSyncPingCollector
         }
 
         return $result;
-    }
-
-    /**
-     * Get the best rollup tier for a given time range
-     */
-    public function getBestRollupTier(int $hoursBack): string
-    {
-        return $this->rollup->getBestTierForHours($hoursBack);
     }
 
     /**
@@ -415,32 +330,5 @@ class MultiSyncPingCollector
         }
 
         return $result;
-    }
-
-    /**
-     * Get information about available rollup tiers
-     *
-     * @return array Tier info including interval, retention, and file status
-     */
-    public function getRollupTiersInfo(): array
-    {
-        $self = $this;
-        return $this->rollup->getTiersInfo(fn($t) => $self->getRollupFilePath($t));
-    }
-
-    /**
-     * Get the RollupProcessor instance
-     */
-    public function getRollupProcessor(): RollupProcessor
-    {
-        return $this->rollup;
-    }
-
-    /**
-     * Get the MetricsStorage instance
-     */
-    public function getMetricsStorage(): MetricsStorage
-    {
-        return $this->storage;
     }
 }
