@@ -45,7 +45,7 @@ class NetworkAdapter
             return false;
         }
 
-        $isWifi = (strpos($adapter, 'wl') === 0);
+        $isWifi = str_starts_with($adapter, 'wl');
 
         if ($isWifi) {
             return $this->resetWifiAdapter($adapter);

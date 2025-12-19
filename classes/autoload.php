@@ -11,7 +11,7 @@
 
 spl_autoload_register(function ($class) {
     // Only handle Watcher namespace
-    if (strpos($class, 'Watcher\\') !== 0) {
+    if (!str_starts_with($class, 'Watcher\\')) {
         return;
     }
 

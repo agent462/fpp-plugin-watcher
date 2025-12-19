@@ -310,12 +310,16 @@ class EfuseCollector
     public function readRollup(int $hoursBack = 24, ?string $portFilter = null): array
     {
         $processor = $this->getRollupProcessor();
-        $endTime = time();
-        $startTime = $endTime - ($hoursBack * 3600);
-
         $bestTier = $this->getBestTierForHours($hoursBack);
         $tiers = $this->getTiers();
         $tierOrder = array_keys($tiers);
+        $interval = $tiers[$bestTier]['interval'] ?? 60;
+
+        // Align start/end times to interval boundaries to match getHeatmapData/getPortHistory
+        // This prevents the first timestamp from being excluded due to timing mismatches
+        $endTime = time();
+        $startTime = $endTime - ($hoursBack * 3600);
+        $startTime = intval(floor($startTime / $interval) * $interval);
 
         $filterFn = null;
         if ($portFilter !== null) {
@@ -410,6 +414,7 @@ class EfuseCollector
     public function getPortHistory(string $portName, int $hoursBack = 24): array
     {
         $tierInfo = null;
+        $period = null;
 
         // Use raw data for very short periods
         if ($hoursBack <= 1) {
@@ -423,6 +428,7 @@ class EfuseCollector
             $source = 'rollup';
             $tierInfo = $result['tier_info'] ?? null;
             $interval = $tierInfo['interval'] ?? 60;
+            $period = $result['period'] ?? null;
         }
 
         // Build indexed lookup by timestamp
@@ -433,10 +439,16 @@ class EfuseCollector
             $dataByTimestamp[$alignedTs] = $entry['ports'][$portName] ?? null;
         }
 
-        $endTime = time();
-        $startTime = $endTime - ($hoursBack * 3600);
-        $startTime = intval(floor($startTime / $interval) * $interval);
-        $endTime = intval(floor($endTime / $interval) * $interval);
+        // Use period from readRollup when available to prevent timing mismatches
+        if ($period) {
+            $startTime = $period['start'];
+            $endTime = intval(floor($period['end'] / $interval) * $interval);
+        } else {
+            $endTime = time();
+            $startTime = $endTime - ($hoursBack * 3600);
+            $startTime = intval(floor($startTime / $interval) * $interval);
+            $endTime = intval(floor($endTime / $interval) * $interval);
+        }
 
         $history = [];
         for ($ts = $startTime; $ts <= $endTime; $ts += $interval) {
@@ -516,9 +528,13 @@ class EfuseCollector
         }
 
         $interval = $tierInfo['interval'] ?? 60;
-        $endTime = time();
-        $startTime = $endTime - ($hoursBack * 3600);
-        $startTime = intval(floor($startTime / $interval) * $interval);
+
+        // Use the period from readRollup to ensure timestamp generation matches data query
+        // This prevents timing mismatches that cause spurious zeros at start/end
+        $period = $result['period'] ?? [];
+        $startTime = $period['start'] ?? (time() - ($hoursBack * 3600));
+        $endTime = $period['end'] ?? time();
+        // Subtract 2 intervals from end to avoid incomplete current buckets
         $endTime = intval(floor($endTime / $interval) * $interval) - (2 * $interval);
 
         $allTimestamps = [];

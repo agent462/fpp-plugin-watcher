@@ -186,7 +186,7 @@ function detectActiveNetworkInterface() {
                 $ip = $addr['local'];
 
                 // Skip link-local IPv4 addresses (169.254.x.x)
-                if (strpos($ip, '169.254.') === 0) {
+                if (str_starts_with($ip, '169.254.')) {
                     continue;
                 }
                 $ipv4Candidates[] = ['ip' => $ip, 'scope' => $scope];

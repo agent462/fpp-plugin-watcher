@@ -73,8 +73,8 @@ if (!function_exists('WriteSettingToFile')) {
         foreach ($tmpSettings as $key => $val) {
             // Handle JSON values (don't double-quote objects/arrays)
             if (is_string($val) && (
-                (strpos($val, '{') === 0 && strpos($val, '}') === strlen($val) - 1) ||
-                (strpos($val, '[') === 0 && strpos($val, ']') === strlen($val) - 1)
+                (str_starts_with($val, '{') && str_ends_with($val, '}')) ||
+                (str_starts_with($val, '[') && str_ends_with($val, ']'))
             )) {
                 $content .= $key . " = " . $val . "\n";
             } else {
