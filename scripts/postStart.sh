@@ -25,6 +25,30 @@ if [ -f "$CONFIG_FILE" ]; then
 
     # Check if collectd should be enabled (true, 1, or yes)
     if [ "$COLLECTD_ENABLED" = "true" ] || [ "$COLLECTD_ENABLED" = "1" ] || [ "$COLLECTD_ENABLED" = "yes" ]; then
+        # Sanity check: Verify required packages exist (may be wiped by OS upgrades)
+        # fpp_install.sh only runs on plugin updates, so we need to detect this here
+        PACKAGES_MISSING=0
+        for pkg in collectd-core rrdtool; do
+            if ! dpkg-query -W -f='${Status}' "$pkg" 2>/dev/null | grep -q "^install ok"; then
+                echo "Watcher: Required package '$pkg' is missing (possibly removed by OS upgrade)"
+                PACKAGES_MISSING=1
+            fi
+        done
+
+        if [ "$PACKAGES_MISSING" -eq 1 ]; then
+            echo "Watcher: Re-running install script to restore missing packages..."
+            if [ -f "$PLUGIN_DIR/scripts/fpp_install.sh" ]; then
+                sudo "$PLUGIN_DIR/scripts/fpp_install.sh"
+                if [ $? -eq 0 ]; then
+                    echo "Watcher: Install script completed successfully"
+                else
+                    echo "Watcher: WARNING - Install script failed, collectd may not work"
+                fi
+            else
+                echo "Watcher: WARNING - Install script not found"
+            fi
+        fi
+
         # collectd should be enabled - check if already running
         if systemctl is-active --quiet collectd.service; then
             echo "Watcher: collectd service is already running"

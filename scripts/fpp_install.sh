@@ -9,7 +9,7 @@ fi
 packages=(collectd-core rrdtool)
 missing_packages=()
 for pkg in "${packages[@]}"; do
-    if ! dpkg -s "$pkg" >/dev/null 2>&1; then
+    if ! dpkg-query -W -f='${Status}' "$pkg" 2>/dev/null | grep -q "^install ok"; then
         missing_packages+=("$pkg")
     fi
 done
