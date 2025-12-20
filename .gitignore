@@ -20,3 +20,7 @@ phpunit.phar
 phpunit-*.phar
 phpunit
 phpunit.xml.backup
+
+# Node.js / Jest
+node_modules/
+tests/js-coverage/
