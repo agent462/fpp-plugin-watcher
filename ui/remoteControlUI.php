@@ -682,7 +682,8 @@ async function fetchLocalStatus() {
                     mode_name: fppStatus.mode_name || '--',
                     status_name: fppStatus.status_name || 'idle',
                     rebootFlag: fppStatus.rebootFlag || 0,
-                    restartFlag: fppStatus.restartFlag || 0
+                    restartFlag: fppStatus.restartFlag || 0,
+                    warnings: fppStatus.warnings || []
                 };
             }
             if (testModeResponse.ok) {
@@ -2342,21 +2343,60 @@ async function fetchIssues() {
     }
 }
 
+function collectFppWarnings() {
+    const warnings = [];
+    const localHostname = '<?php echo htmlspecialchars($localHostname); ?>';
+
+    // Collect warnings from local host
+    if (localCache.status && Array.isArray(localCache.status.warnings)) {
+        localCache.status.warnings.forEach(msg => {
+            warnings.push({
+                type: 'fpp_warning',
+                severity: 'warning',
+                address: 'localhost',
+                hostname: localHostname,
+                message: msg
+            });
+        });
+    }
+
+    // Collect warnings from remote hosts
+    bulkStatusCache.forEach((hostData, address) => {
+        if (hostData.sysStatus && Array.isArray(hostData.sysStatus.warnings)) {
+            hostData.sysStatus.warnings.forEach(msg => {
+                warnings.push({
+                    type: 'fpp_warning',
+                    severity: 'warning',
+                    address: address,
+                    hostname: hostData.hostname || address,
+                    message: msg
+                });
+            });
+        }
+    });
+
+    return warnings;
+}
+
 function renderIssues(data) {
     const banner = document.getElementById('issuesBanner');
     const countEl = document.getElementById('issuesCount');
     const listEl = document.getElementById('issuesList');
 
-    if (!data || !data.discrepancies || data.discrepancies.length === 0) {
+    // Combine discrepancies from API with FPP warnings from cached status
+    const discrepancies = (data && data.discrepancies) ? [...data.discrepancies] : [];
+    const fppWarnings = collectFppWarnings();
+    const allIssues = [...discrepancies, ...fppWarnings];
+
+    if (allIssues.length === 0) {
         banner.classList.remove('visible');
         return;
     }
 
-    const discrepancies = data.discrepancies;
-    countEl.textContent = discrepancies.length;
+    countEl.textContent = allIssues.length;
 
     let html = '';
-    discrepancies.forEach(d => {
+    allIssues.forEach(d => {
         let icon, details = [];
 
         switch (d.type) {
@@ -2389,6 +2429,9 @@ function renderIssues(data) {
                 if (d.startChannel && d.channelCount) {
                     details.push(`<span><strong>Channels:</strong> ${d.startChannel}-${d.startChannel + d.channelCount - 1}</span>`);
                 }
+                break;
+            case 'fpp_warning':
+                icon = 'fa-exclamation-circle';
                 break;
             default:
                 icon = 'fa-question-circle';

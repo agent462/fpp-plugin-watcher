@@ -539,6 +539,79 @@ class ApiEndpointTest extends TestCase
         $this->assertArrayHasKey('success', $result);
     }
 
+    public function testRemoteBulkStatusHostDataStructure(): void
+    {
+        $result = $this->client->get("{$this->baseUrl}/remote/bulk/status");
+
+        if ($result === false) {
+            $this->markTestSkipped('Remote bulk status endpoint not responding');
+        }
+
+        if (empty($result['hosts'])) {
+            $this->markTestSkipped('No remote hosts available for testing');
+        }
+
+        // Verify structure of first host's data
+        $firstHost = reset($result['hosts']);
+        $this->assertIsArray($firstHost);
+        $this->assertArrayHasKey('success', $firstHost);
+        $this->assertArrayHasKey('hostname', $firstHost);
+        $this->assertArrayHasKey('status', $firstHost);
+        $this->assertArrayHasKey('testMode', $firstHost);
+        $this->assertArrayHasKey('sysStatus', $firstHost);
+        $this->assertArrayHasKey('connectivity', $firstHost);
+    }
+
+    public function testRemoteBulkStatusSysStatusWarningsFormat(): void
+    {
+        $result = $this->client->get("{$this->baseUrl}/remote/bulk/status");
+
+        if ($result === false) {
+            $this->markTestSkipped('Remote bulk status endpoint not responding');
+        }
+
+        if (empty($result['hosts'])) {
+            $this->markTestSkipped('No remote hosts available for testing');
+        }
+
+        // Find a host with sysStatus data
+        foreach ($result['hosts'] as $address => $hostData) {
+            if (!empty($hostData['sysStatus'])) {
+                // FPP may not include warnings key when there are no warnings
+                // If present, it should be an array
+                if (array_key_exists('warnings', $hostData['sysStatus'])) {
+                    $this->assertIsArray($hostData['sysStatus']['warnings'],
+                        "Host {$address} warnings should be an array when present");
+                } else {
+                    // No warnings key is valid - means no warnings on this host
+                    $this->assertTrue(true, "Host {$address} has no warnings key - valid state");
+                }
+                return; // Test passed - sysStatus structure verified
+            }
+        }
+
+        $this->markTestSkipped('No remote hosts with sysStatus data available');
+    }
+
+    public function testLocalFppdStatusWarningsFormat(): void
+    {
+        $result = $this->client->get('http://127.0.0.1/api/fppd/status');
+
+        if ($result === false) {
+            $this->markTestSkipped('Local fppd/status not responding');
+        }
+
+        $this->assertIsArray($result);
+        // FPP may not include warnings key when there are no warnings
+        // If present, it should be an array
+        if (array_key_exists('warnings', $result)) {
+            $this->assertIsArray($result['warnings'], 'warnings should be an array when present');
+        } else {
+            // No warnings key means no warnings - this is valid
+            $this->assertTrue(true, 'No warnings key present - FPP has no warnings');
+        }
+    }
+
     // =========================================================================
     // MQTT Endpoints
     // =========================================================================
@@ -823,4 +896,5 @@ class ApiEndpointTest extends TestCase
         $this->assertIsArray($result);
         $this->assertArrayHasKey('success', $result);
     }
+
 }
