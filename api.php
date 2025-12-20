@@ -203,6 +203,8 @@ function getEndpointsfpppluginwatcher() {
         ['method' => 'POST', 'endpoint' => 'falcon/test', 'callback' => 'fpppluginWatcherFalconTest'],
         ['method' => 'POST', 'endpoint' => 'falcon/reboot', 'callback' => 'fpppluginWatcherFalconReboot'],
         ['method' => 'GET', 'endpoint' => 'falcon/discover', 'callback' => 'fpppluginWatcherFalconDiscover'],
+        ['method' => 'POST', 'endpoint' => 'falcon/fuses/master', 'callback' => 'fpppluginWatcherFalconFusesMaster'],
+        ['method' => 'POST', 'endpoint' => 'falcon/fuses/reset', 'callback' => 'fpppluginWatcherFalconFusesReset'],
 
         // Remote systems list (single source of truth for filtered remote list)
         ['method' => 'GET', 'endpoint' => 'remotes', 'callback' => 'fpppluginWatcherRemotes'],
@@ -549,6 +551,80 @@ function fpppluginWatcherFalconDiscover() {
             'count' => count($discovered),
             'controllers' => $discovered
         ]);
+    } catch (Exception $e) {
+        return apiError($e->getMessage());
+    }
+}
+
+// POST /api/plugin/fpp-plugin-watcher/falcon/fuses/master
+function fpppluginWatcherFalconFusesMaster() {
+    $input = json_decode(file_get_contents('php://input'), true);
+
+    if (!isset($input['host'])) {
+        return apiError('Missing host parameter');
+    }
+
+    $host = trim($input['host']);
+    $enable = isset($input['enable']) ? (bool)$input['enable'] : true;
+
+    try {
+        $controller = new FalconController($host, 80, 5);
+
+        if (!$controller->isReachable()) {
+            return apiError('Controller not reachable');
+        }
+
+        if (!$controller->hasEfuseSupport()) {
+            return apiError('eFuse control not supported on this controller (F16V5 only)');
+        }
+
+        $result = $controller->setAllFuses($enable);
+
+        if ($result) {
+            return apiSuccess([
+                'message' => 'Fuses ' . ($enable ? 'enabled' : 'disabled'),
+                'host' => $host,
+                'fusesEnabled' => $enable
+            ]);
+        } else {
+            return apiError($controller->getLastError() ?: 'Failed to change fuse state');
+        }
+    } catch (Exception $e) {
+        return apiError($e->getMessage());
+    }
+}
+
+// POST /api/plugin/fpp-plugin-watcher/falcon/fuses/reset
+function fpppluginWatcherFalconFusesReset() {
+    $input = json_decode(file_get_contents('php://input'), true);
+
+    if (!isset($input['host'])) {
+        return apiError('Missing host parameter');
+    }
+
+    $host = trim($input['host']);
+
+    try {
+        $controller = new FalconController($host, 80, 5);
+
+        if (!$controller->isReachable()) {
+            return apiError('Controller not reachable');
+        }
+
+        if (!$controller->hasEfuseSupport()) {
+            return apiError('eFuse control not supported on this controller (F16V5 only)');
+        }
+
+        $result = $controller->resetAllFuses();
+
+        if ($result) {
+            return apiSuccess([
+                'message' => 'All fuses reset',
+                'host' => $host
+            ]);
+        } else {
+            return apiError($controller->getLastError() ?: 'Failed to reset fuses');
+        }
     } catch (Exception $e) {
         return apiError($e->getMessage());
     }

@@ -1610,4 +1610,156 @@ class FalconController
             'model' => self::getModelName($productCode),
         ];
     }
+
+    // ==================== EFUSE CONTROL (F16V5 ONLY) ====================
+
+    /**
+     * Check if this controller has eFuse support
+     * Only F16V5 controllers have eFuse hardware
+     */
+    public function hasEfuseSupport(?int $productCode = null): bool
+    {
+        if ($productCode === null) {
+            $status = $this->getStatus();
+            $productCode = $status['product_code'] ?? 0;
+        }
+
+        return $productCode === self::F16V5_PRODUCT_CODE;
+    }
+
+    /**
+     * Set all fuses on or off (F16V5 only)
+     * Uses FT (Fuse Toggle) API command
+     *
+     * @param bool $enabled True to enable fuses, false to disable
+     * @return bool Success
+     */
+    public function setAllFuses(bool $enabled): bool
+    {
+        if (!$this->hasEfuseSupport()) {
+            $this->lastError = 'Fuse control only supported on F16V5 controllers';
+            return false;
+        }
+
+        $result = $this->setV4Api('FT', ['T' => $enabled ? 1 : 0]);
+        return $result !== false;
+    }
+
+    /**
+     * Reset all fuses (re-enable after trip)
+     * Uses FR (Fuse Reset) API command
+     *
+     * @return bool Success
+     */
+    public function resetAllFuses(): bool
+    {
+        if (!$this->hasEfuseSupport()) {
+            $this->lastError = 'Fuse control only supported on F16V5 controllers';
+            return false;
+        }
+
+        // Use stdClass for empty object {} instead of empty array []
+        $request = [
+            'T' => 'S',
+            'M' => 'FR',
+            'B' => 0,
+            'E' => 0,
+            'I' => 0,
+            'P' => new \stdClass()
+        ];
+
+        $response = $this->httpPostJson('/api', $request);
+        return $response !== false;
+    }
+
+    /**
+     * Reset a specific port's fuse (F16V5 only)
+     * Uses TF (Toggle Fuse) API command
+     *
+     * @param int $port Port number (0-indexed)
+     * @param int $receiver Receiver ID (0 = main board, 1-6 = Smart Receivers A-F)
+     * @return bool Success
+     */
+    public function resetFuse(int $port, int $receiver = 0): bool
+    {
+        if (!$this->hasEfuseSupport()) {
+            $this->lastError = 'Fuse control only supported on F16V5 controllers';
+            return false;
+        }
+
+        $result = $this->setV4Api('TF', ['P' => $port, 'R' => $receiver]);
+        return $result !== false;
+    }
+
+    /**
+     * Get eFuse summary for this controller
+     * Returns port-level current and fuse status data
+     */
+    public function getEfuseSummary(): array
+    {
+        if (!$this->hasEfuseSupport()) {
+            return ['supported' => false];
+        }
+
+        $strings = $this->getStrings();
+        if ($strings === false) {
+            return ['supported' => false, 'error' => $this->lastError];
+        }
+
+        $ports = [];
+        $fuseablePorts = 0;
+        $activePorts = 0;
+        $trippedPorts = 0;
+        $totalCurrentMa = 0;
+
+        foreach ($strings['strings'] ?? [] as $string) {
+            $fuseStatus = $string['fuse_status'] ?? -1;
+            $currentMa = $string['current'] ?? 0;
+            $hasFuse = $fuseStatus >= 0;
+
+            $ports[] = [
+                'port' => $string['port'] ?? 0,
+                'name' => $string['description'] ?? '',
+                'current_ma' => $currentMa,
+                'fuse_status' => $this->mapFuseStatus($fuseStatus),
+                'has_fuse' => $hasFuse,
+                'pixel_count' => $string['pixel_count'] ?? 0,
+                'brightness' => $string['brightness'] ?? 100,
+            ];
+
+            if ($hasFuse) {
+                $fuseablePorts++;
+                $totalCurrentMa += $currentMa;
+                if ($currentMa > 0) {
+                    $activePorts++;
+                }
+                if ($fuseStatus > 0) {
+                    $trippedPorts++;
+                }
+            }
+        }
+
+        return [
+            'supported' => true,
+            'total_ports' => count($ports),
+            'fuseable_ports' => $fuseablePorts,
+            'active_ports' => $activePorts,
+            'tripped_ports' => $trippedPorts,
+            'total_current_ma' => $totalCurrentMa,
+            'total_current_a' => round($totalCurrentMa / 1000, 2),
+            'ports' => $ports,
+        ];
+    }
+
+    /**
+     * Map fuse status code to human-readable status
+     */
+    private function mapFuseStatus(int $status): string
+    {
+        return match($status) {
+            -1 => 'none',
+            0 => 'ok',
+            default => 'tripped',
+        };
+    }
 }

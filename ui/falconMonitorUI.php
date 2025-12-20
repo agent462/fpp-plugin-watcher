@@ -307,6 +307,22 @@ function renderFooter(index, controller, isLoading = false) {
     const testActive = controller.testMode?.enabled ? 'active' : '';
     const testTitle = controller.testMode?.enabled ? 'Test mode is ON - Click to disable' : 'Click to enable test mode';
 
+    // Check if F16V5 (product_code 130) - has eFuse support
+    const isF16V5 = controller.status?.product_code === 130;
+    const fuseControls = isF16V5 ? `
+        <div class="watcher-card__footer-row watcher-fuse-controls">
+            <button class="btn btn-sm btn-outline-success" onclick="setFuses(${index}, true)" title="Enable all fuses">
+                <i class="fas fa-bolt"></i> Fuses On
+            </button>
+            <button class="btn btn-sm btn-outline-secondary" onclick="setFuses(${index}, false)" title="Disable all fuses">
+                <i class="fas fa-bolt"></i> Fuses Off
+            </button>
+            <button class="btn btn-sm btn-outline-info" onclick="resetFuses(${index})" title="Reset all tripped fuses">
+                <i class="fas fa-redo"></i> Reset Fuses
+            </button>
+        </div>
+    ` : '';
+
     return `
         <div class="watcher-card__footer">
             <a href="http://${escapeHtml(controller.host)}/" target="_blank" class="btn btn-sm btn-outline-primary">
@@ -323,6 +339,7 @@ function renderFooter(index, controller, isLoading = false) {
                 <i class="fas fa-sync-alt"></i>
             </button>
         </div>
+        ${fuseControls}
     `;
 }
 
@@ -577,6 +594,57 @@ async function rebootController(index) {
             card.replaceWith(createControllerCard(controller, index, false));
         } else {
             alert('Failed to reboot: ' + (data.error || 'Unknown error'));
+        }
+    });
+}
+
+async function setFuses(index, enable) {
+    const controller = controllers[index];
+    if (!controller?.online) return;
+
+    const action = enable ? 'enable' : 'disable';
+    if (!confirm(`Are you sure you want to ${action} all fuses on ${controller.status?.name || controller.host}?`)) return;
+
+    const card = document.getElementById('controller-' + index);
+    const btn = card?.querySelector(enable ? '.btn-outline-success' : '.watcher-fuse-controls .btn-outline-secondary');
+
+    await withButtonLoading(btn, 'fas fa-bolt', async () => {
+        const response = await fetch('/api/plugin/fpp-plugin-watcher/falcon/fuses/master', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ host: controller.host, enable })
+        });
+
+        const data = await response.json();
+        if (data.success) {
+            refreshController(index);
+        } else {
+            alert('Failed to ' + action + ' fuses: ' + (data.error || 'Unknown error'));
+        }
+    });
+}
+
+async function resetFuses(index) {
+    const controller = controllers[index];
+    if (!controller?.online) return;
+
+    if (!confirm(`Reset all fuses on ${controller.status?.name || controller.host}?`)) return;
+
+    const card = document.getElementById('controller-' + index);
+    const btn = card?.querySelector('.btn-outline-info');
+
+    await withButtonLoading(btn, 'fas fa-redo', async () => {
+        const response = await fetch('/api/plugin/fpp-plugin-watcher/falcon/fuses/reset', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ host: controller.host })
+        });
+
+        const data = await response.json();
+        if (data.success) {
+            refreshController(index);
+        } else {
+            alert('Failed to reset fuses: ' + (data.error || 'Unknown error'));
         }
     });
 }
