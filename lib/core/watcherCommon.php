@@ -65,6 +65,7 @@ define("WATCHERDEFAULTSETTINGS",
         'mqttRetentionDays' => 60,
         'issueCheckOutputs' => true,
         'issueCheckSequences' => true,
+        'issueCheckOutputHostsNotInSync' => true,
         'efuseMonitorEnabled' => false,
         'efuseCollectionInterval' => 5,   // seconds (1-60)
         'efuseRetentionDays' => 7)        // days (1-90)
@@ -90,6 +91,7 @@ define("WATCHERSETTINGSRESTARTREQUIRED",
         'mqttRetentionDays' => false,         // Cleanup schedule, no restart needed
         'issueCheckOutputs' => false,         // UI feature only
         'issueCheckSequences' => false,       // UI feature only
+        'issueCheckOutputHostsNotInSync' => false, // UI feature only
         'efuseMonitorEnabled' => true,        // Daemon started/stopped in postStart.sh
         'efuseCollectionInterval' => false,   // Hot-reloadable
         'efuseRetentionDays' => false         // Hot-reloadable

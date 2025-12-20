@@ -37,6 +37,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['save_settings'])) {
     $mqttRetentionDays = intval($_POST['mqttRetentionDays'] ?? 60);
     $issueCheckOutputs = isset($_POST['issueCheckOutputs']) ? 'true' : 'false';
     $issueCheckSequences = isset($_POST['issueCheckSequences']) ? 'true' : 'false';
+    $issueCheckOutputHostsNotInSync = isset($_POST['issueCheckOutputHostsNotInSync']) ? 'true' : 'false';
     $efuseMonitorEnabled = isset($_POST['efuseMonitorEnabled']) ? 'true' : 'false';
     $efuseCollectionInterval = intval($_POST['efuseCollectionInterval'] ?? 5);
     $efuseRetentionDays = intval($_POST['efuseRetentionDays'] ?? 7);
@@ -103,6 +104,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['save_settings'])) {
             'mqttRetentionDays' => $mqttRetentionDays,
             'issueCheckOutputs' => $issueCheckOutputs,
             'issueCheckSequences' => $issueCheckSequences,
+            'issueCheckOutputHostsNotInSync' => $issueCheckOutputHostsNotInSync,
             'efuseMonitorEnabled' => $efuseMonitorEnabled,
             'efuseCollectionInterval' => $efuseCollectionInterval,
             'efuseRetentionDays' => $efuseRetentionDays
@@ -409,6 +411,11 @@ if ($isPlayerMode) {
                                     <input type="checkbox" name="issueCheckSequences" value="1"
                                         <?php echo (!empty($config['issueCheckSequences'])) ? 'checked' : ''; ?>>
                                     <span><strong>Missing Sequences</strong> - Warn when remotes are missing sequences from the player</span>
+                                </div>
+                                <div class="featureOption">
+                                    <input type="checkbox" name="issueCheckOutputHostsNotInSync" value="1"
+                                        <?php echo (!empty($config['issueCheckOutputHostsNotInSync'])) ? 'checked' : ''; ?>>
+                                    <span><strong>Output Host Not Found</strong> - Warn when outputs target hosts not discovered via MultiSync</span>
                                 </div>
                             </div>
                         </div>

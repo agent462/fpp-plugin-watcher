@@ -61,7 +61,7 @@ renderCSSIncludes(false);
         <div class="issues-banner__header">
             <div class="issues-banner__title">
                 <i class="fas fa-exclamation-triangle"></i>
-                Configuration Issues
+                Potential Issues
                 <span class="issues-banner__count" id="issuesCount">0</span>
             </div>
             <button class="issues-banner__toggle" id="issuesToggle" onclick="toggleIssuesDetails()">
@@ -2381,6 +2381,13 @@ function renderIssues(data) {
                     const seqList = d.sequences.slice(0, 5).map(s => escapeHtml(s)).join(', ');
                     const more = d.sequences.length > 5 ? ` (+${d.sequences.length - 5} more)` : '';
                     details.push(`<span><strong>Missing:</strong> ${seqList}${more}</span>`);
+                }
+                break;
+            case 'output_host_not_in_sync':
+                icon = 'fa-unlink';
+                if (d.description) details.push(`<span><strong>Output:</strong> ${escapeHtml(d.description)}</span>`);
+                if (d.startChannel && d.channelCount) {
+                    details.push(`<span><strong>Channels:</strong> ${d.startChannel}-${d.startChannel + d.channelCount - 1}</span>`);
                 }
                 break;
             default:

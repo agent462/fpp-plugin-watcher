@@ -555,4 +555,131 @@ class RemoteControlTest extends TestCase
             'dollar sign' => ['plugin$var'],
         ];
     }
+
+    // =========================================================================
+    // isMulticastAddress Tests (Private Method via Reflection)
+    // =========================================================================
+
+    private function callPrivateMethod(object $object, string $methodName, array $parameters = []): mixed
+    {
+        $reflection = new \ReflectionClass(get_class($object));
+        $method = $reflection->getMethod($methodName);
+        $method->setAccessible(true);
+        return $method->invokeArgs($object, $parameters);
+    }
+
+    public function testIsMulticastAddressWithMulticastIPs(): void
+    {
+        // Multicast range: 224.0.0.0 - 239.255.255.255
+        $this->assertTrue($this->callPrivateMethod($this->remoteControl, 'isMulticastAddress', ['224.0.0.1']));
+        $this->assertTrue($this->callPrivateMethod($this->remoteControl, 'isMulticastAddress', ['239.255.255.255']));
+        $this->assertTrue($this->callPrivateMethod($this->remoteControl, 'isMulticastAddress', ['230.10.10.10']));
+        $this->assertTrue($this->callPrivateMethod($this->remoteControl, 'isMulticastAddress', ['239.0.0.0']));
+    }
+
+    public function testIsMulticastAddressWithNonMulticastIPs(): void
+    {
+        $this->assertFalse($this->callPrivateMethod($this->remoteControl, 'isMulticastAddress', ['192.168.1.1']));
+        $this->assertFalse($this->callPrivateMethod($this->remoteControl, 'isMulticastAddress', ['10.0.0.1']));
+        $this->assertFalse($this->callPrivateMethod($this->remoteControl, 'isMulticastAddress', ['172.16.0.1']));
+        $this->assertFalse($this->callPrivateMethod($this->remoteControl, 'isMulticastAddress', ['223.255.255.255']));
+        $this->assertFalse($this->callPrivateMethod($this->remoteControl, 'isMulticastAddress', ['240.0.0.1']));
+    }
+
+    public function testIsMulticastAddressWithInvalidIPs(): void
+    {
+        $this->assertFalse($this->callPrivateMethod($this->remoteControl, 'isMulticastAddress', ['not.an.ip']));
+        $this->assertFalse($this->callPrivateMethod($this->remoteControl, 'isMulticastAddress', ['']));
+        $this->assertFalse($this->callPrivateMethod($this->remoteControl, 'isMulticastAddress', ['192.168.1']));
+    }
+
+    /**
+     * @dataProvider multicastAddressProvider
+     */
+    public function testIsMulticastAddressDataProvider(string $ip, bool $expected): void
+    {
+        $result = $this->callPrivateMethod($this->remoteControl, 'isMulticastAddress', [$ip]);
+        $this->assertEquals($expected, $result, "IP {$ip} should " . ($expected ? '' : 'not ') . "be multicast");
+    }
+
+    public static function multicastAddressProvider(): array
+    {
+        return [
+            'first multicast 224.0.0.0' => ['224.0.0.0', true],
+            'last multicast 239.255.255.255' => ['239.255.255.255', true],
+            'common multicast 239.255.0.0' => ['239.255.0.0', true],
+            'mid-range multicast' => ['230.0.0.1', true],
+            'just below multicast 223.255.255.255' => ['223.255.255.255', false],
+            'just above multicast 240.0.0.0' => ['240.0.0.0', false],
+            'private IP 192.168.1.1' => ['192.168.1.1', false],
+            'localhost' => ['127.0.0.1', false],
+            'broadcast' => ['255.255.255.255', false],
+        ];
+    }
+
+    // =========================================================================
+    // isBroadcastAddress Tests (Private Method via Reflection)
+    // =========================================================================
+
+    public function testIsBroadcastAddressWithBroadcastIPs(): void
+    {
+        $this->assertTrue($this->callPrivateMethod($this->remoteControl, 'isBroadcastAddress', ['255.255.255.255']));
+        $this->assertTrue($this->callPrivateMethod($this->remoteControl, 'isBroadcastAddress', ['192.168.1.255']));
+        $this->assertTrue($this->callPrivateMethod($this->remoteControl, 'isBroadcastAddress', ['10.0.0.255']));
+        $this->assertTrue($this->callPrivateMethod($this->remoteControl, 'isBroadcastAddress', ['172.16.0.255']));
+    }
+
+    public function testIsBroadcastAddressWithNonBroadcastIPs(): void
+    {
+        $this->assertFalse($this->callPrivateMethod($this->remoteControl, 'isBroadcastAddress', ['192.168.1.1']));
+        $this->assertFalse($this->callPrivateMethod($this->remoteControl, 'isBroadcastAddress', ['192.168.1.254']));
+        $this->assertFalse($this->callPrivateMethod($this->remoteControl, 'isBroadcastAddress', ['10.0.0.1']));
+        $this->assertFalse($this->callPrivateMethod($this->remoteControl, 'isBroadcastAddress', ['172.16.0.1']));
+    }
+
+    public function testIsBroadcastAddressWithInvalidIPs(): void
+    {
+        $this->assertFalse($this->callPrivateMethod($this->remoteControl, 'isBroadcastAddress', ['not.an.ip']));
+        $this->assertFalse($this->callPrivateMethod($this->remoteControl, 'isBroadcastAddress', ['']));
+        $this->assertFalse($this->callPrivateMethod($this->remoteControl, 'isBroadcastAddress', ['192.168.1']));
+    }
+
+    /**
+     * @dataProvider broadcastAddressProvider
+     */
+    public function testIsBroadcastAddressDataProvider(string $ip, bool $expected): void
+    {
+        $result = $this->callPrivateMethod($this->remoteControl, 'isBroadcastAddress', [$ip]);
+        $this->assertEquals($expected, $result, "IP {$ip} should " . ($expected ? '' : 'not ') . "be broadcast");
+    }
+
+    public static function broadcastAddressProvider(): array
+    {
+        return [
+            'global broadcast' => ['255.255.255.255', true],
+            'subnet broadcast /24' => ['192.168.1.255', true],
+            'class A broadcast' => ['10.255.255.255', true],
+            'class B broadcast' => ['172.16.255.255', true],
+            'normal host .1' => ['192.168.1.1', false],
+            'normal host .254' => ['192.168.1.254', false],
+            'normal host .100' => ['192.168.1.100', false],
+            'localhost' => ['127.0.0.1', false],
+            'multicast' => ['239.255.0.0', false],
+        ];
+    }
+
+    // =========================================================================
+    // getOutputDiscrepancies Tests
+    // Note: Full getOutputDiscrepancies() tests are in Integration/ApiEndpointTest.php
+    // because they require FPP environment (WATCHERLOGDIR constant, config, API)
+    // =========================================================================
+
+    public function testGetOutputDiscrepanciesMethodExists(): void
+    {
+        $reflection = new \ReflectionClass(RemoteControl::class);
+        $this->assertTrue($reflection->hasMethod('getOutputDiscrepancies'));
+
+        $method = $reflection->getMethod('getOutputDiscrepancies');
+        $this->assertTrue($method->isPublic());
+    }
 }

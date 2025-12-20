@@ -94,6 +94,34 @@ class RemoteControl
     }
 
     /**
+     * Check if an IP address is a multicast address (224.0.0.0 - 239.255.255.255)
+     */
+    private function isMulticastAddress(string $ip): bool
+    {
+        $parts = explode('.', $ip);
+        if (count($parts) !== 4) {
+            return false;
+        }
+        $firstOctet = (int)$parts[0];
+        return $firstOctet >= 224 && $firstOctet <= 239;
+    }
+
+    /**
+     * Check if an IP address is a broadcast address
+     */
+    private function isBroadcastAddress(string $ip): bool
+    {
+        if ($ip === '255.255.255.255') {
+            return true;
+        }
+        $parts = explode('.', $ip);
+        if (count($parts) !== 4) {
+            return false;
+        }
+        return $parts[3] === '255';
+    }
+
+    /**
      * Call a remote FPP API endpoint with host validation
      */
     public function callApi(string $host, string $method, string $endpoint, mixed $data = [], int $timeout = self::TIMEOUT_LONG): array
@@ -529,9 +557,10 @@ class RemoteControl
         $config = readPluginConfig();
         $checkOutputs = !empty($config['issueCheckOutputs']);
         $checkSequences = !empty($config['issueCheckSequences']);
+        $checkOutputHostsNotInSync = !empty($config['issueCheckOutputHostsNotInSync']);
 
         // If all checks are disabled, return empty result (no cache needed)
-        if (!$checkOutputs && !$checkSequences) {
+        if (!$checkOutputs && !$checkSequences && !$checkOutputHostsNotInSync) {
             return [
                 'success' => true,
                 'discrepancies' => [],
@@ -547,9 +576,10 @@ class RemoteControl
                 if ($cached && isset($cached['success'])) {
                     // Filter cached results based on current config
                     if (isset($cached['discrepancies']) && is_array($cached['discrepancies'])) {
-                        $cached['discrepancies'] = array_values(array_filter($cached['discrepancies'], function($d) use ($checkOutputs, $checkSequences) {
+                        $cached['discrepancies'] = array_values(array_filter($cached['discrepancies'], function($d) use ($checkOutputs, $checkSequences, $checkOutputHostsNotInSync) {
                             if ($d['type'] === 'output_to_remote' && !$checkOutputs) return false;
                             if ($d['type'] === 'missing_sequences' && !$checkSequences) return false;
+                            if ($d['type'] === 'output_host_not_in_sync' && !$checkOutputHostsNotInSync) return false;
                             return true;
                         }));
                     }
@@ -560,7 +590,7 @@ class RemoteControl
 
         $discrepancies = [];
 
-        // Get remote systems
+        // Get remote systems (player/remote only - for Check 1)
         $remoteSystems = getMultiSyncRemoteSystems();
         $remotesByIP = [];
         foreach ($remoteSystems as $remote) {
@@ -569,15 +599,34 @@ class RemoteControl
             }
         }
 
+        // Get ALL multisync systems including bridges (for Check 3)
+        // This includes all discovered systems regardless of mode
+        $allMultiSyncIPs = [];
+        if ($checkOutputHostsNotInSync) {
+            $allSystems = $this->apiClient->get('http://127.0.0.1/api/fppd/multiSyncSystems', WATCHER_TIMEOUT_STANDARD);
+            if ($allSystems && isset($allSystems['systems']) && is_array($allSystems['systems'])) {
+                foreach ($allSystems['systems'] as $system) {
+                    // Skip local system
+                    if (!empty($system['local'])) {
+                        continue;
+                    }
+                    if (!empty($system['address'])) {
+                        $allMultiSyncIPs[$system['address']] = $system;
+                    }
+                }
+            }
+        }
+
         // =========================================================================
-        // Check 1: Output configuration issues
+        // Check 1 & 3: Output configuration issues (shared output data)
         // =========================================================================
-        if ($checkOutputs) {
+        $activeOutputsByIP = [];  // For Check 1: only active outputs
+        $allOutputsByIP = [];     // For Check 3: all configured outputs
+        if ($checkOutputs || $checkOutputHostsNotInSync) {
             $outputsData = $this->apiClient->get('http://127.0.0.1/api/channel/output/universeOutputs', WATCHER_TIMEOUT_STANDARD);
 
             if ($outputsData && isset($outputsData['channelOutputs'])) {
-                // Build map of active outputs per remote IP
-                $activeOutputsByIP = [];
+                // Build maps of outputs per remote IP
                 foreach ($outputsData['channelOutputs'] as $outputGroup) {
                     if (!isset($outputGroup['universes']) || !is_array($outputGroup['universes'])) {
                         continue;
@@ -585,36 +634,95 @@ class RemoteControl
                     foreach ($outputGroup['universes'] as $universe) {
                         $address = $universe['address'] ?? '';
                         $active = ($universe['active'] ?? 0) == 1;
-                        if (empty($address) || !filter_var($address, FILTER_VALIDATE_IP) || !$active) {
+                        if (empty($address) || !filter_var($address, FILTER_VALIDATE_IP)) {
                             continue;
                         }
-                        if (!isset($activeOutputsByIP[$address])) {
-                            $activeOutputsByIP[$address] = [];
+                        // All outputs for Check 3 (host not in sync)
+                        if (!isset($allOutputsByIP[$address])) {
+                            $allOutputsByIP[$address] = [];
                         }
-                        $activeOutputsByIP[$address][] = $universe;
+                        $allOutputsByIP[$address][] = $universe;
+
+                        // Only active outputs for Check 1 (output to remote mode)
+                        if ($active) {
+                            if (!isset($activeOutputsByIP[$address])) {
+                                $activeOutputsByIP[$address] = [];
+                            }
+                            $activeOutputsByIP[$address][] = $universe;
+                        }
                     }
                 }
 
-                // Check for active outputs to systems in remote mode
-                foreach ($activeOutputsByIP as $ip => $outputs) {
-                    if (!isset($remotesByIP[$ip])) {
-                        continue;
-                    }
-                    $remote = $remotesByIP[$ip];
-                    $remoteMode = $remote['fppModeString'] ?? '';
-                    $hostname = $remote['hostname'] ?? $ip;
+                // Check 1: Active outputs to systems in remote mode
+                if ($checkOutputs) {
+                    foreach ($activeOutputsByIP as $ip => $outputs) {
+                        if (!isset($remotesByIP[$ip])) {
+                            continue;
+                        }
+                        $remote = $remotesByIP[$ip];
+                        $remoteMode = $remote['fppModeString'] ?? '';
+                        $hostname = $remote['hostname'] ?? $ip;
 
-                    if ($remoteMode === 'remote') {
+                        if ($remoteMode === 'remote') {
+                            foreach ($outputs as $output) {
+                                $discrepancies[] = [
+                                    'type' => 'output_to_remote',
+                                    'severity' => 'warning',
+                                    'address' => $ip,
+                                    'hostname' => $hostname,
+                                    'description' => $output['description'] ?? '',
+                                    'startChannel' => $output['startChannel'] ?? 0,
+                                    'channelCount' => $output['channelCount'] ?? 0,
+                                    'message' => "Output enabled to {$hostname} but it's in remote mode (receives via multisync)"
+                                ];
+                            }
+                        }
+                    }
+                }
+
+                // Check 3: Outputs targeting hosts not in MultiSync (including bridges)
+                // Uses ALL outputs, not just active ones - catch offline hosts even if disabled
+                if ($checkOutputHostsNotInSync) {
+                    foreach ($allOutputsByIP as $ip => $outputs) {
+                        // Skip if this IP is in ANY multisync system (player, remote, or bridge)
+                        if (isset($allMultiSyncIPs[$ip])) {
+                            continue;
+                        }
+
+                        // Skip multicast addresses (224.x.x.x - 239.x.x.x)
+                        if ($this->isMulticastAddress($ip)) {
+                            continue;
+                        }
+
+                        // Skip broadcast addresses
+                        if ($this->isBroadcastAddress($ip)) {
+                            continue;
+                        }
+
+                        // Skip localhost
+                        if ($ip === '127.0.0.1') {
+                            continue;
+                        }
+
+                        // Ping the host to verify it's actually offline before flagging
+                        $pingResult = pingHost($ip, null, 1);
+                        if ($pingResult['success']) {
+                            // Host responds to ping - it's online, just not in multisync
+                            // This could be a non-FPP device (Falcon controller, etc.) - skip
+                            continue;
+                        }
+
+                        // Host doesn't respond - flag each universe
                         foreach ($outputs as $output) {
                             $discrepancies[] = [
-                                'type' => 'output_to_remote',
+                                'type' => 'output_host_not_in_sync',
                                 'severity' => 'warning',
                                 'address' => $ip,
-                                'hostname' => $hostname,
+                                'hostname' => null,
                                 'description' => $output['description'] ?? '',
                                 'startChannel' => $output['startChannel'] ?? 0,
                                 'channelCount' => $output['channelCount'] ?? 0,
-                                'message' => "Output enabled to {$hostname} but it's in remote mode (receives via multisync)"
+                                'message' => "Output configured to {$ip} but host not responding (offline or unreachable)"
                             ];
                         }
                     }
