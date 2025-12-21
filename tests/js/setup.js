@@ -10,6 +10,9 @@ global.Chart = jest.fn().mockImplementation(function(ctx, config) {
   this.destroy = jest.fn();
 });
 
+// Static method to get existing chart on a canvas (returns null in tests by default)
+global.Chart.getChart = jest.fn(() => null);
+
 // Mock localStorage
 const localStorageMock = {
   store: {},

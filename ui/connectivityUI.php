@@ -3,10 +3,9 @@ require_once __DIR__ . '/../classes/autoload.php';
 require_once __DIR__ . '/../classes/Watcher/UI/ViewHelpers.php';
 
 renderCSSIncludes(true);
-renderCommonJS();
 ?>
 
-<div class="metricsContainer">
+<div class="metricsContainer" data-watcher-page="connectivityUI">
     <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1.5rem;">
         <h2 style="margin: 0; color: #212529;">
             <i class="fas fa-network-wired"></i> Connectivity Metrics
@@ -25,7 +24,7 @@ renderCommonJS();
                     <strong>Note:</strong> This may explain missing or incomplete metrics data. The connectivity check daemon
                     is currently paused to prevent repeated resets.
                 </p>
-                <button onclick="clearNetworkResetState()" class="btn btn-warning" style="margin-top: 0.5rem;">
+                <button onclick="page.clearNetworkResetState()" class="btn btn-warning" style="margin-top: 0.5rem;">
                     <i class="fas fa-redo"></i> Clear State &amp; Resume Monitoring
                 </button>
             </div>
@@ -49,7 +48,7 @@ renderCommonJS();
             <div class="chartControls" style="margin-bottom: 1rem;">
                 <div class="controlGroup">
                     <label for="rawTimeRange">Time Range:</label>
-                    <select id="rawTimeRange" onchange="updateRawPingLatencyChart()">
+                    <select id="rawTimeRange" onchange="page.updateRawPingLatencyChart()">
                         <option value="2">Last 2 Hours</option>
                         <option value="4">Last 4 Hours</option>
                         <option value="8">Last 8 Hours</option>
@@ -99,7 +98,7 @@ renderCommonJS();
         <div class="chartControls" style="margin-bottom: 1.5rem;">
             <div class="controlGroup">
                 <label for="timeRange">Rollup Time Range:</label>
-                <select id="timeRange" onchange="updateAllCharts()">
+                <select id="timeRange" onchange="page.updateAllCharts()">
                     <option value="1">Last 1 Hour</option>
                     <option value="6">Last 6 Hours</option>
                     <option value="12" selected>Last 12 Hours</option>
@@ -148,182 +147,9 @@ renderCommonJS();
         </div>
     </div>
 
-    <button class="refreshButton" onclick="loadAllMetrics()" title="Refresh Data">
+    <button class="refreshButton" onclick="page.refresh()" title="Refresh Data">
         <i class="fas fa-sync-alt"></i>
     </button>
 </div>
 
-<script>
-const charts = {};
-let isRefreshing = false;
-
-async function checkNetworkResetState() {
-    try {
-        const data = await fetchJson('/api/plugin/fpp-plugin-watcher/connectivity/state');
-        const banner = document.getElementById('networkResetBanner');
-        const details = document.getElementById('resetDetails');
-
-        if (data.success && data.hasResetAdapter) {
-            const resetTime = data.resetTime || 'Unknown time';
-            const adapter = data.adapter || 'Unknown adapter';
-            const reason = data.reason || 'Max failures reached';
-
-            details.innerHTML = `The network adapter <strong>${escapeHtml(adapter)}</strong> was reset on <strong>${escapeHtml(resetTime)}</strong>.<br>Reason: ${escapeHtml(reason)}`;
-            banner.style.display = 'block';
-        } else {
-            banner.style.display = 'none';
-        }
-    } catch (e) {
-        console.error('Error checking network reset state:', e);
-    }
-}
-
-async function clearNetworkResetState() {
-    const btn = event.target.closest('button');
-    const originalContent = btn.innerHTML;
-    btn.disabled = true;
-    btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Clearing...';
-
-    try {
-        const response = await fetch('/api/plugin/fpp-plugin-watcher/connectivity/state/clear', { method: 'POST' });
-        const data = await response.json();
-
-        if (data.success) {
-            document.getElementById('networkResetBanner').style.display = 'none';
-            loadAllMetrics();
-        } else {
-            alert('Failed to clear reset state: ' + (data.error || 'Unknown error'));
-            btn.disabled = false;
-            btn.innerHTML = originalContent;
-        }
-    } catch (e) {
-        console.error('Error clearing reset state:', e);
-        alert('Failed to clear reset state: ' + e.message);
-        btn.disabled = false;
-        btn.innerHTML = originalContent;
-    }
-}
-
-async function loadAllMetrics() {
-    if (isRefreshing) return;
-    isRefreshing = true;
-
-    const refreshBtn = document.querySelector('.refreshButton i');
-    if (refreshBtn) refreshBtn.style.animation = 'spin 1s linear infinite';
-
-    try {
-        await checkNetworkResetState();
-        await Promise.all([updateAllCharts(), updateRawPingLatencyChart()]);
-        hideElement('loadingIndicator');
-        showElement('metricsContent');
-        updateLastUpdateTime();
-    } catch (error) {
-        console.error('Error loading metrics:', error);
-    } finally {
-        isRefreshing = false;
-        if (refreshBtn) refreshBtn.style.animation = '';
-    }
-}
-
-async function updateAllCharts() {
-    const hours = parseInt(document.getElementById('timeRange').value);
-    const data = await fetchJson(`/api/plugin/fpp-plugin-watcher/metrics/ping/rollup?hours=${hours}`);
-
-    const noDataEl = document.getElementById('noDataMessage');
-    const statsSection = document.getElementById('statsBarSection');
-    const chartsSection = document.getElementById('rollupChartsSection');
-
-    if (!data.success || !data.data?.length) {
-        statsSection.style.display = 'none';
-        chartsSection.style.display = 'none';
-        noDataEl.style.display = 'block';
-        return false;
-    }
-
-    noDataEl.style.display = 'none';
-    statsSection.style.display = 'block';
-    chartsSection.style.display = 'block';
-
-    // Update tier badges
-    if (data.tier_info) {
-        ['latencyTierBadge', 'rangeTierBadge', 'sampleTierBadge'].forEach(id => {
-            document.getElementById(id).textContent = data.tier_info.label;
-        });
-    }
-
-    // Calculate and display stats
-    const latencies = data.data.map(d => d.avg_latency).filter(v => v !== null);
-    const minLats = data.data.map(d => d.min_latency).filter(v => v !== null);
-    const maxLats = data.data.map(d => d.max_latency).filter(v => v !== null);
-
-    document.getElementById('currentLatency').textContent = formatLatency(latencies.at(-1));
-    document.getElementById('avgLatency').textContent = formatLatency(latencies.reduce((a, b) => a + b, 0) / latencies.length);
-    document.getElementById('minLatency').textContent = formatLatency(Math.min(...minLats));
-    document.getElementById('maxLatency').textContent = formatLatency(Math.max(...maxLats));
-    document.getElementById('dataPoints').textContent = data.data.length.toLocaleString();
-
-    // Build chart options
-    const latencyOpts = buildChartOptions(hours, {
-        yLabel: 'Latency (ms)',
-        beginAtZero: true,
-        yTickFormatter: v => v.toFixed(1) + ' ms',
-        tooltipLabel: ctx => 'Latency: ' + ctx.parsed.y.toFixed(2) + ' ms'
-    });
-
-    const sampleOpts = buildChartOptions(hours, {
-        yLabel: 'Number of Samples',
-        beginAtZero: true,
-        yTickFormatter: v => v.toFixed(0),
-        tooltipLabel: ctx => 'Samples: ' + ctx.parsed.y
-    });
-
-    // Latency chart
-    updateOrCreateChart(charts, 'latency', 'latencyChart', 'line',
-        [createDataset('Average Latency (ms)', mapChartData(data, 'avg_latency'), 'purple')],
-        latencyOpts
-    );
-
-    // Range chart (min/avg/max)
-    updateOrCreateChart(charts, 'range', 'rangeChart', 'line', [
-        createDataset('Min Latency', mapChartData(data, 'min_latency'), 'green', { fill: false }),
-        createDataset('Avg Latency', mapChartData(data, 'avg_latency'), 'purple', { fill: false }),
-        createDataset('Max Latency', mapChartData(data, 'max_latency'), 'red', { fill: false })
-    ], latencyOpts);
-
-    // Sample count chart (bar)
-    const barDataset = createDataset('Sample Count', mapChartData(data, 'sample_count'), 'blue');
-    barDataset.borderWidth = 1;
-    updateOrCreateChart(charts, 'sample', 'sampleChart', 'bar', [barDataset], sampleOpts);
-
-    return true;
-}
-
-async function updateRawPingLatencyChart() {
-    const hours = parseInt(document.getElementById('rawTimeRange').value);
-    const data = await fetchJson(`/api/plugin/fpp-plugin-watcher/metrics/ping/raw?hours=${hours}`);
-
-    if (!data.success || !data.data?.length) return;
-
-    // Group by host and create datasets
-    const byHost = {};
-    data.data.forEach(e => {
-        (byHost[e.host] = byHost[e.host] || []).push({ x: e.timestamp * 1000, y: e.latency });
-    });
-
-    const datasets = Object.keys(byHost).map((host, i) => {
-        const color = getChartColor(i);
-        return createDataset(host, byHost[host], color, { pointRadius: 2 });
-    });
-
-    const opts = buildChartOptions(hours, {
-        yLabel: 'Latency (ms)',
-        beginAtZero: true,
-        tooltipLabel: ctx => ctx.dataset.label + ': ' + ctx.parsed.y.toFixed(2) + ' ms'
-    });
-
-    updateOrCreateChart(charts, 'rawPing', 'rawPingLatencyChart', 'line', datasets, opts);
-}
-
-setInterval(() => { if (!isRefreshing) loadAllMetrics(); }, 30000);
-document.addEventListener('DOMContentLoaded', loadAllMetrics);
-</script>
+<?php renderWatcherJS(); ?>

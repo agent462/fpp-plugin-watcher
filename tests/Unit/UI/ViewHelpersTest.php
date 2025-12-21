@@ -12,6 +12,15 @@ use Watcher\UI\ViewHelpers;
 
 class ViewHelpersTest extends TestCase
 {
+    /**
+     * Ensure ViewHelpers class is loaded to register global function aliases
+     */
+    public static function setUpBeforeClass(): void
+    {
+        // Trigger autoload to register global function aliases
+        class_exists(ViewHelpers::class);
+    }
+
     // ========================================
     // h() HTML Escape Helper Tests
     // ========================================
@@ -342,17 +351,19 @@ class ViewHelpersTest extends TestCase
     }
 
     // ========================================
-    // renderCommonJS() Tests
+    // renderWatcherJS() Tests
     // ========================================
 
-    public function testRenderCommonJSOutputsScript(): void
+    public function testRenderWatcherJSOutputsComment(): void
     {
+        // FPP auto-loads JS files, so renderWatcherJS outputs a comment placeholder
         ob_start();
-        ViewHelpers::renderCommonJS();
+        ViewHelpers::renderWatcherJS();
         $output = ob_get_clean();
 
-        $this->assertStringContainsString('<script', $output);
-        $this->assertStringContainsString('commonUI.js', $output);
+        // Output contains commented-out script tag (FPP auto-loads js/watcher.min.js)
+        $this->assertStringContainsString('<!--', $output);
+        $this->assertStringContainsString('watcher.min.js', $output);
     }
 
     // ========================================
@@ -470,9 +481,9 @@ class ViewHelpersTest extends TestCase
         $this->assertTrue(function_exists('renderCSSIncludes'));
     }
 
-    public function testGlobalRenderCommonJSFunctionExists(): void
+    public function testGlobalRenderWatcherJSFunctionExists(): void
     {
-        $this->assertTrue(function_exists('renderCommonJS'));
+        $this->assertTrue(function_exists('renderWatcherJS'));
     }
 
     public function testGlobalRenderEmptyMessageFunctionExists(): void

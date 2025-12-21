@@ -37,13 +37,11 @@ if ($retentionDays >= 90) {
 }
 
 renderCSSIncludes(true);
-renderCommonJS();
 ?>
 <link rel="stylesheet" href="/plugin.php?plugin=fpp-plugin-watcher&file=css/efuseHeatmap.css&nopage=1">
-<script src="/plugin.php?plugin=fpp-plugin-watcher&file=js/efuseHeatmap.js&nopage=1"></script>
 
 <script>
-    window.efuseConfig = {
+    window.watcherConfig = {
         supported: <?php echo json_encode($hardware['supported']); ?>,
         type: <?php echo json_encode($hardware['type']); ?>,
         ports: <?php echo json_encode($hardware['ports']); ?>,
@@ -52,14 +50,14 @@ renderCommonJS();
     };
 </script>
 
-<div class="efuseContainer">
+<div class="efuseContainer" data-watcher-page="efuseMonitorUI">
     <div class="efuseHeader">
         <h2>
             <i class="fas fa-bolt"></i> eFuse Current Monitor
         </h2>
         <div class="efuseHeaderRight">
             <span id="lastUpdate" class="lastUpdate"></span>
-            <i class="fas fa-question-circle efusePageHelp" onclick="showPageHelp(event)" title="About eFuse Monitoring"></i>
+            <i class="fas fa-question-circle efusePageHelp" onclick="page.showPageHelp(event)" title="About eFuse Monitoring"></i>
         </div>
     </div>
 
@@ -83,7 +81,7 @@ renderCommonJS();
             <strong><span id="trippedCount">0</span> FUSES TRIPPED:</strong>
             <span id="trippedPortList"></span>
         </span>
-        <button class="efuseControlBtn warning" onclick="resetAllTripped()">
+        <button class="efuseControlBtn warning" onclick="page.resetAllTripped()">
             <i class="fas fa-redo"></i> Reset All
         </button>
     </div>
@@ -105,13 +103,13 @@ renderCommonJS();
             </div>
         </div>
         <div class="hardwareMasterControls">
-            <button class="efuseControlBtn primary" onclick="masterControl('on')" title="Enable all ports">
+            <button class="efuseControlBtn primary" onclick="page.masterControl('on')" title="Enable all ports">
                 <i class="fas fa-power-off"></i> All On
             </button>
-            <button class="efuseControlBtn danger" onclick="masterControl('off')" title="Disable all ports">
+            <button class="efuseControlBtn danger" onclick="page.masterControl('off')" title="Disable all ports">
                 <i class="fas fa-power-off"></i> All Off
             </button>
-            <button class="efuseControlBtn warning" id="resetTrippedBtn" onclick="resetAllTripped()" style="display: none;" title="Reset all tripped fuses">
+            <button class="efuseControlBtn warning" id="resetTrippedBtn" onclick="page.resetAllTripped()" style="display: none;" title="Reset all tripped fuses">
                 <i class="fas fa-redo"></i> Reset <span class="badge">0</span>
             </button>
         </div>
@@ -154,7 +152,7 @@ renderCommonJS();
         <span><i class="fas fa-chart-line"></i> Current History</span>
         <div class="efuseControls">
             <label for="timeRange">Time Range:</label>
-            <select id="timeRange" onchange="loadAllData()">
+            <select id="timeRange" onchange="page.refresh()">
                 <?php foreach ($timeRangeOptions as $value => $label): ?>
                 <option value="<?php echo htmlspecialchars($value); ?>"<?php echo $value == '6' ? ' selected' : ''; ?>>
                     <?php echo htmlspecialchars($label); ?>
@@ -168,7 +166,7 @@ renderCommonJS();
     <div id="portDetailPanel" class="portDetailPanel" style="display: none;">
         <div class="portDetailHeader">
             <h3><i class="fas fa-plug"></i> <span id="portDetailName">Port 1</span></h3>
-            <button class="closeBtn" onclick="closePortDetail()"><i class="fas fa-times"></i></button>
+            <button class="closeBtn" onclick="page.closePortDetail()"><i class="fas fa-times"></i></button>
         </div>
         <div class="portDetailContent">
             <div class="portDetailStats">
@@ -185,7 +183,7 @@ renderCommonJS();
                     <div class="detailStatValue" id="portDetailAvg">-- mA</div>
                 </div>
                 <div class="detailStatItem">
-                    <div class="detailStatLabel">Expected <i class="fas fa-question-circle expectedHelp" onclick="showExpectedHelp(event)" title="How is this calculated?"></i></div>
+                    <div class="detailStatLabel">Expected <i class="fas fa-question-circle expectedHelp" onclick="page.showExpectedHelp(event)" title="How is this calculated?"></i></div>
                     <div class="detailStatValue" id="portDetailExpected">-- mA</div>
                 </div>
             </div>
@@ -216,16 +214,16 @@ renderCommonJS();
 
     <?php endif; ?>
 
-    <button class="refreshButton" onclick="loadAllData()" title="Refresh Data">
+    <button class="refreshButton" onclick="page.refresh()" title="Refresh Data">
         <i class="fas fa-sync-alt"></i>
     </button>
 
     <!-- Expected Amperage Help Modal -->
-    <div id="expectedHelpModal" class="helpModal" style="display: none;" onclick="hideExpectedHelp(event)">
+    <div id="expectedHelpModal" class="helpModal" style="display: none;" onclick="page.hideExpectedHelp(event)">
         <div class="helpModalContent" onclick="event.stopPropagation()">
             <div class="helpModalHeader">
                 <h4><i class="fas fa-question-circle"></i> Expected Current Calculation</h4>
-                <button class="closeBtn" onclick="hideExpectedHelp()"><i class="fas fa-times"></i></button>
+                <button class="closeBtn" onclick="page.hideExpectedHelp()"><i class="fas fa-times"></i></button>
             </div>
             <div class="helpModalBody">
                 <p>Expected current is estimated based on real-world measurements and pixel count:</p>
@@ -260,11 +258,11 @@ renderCommonJS();
     </div>
 
     <!-- Page Help Modal -->
-    <div id="pageHelpModal" class="helpModal" style="display: none;" onclick="hidePageHelp(event)">
+    <div id="pageHelpModal" class="helpModal" style="display: none;" onclick="page.hidePageHelp(event)">
         <div class="helpModalContent" onclick="event.stopPropagation()">
             <div class="helpModalHeader">
                 <h4><i class="fas fa-question-circle"></i> About eFuse Current Monitoring</h4>
-                <button class="closeBtn" onclick="hidePageHelp()"><i class="fas fa-times"></i></button>
+                <button class="closeBtn" onclick="page.hidePageHelp()"><i class="fas fa-times"></i></button>
             </div>
             <div class="helpModalBody">
                 <p>This dashboard monitors real-time current draw from each eFuse port on your controller.</p>
@@ -325,7 +323,7 @@ renderCommonJS();
     </div>
 
     <!-- Confirmation Modal for destructive actions -->
-    <div id="confirmModal" class="confirmModal" style="display: none;" onclick="hideConfirmModal(event)">
+    <div id="confirmModal" class="confirmModal" style="display: none;" onclick="page.hideConfirmModal(event)">
         <div class="confirmModalContent" onclick="event.stopPropagation()">
             <div class="confirmModalIcon">
                 <i class="fas fa-exclamation-triangle"></i>
@@ -333,8 +331,8 @@ renderCommonJS();
             <h3 id="confirmModalTitle">Confirm Action</h3>
             <p id="confirmModalMessage">Are you sure you want to proceed?</p>
             <div class="confirmModalButtons">
-                <button class="efuseControlBtn secondary" onclick="hideConfirmModal()">Cancel</button>
-                <button class="efuseControlBtn danger" id="confirmModalAction" onclick="confirmModalCallback()">Confirm</button>
+                <button class="efuseControlBtn secondary" onclick="page.hideConfirmModal()">Cancel</button>
+                <button class="efuseControlBtn danger" id="confirmModalAction" onclick="page.confirmModalCallback()">Confirm</button>
             </div>
         </div>
     </div>
@@ -343,11 +341,4 @@ renderCommonJS();
     <div id="toastContainer" class="toastContainer"></div>
 </div>
 
-<script>
-<?php if ($hardware['supported']): ?>
-// Initialize on page load
-document.addEventListener('DOMContentLoaded', function() {
-    initEfuseMonitor();
-});
-<?php endif; ?>
-</script>
+<?php renderWatcherJS(); ?>

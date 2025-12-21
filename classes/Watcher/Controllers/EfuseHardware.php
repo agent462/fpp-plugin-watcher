@@ -36,7 +36,7 @@ class EfuseHardware
     {
         $this->logger = Logger::getInstance();
         $this->fileManager = FileManager::getInstance();
-        $this->efuseDir = '/home/fpp/media/logs/watcher-efuse';
+        $this->efuseDir = '/home/fpp/media/plugin-data/fpp-plugin-watcher/watcher-efuse';
         $this->cacheFile = $this->efuseDir . '/hardware-cache.json';
     }
 

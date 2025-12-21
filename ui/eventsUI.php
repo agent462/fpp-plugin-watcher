@@ -11,11 +11,10 @@ $localSystem = ApiClient::getInstance()->get('http://127.0.0.1/api/fppd/status',
 $access = checkDashboardAccess($config, $localSystem, 'mqttMonitorEnabled');
 
 renderCSSIncludes(true);
-renderCommonJS();
 ?>
 
 <?php if (!renderAccessError($access)): ?>
-<div class="metricsContainer">
+<div class="metricsContainer" data-watcher-page="eventsUI">
     <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1.5rem;">
         <h2 style="margin: 0; color: #212529;">
             <i class="fas fa-rss"></i> FPP Events
@@ -53,7 +52,7 @@ renderCommonJS();
         <div class="chartControls" style="margin-bottom: 1.5rem;">
             <div class="controlGroup">
                 <label for="timeRange">Time Range:</label>
-                <select id="timeRange" onchange="loadAllData()">
+                <select id="timeRange" onchange="page.refresh()">
                     <option value="24" selected>Last 24 Hours</option>
                     <option value="168">Last 7 Days</option>
                     <option value="720">Last 30 Days</option>
@@ -109,14 +108,14 @@ renderCommonJS();
                 </table>
             </div>
             <div id="showMoreContainer" style="text-align: center; margin-top: 1rem; display: none;">
-                <button class="buttons btn-outline-secondary btn-sm" onclick="showMoreEvents()">
+                <button class="buttons btn-outline-secondary btn-sm" onclick="page.showMoreEvents()">
                     <i class="fas fa-chevron-down"></i> Show More
                 </button>
             </div>
         </div>
     </div>
 
-    <button class="refreshButton" onclick="loadAllData()" title="Refresh Data">
+    <button class="refreshButton" onclick="page.refresh()" title="Refresh Data">
         <i class="fas fa-sync-alt"></i>
     </button>
 </div>
@@ -206,173 +205,5 @@ renderCommonJS();
 .eventBadge.warning { background: #fed7aa; color: #c2410c; }
 </style>
 
-<script>
-const charts = {};
-let isRefreshing = false;
-let allEvents = [];
-let displayedEvents = 50;
-
-async function loadAllData() {
-    if (isRefreshing) return;
-    isRefreshing = true;
-
-    const refreshBtn = document.querySelector('.refreshButton i');
-    if (refreshBtn) refreshBtn.style.animation = 'spin 1s linear infinite';
-
-    try {
-        await Promise.all([loadStats(), loadEvents()]);
-        hideElement('loadingIndicator');
-        showElement('metricsContent');
-        document.getElementById('lastUpdate').textContent = 'Updated: ' + new Date().toLocaleTimeString();
-    } catch (error) {
-        console.error('Error loading data:', error);
-    } finally {
-        isRefreshing = false;
-        if (refreshBtn) refreshBtn.style.animation = '';
-    }
-}
-
-async function loadStats() {
-    const hours = document.getElementById('timeRange').value;
-    const url = `/api/plugin/fpp-plugin-watcher/mqtt/stats?hours=${hours}`;
-
-    const response = await fetchJson(url);
-    if (response && response.success && response.stats) {
-        const stats = response.stats;
-
-        document.getElementById('totalEvents').textContent = stats.totalEvents || 0;
-        document.getElementById('sequencesPlayed').textContent = Object.keys(stats.sequencesPlayed || {}).length;
-        document.getElementById('playlistsStarted').textContent = Object.keys(stats.playlistsStarted || {}).length;
-
-        // Total runtime formatted
-        document.getElementById('totalRuntime').textContent = formatDuration(stats.totalRuntime || 0);
-
-        // Update timeline chart
-        updateTimelineChart(stats.hourlyDistribution || []);
-
-        // Update top sequences
-        updateTopSequences(stats.sequencesPlayed || {});
-    }
-}
-
-async function loadEvents() {
-    const hours = document.getElementById('timeRange').value;
-    const url = `/api/plugin/fpp-plugin-watcher/mqtt/events?hours=${hours}`;
-
-    const response = await fetchJson(url);
-    if (response && response.success) {
-        allEvents = response.data || [];
-        displayedEvents = 50;
-        updateEventsTable();
-        document.getElementById('eventCount').textContent = allEvents.length + ' events';
-    }
-}
-
-function updateTimelineChart(data) {
-    const ctx = document.getElementById('timelineChart');
-    if (!ctx) return;
-
-    const chartData = data.map(d => ({
-        x: new Date(d.timestamp * 1000),
-        y: d.count
-    }));
-
-    const hours = parseInt(document.getElementById('timeRange').value);
-    const dataset = createDataset('Events', chartData, 'blue', { pointRadius: 2 });
-
-    if (charts.timeline) {
-        charts.timeline.data.datasets[0].data = chartData;
-        charts.timeline.update('none');
-    } else {
-        charts.timeline = new Chart(ctx, {
-            type: 'line',
-            data: { datasets: [dataset] },
-            options: buildChartOptions(hours, {
-                yLabel: 'Events',
-                beginAtZero: true,
-                showLegend: false
-            })
-        });
-    }
-}
-
-function updateTopSequences(sequences) {
-    const container = document.getElementById('topSequences');
-    if (!container) return;
-
-    const entries = Object.entries(sequences).slice(0, 10);
-
-    if (entries.length === 0) {
-        container.innerHTML = '<p class="noData">No sequence data available</p>';
-        return;
-    }
-
-    container.innerHTML = entries.map(([name, count], index) => `
-        <div class="topItem">
-            <span class="rank">${index + 1}</span>
-            <span class="name">${escapeHtml(name)}</span>
-            <span class="count">${count} plays</span>
-        </div>
-    `).join('');
-}
-
-function updateEventsTable() {
-    const tbody = document.getElementById('eventsTableBody');
-    if (!tbody) return;
-
-    const eventsToShow = allEvents.slice(0, displayedEvents);
-
-    if (eventsToShow.length === 0) {
-        tbody.innerHTML = '<tr><td colspan="5" class="noData">No events found</td></tr>';
-        hideElement('showMoreContainer');
-        return;
-    }
-
-    tbody.innerHTML = eventsToShow.map(event => {
-        const badgeClass = getBadgeClass(event.eventType);
-        const durationStr = event.duration ? formatDuration(event.duration) : '';
-        return `
-            <tr>
-                <td>${escapeHtml(event.datetime)}</td>
-                <td>${escapeHtml(event.hostname)}</td>
-                <td><span class="eventBadge ${badgeClass}">${escapeHtml(event.eventLabel)}</span></td>
-                <td>${escapeHtml(event.data || '-')}</td>
-                <td>${durationStr}</td>
-            </tr>
-        `;
-    }).join('');
-
-    // Show/hide "Show More" button
-    if (allEvents.length > displayedEvents) {
-        showElement('showMoreContainer');
-    } else {
-        hideElement('showMoreContainer');
-    }
-}
-
-function showMoreEvents() {
-    displayedEvents += 50;
-    updateEventsTable();
-}
-
-function getBadgeClass(eventType) {
-    const classes = {
-        'ss': 'seq-start',
-        'se': 'seq-stop',
-        'ps': 'pl-start',
-        'pe': 'pl-stop',
-        'st': 'status',
-        'ms': 'media-start',
-        'me': 'media-stop',
-        'wn': 'warning'
-    };
-    return classes[eventType] || '';
-}
-
-// Initial load
-document.addEventListener('DOMContentLoaded', loadAllData);
-
-// Auto-refresh every 30 seconds
-setInterval(loadAllData, 30000);
-</script>
+<?php renderWatcherJS(); ?>
 <?php endif; ?>

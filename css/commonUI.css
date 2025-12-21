@@ -1123,6 +1123,24 @@
     cursor: not-allowed;
 }
 
+/* Blocked by branch update - version upgrade disabled until branch update is done */
+.updates-container .update-row.blocked-by-branch {
+    position: relative;
+}
+
+.updates-container .update-row.blocked-by-branch::after {
+    content: 'Complete branch update first';
+    display: block;
+    font-size: 0.65rem;
+    color: rgba(255,255,255,0.8);
+    margin-top: 0.25rem;
+    font-style: italic;
+}
+
+.updates-container .update-row.blocked-by-branch .banner-btn {
+    opacity: 0.5;
+}
+
 /* ==========================================================================
    Toolbar Component
 
@@ -2485,6 +2503,45 @@
     display: none;
 }
 
+/* Blocked accordion item (branch update required before version upgrade) */
+.fpp-accordion-item.blocked {
+    opacity: 0.7;
+    border-color: #ffc107;
+}
+
+.fpp-accordion-item.blocked .fpp-accordion-header {
+    background: #fff8e1;
+    cursor: default;
+}
+
+.fpp-accordion-item.blocked .fpp-accordion-header:hover {
+    background: #fff8e1;
+}
+
+.fpp-accordion-item.blocked .fpp-accordion-checkbox {
+    cursor: not-allowed;
+}
+
+.fpp-accordion-status.blocked {
+    background: #fff3cd;
+    color: #856404;
+}
+
+.fpp-accordion-blocked-note {
+    background: #fff3cd;
+    border-top: 1px solid #ffeeba;
+    padding: 0.5rem 1rem;
+    font-size: 0.8rem;
+    color: #856404;
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+}
+
+.fpp-accordion-blocked-note i {
+    flex-shrink: 0;
+}
+
 /* ==========================================================================
    Config Page - Auto-config Note
    ========================================================================== */
@@ -3243,6 +3300,18 @@
 .msm-notice-warning i { color: #856404; }
 .msm-notice-error { background: #f8d7da; border: 1px solid #f5c6cb; }
 .msm-notice-error i { color: #721c24; }
+
+/* Ping Disabled Notice */
+.msm-ping-disabled {
+    display: flex; align-items: flex-start; gap: 0.75rem;
+    background: #e2e3e5; border: 1px solid #d6d8db; border-radius: 8px;
+    padding: 1.5rem; text-align: left; color: #383d41;
+}
+.msm-ping-disabled i { font-size: 1.5rem; color: #6c757d; flex-shrink: 0; margin-top: 0.1rem; }
+.msm-ping-disabled strong { display: block; margin-bottom: 0.25rem; font-size: 0.95rem; }
+.msm-ping-disabled p { margin: 0; font-size: 0.85rem; color: #6c757d; }
+.msm-ping-disabled a { color: #007bff; text-decoration: none; }
+.msm-ping-disabled a:hover { text-decoration: underline; }
 
 /* Empty State */
 .msm-empty { text-align: center; padding: 2rem; color: #6c757d; }

@@ -24,3 +24,9 @@ phpunit.xml.backup
 # Node.js / Jest
 node_modules/
 tests/js-coverage/
+
+# Development JS build (not for production)
+js/watcher.dev.js
+js/watcher.dev.js.map
+js/watcher.js
+js/watcher.js.map

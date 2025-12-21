@@ -272,7 +272,16 @@ class NetworkQualityCollector extends BaseMetricsCollector
                 }
 
                 if ($remotePkts !== null) {
-                    if ($byHost[$hostname]['firstPlayingPackets'] === null) {
+                    // Detect counter reset: if current packets < last packets, counter was reset
+                    // Reset our tracking to start fresh from this point
+                    if ($byHost[$hostname]['lastPlayingPackets'] !== null &&
+                        $remotePkts < $byHost[$hostname]['lastPlayingPackets']) {
+                        // Counter reset detected - restart tracking from this sample
+                        $byHost[$hostname]['firstPlayingTimestamp'] = $ts;
+                        $byHost[$hostname]['firstPlayingPackets'] = $remotePkts;
+                        $byHost[$hostname]['playingSampleCount'] = 1;
+                        $byHost[$hostname]['stepTimes'] = $stepTime !== null ? [$stepTime] : [];
+                    } elseif ($byHost[$hostname]['firstPlayingPackets'] === null) {
                         $byHost[$hostname]['firstPlayingTimestamp'] = $ts;
                         $byHost[$hostname]['firstPlayingPackets'] = $remotePkts;
                     }

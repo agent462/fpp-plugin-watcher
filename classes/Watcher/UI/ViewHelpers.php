@@ -10,13 +10,13 @@ namespace Watcher\UI {
  *
  * HTML Escaping Convention:
  * - PHP: Use h() or htmlspecialchars() for all dynamic content in HTML output
- * - JavaScript: Use escapeHtml() from commonUI.js for all dynamic content in innerHTML
+ * - JavaScript: Use watcher.utils.escapeHtml() or page module methods for all dynamic content in innerHTML
  */
 class ViewHelpers
 {
     /**
      * HTML escape helper - shorthand for htmlspecialchars with consistent flags
-     * Mirrors escapeHtml() in commonUI.js for naming consistency
+     * Mirrors watcher.utils.escapeHtml() for naming consistency
      *
      * @param string|null $text Text to escape
      * @return string Escaped text safe for HTML output
@@ -45,12 +45,24 @@ class ViewHelpers
     }
 
     /**
-     * Render common JavaScript utilities
+     * Render the watcher.js bundle for pages using the new module architecture
+     *
+     * The watcher.js bundle contains all page modules and auto-initializes based on
+     * the data-watcher-page attribute on the body or wrapper element.
+     *
+     * Usage in PHP:
+     *   <div data-watcher-page="connectivityUI">
+     *   <script>window.watcherConfig = { ... };</script>
+     *   <?php ViewHelpers::renderWatcherJS(); ?>
+     *
+     * Note: FPP auto-loads ALL .js files in plugin directories, so we only
+     * include watcher.min.js to avoid duplicate loading.
      */
-    public static function renderCommonJS(): void
+    public static function renderWatcherJS(): void
     {
-        ?>
-<script src="/plugin.php?plugin=fpp-plugin-watcher&file=js/commonUI.js&nopage=1"></script>
+        // Commented out: FPP auto-loads js/watcher.min.js from plugin directory
+        // ?>
+<!-- <script src="/plugin.php?plugin=fpp-plugin-watcher&file=js/watcher.min.js&nopage=1"></script> -->
 <?php
     }
 
@@ -186,9 +198,9 @@ if (!function_exists('renderCSSIncludes')) {
     }
 }
 
-if (!function_exists('renderCommonJS')) {
-    function renderCommonJS(): void {
-        \Watcher\UI\ViewHelpers::renderCommonJS();
+if (!function_exists('renderWatcherJS')) {
+    function renderWatcherJS(): void {
+        \Watcher\UI\ViewHelpers::renderWatcherJS();
     }
 }
 

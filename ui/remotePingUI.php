@@ -11,7 +11,6 @@ $localSystem = ApiClient::getInstance()->get('http://127.0.0.1/api/fppd/status',
 $access = checkDashboardAccess($config, $localSystem, 'multiSyncMetricsEnabled');
 
 renderCSSIncludes($access['show']);
-if ($access['show']) renderCommonJS();
 ?>
 <style>
     .perHostStats { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 1rem; margin-bottom: 1.5rem; }
@@ -27,7 +26,7 @@ if ($access['show']) renderCommonJS();
     .hostStatCard .stat-value.danger { color: #dc3545; }
 </style>
 
-<div class="metricsContainer">
+<div class="metricsContainer" data-watcher-page="remotePingUI">
     <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1.5rem;">
         <h2 style="margin: 0; color: #212529;">
             <i class="fas fa-server"></i> Multi-Sync Host Ping Metrics
@@ -51,7 +50,7 @@ if ($access['show']) renderCommonJS();
             <div class="chartControls" style="margin-bottom: 1rem;">
                 <div class="controlGroup">
                     <label for="rawTimeRange">Time Range:</label>
-                    <select id="rawTimeRange" onchange="updateRawPingLatencyChart()">
+                    <select id="rawTimeRange" onchange="page.updateRawPingLatencyChart()">
                         <option value="2">Last 2 Hours</option>
                         <option value="4">Last 4 Hours</option>
                         <option value="8">Last 8 Hours</option>
@@ -89,7 +88,7 @@ if ($access['show']) renderCommonJS();
         <div class="chartControls" style="margin-bottom: 1.5rem;">
             <div class="controlGroup">
                 <label for="timeRange">Rollup Time Range:</label>
-                <select id="timeRange" onchange="updateAllCharts()">
+                <select id="timeRange" onchange="page.updateAllCharts()">
                     <option value="1">Last 1 Hour</option>
                     <option value="6">Last 6 Hours</option>
                     <option value="12" selected>Last 12 Hours</option>
@@ -117,132 +116,8 @@ if ($access['show']) renderCommonJS();
         </div>
     </div>
 
-    <button class="refreshButton" onclick="loadAllMetrics()" title="Refresh Data"><i class="fas fa-sync-alt"></i></button>
+    <button class="refreshButton" onclick="page.refresh()" title="Refresh Data"><i class="fas fa-sync-alt"></i></button>
     <?php endif; ?>
 </div>
 
-<?php if ($access['show']): ?>
-<script>
-const charts = {};
-let isRefreshing = false;
-
-function groupByHost(data) {
-    const grouped = {};
-    data.forEach(e => {
-        const host = e.hostname || 'unknown';
-        (grouped[host] = grouped[host] || { entries: [], address: e.address || '' }).entries.push(e);
-    });
-    return grouped;
-}
-
-function createHostDatasets(dataByHost, valueMapper, pointRadius = 0) {
-    return Object.keys(dataByHost).sort().map((hostname, i) => {
-        const color = getChartColor(i);
-        return createDataset(hostname, dataByHost[hostname].entries.map(valueMapper), color, { fill: false, pointRadius });
-    });
-}
-
-async function loadAllMetrics() {
-    if (isRefreshing) return;
-    isRefreshing = true;
-    const btn = document.querySelector('.refreshButton i');
-    if (btn) btn.style.animation = 'spin 1s linear infinite';
-    try {
-        await Promise.all([updateRawPingLatencyChart(), updateAllCharts()]);
-        hideElement('loadingIndicator');
-        showElement('metricsContent');
-        updateLastUpdateTime();
-    } catch (e) { console.error('Error loading metrics:', e); }
-    finally { isRefreshing = false; if (btn) btn.style.animation = ''; }
-}
-
-async function updateRawPingLatencyChart() {
-    const hours = parseInt(document.getElementById('rawTimeRange').value);
-    const data = await fetchJson(`/api/plugin/fpp-plugin-watcher/metrics/multisync/ping/raw?hours=${hours}`);
-
-    if (!data.success || !data.data?.length) {
-        showElement('noDataMessage');
-        return;
-    }
-    hideElement('noDataMessage');
-
-    const dataByHost = groupByHost(data.data);
-    const datasets = createHostDatasets(dataByHost, e => ({ x: e.timestamp * 1000, y: e.latency }), 2);
-    const opts = buildChartOptions(hours, { yLabel: 'Latency (ms)', beginAtZero: true, tooltipLabel: ctx => ctx.dataset.label + ': ' + ctx.parsed.y.toFixed(2) + ' ms' });
-    updateOrCreateChart(charts, 'rawPing', 'rawPingLatencyChart', 'line', datasets, opts);
-}
-
-async function updateAllCharts() {
-    const hours = parseInt(document.getElementById('timeRange').value);
-    const data = await fetchJson(`/api/plugin/fpp-plugin-watcher/metrics/multisync/ping/rollup?hours=${hours}`);
-
-    const sections = ['statsBarSection', 'rollupChartsSection', 'perHostStatsSection'];
-    if (!data.success || !data.data?.length) {
-        sections.forEach(id => document.getElementById(id).style.display = 'none');
-        return;
-    }
-    sections.forEach(id => document.getElementById(id).style.display = 'block');
-
-    if (data.tier_info) {
-        document.getElementById('latencyTierBadge').textContent = data.tier_info.label;
-        document.getElementById('successTierBadge').textContent = data.tier_info.label;
-    }
-
-    const dataByHost = groupByHost(data.data);
-    const hostnames = Object.keys(dataByHost).sort();
-
-    // Calculate per-host stats
-    const hostStats = hostnames.map(hostname => {
-        const entries = dataByHost[hostname].entries;
-        const latencies = entries.map(e => e.avg_latency).filter(v => v !== null);
-        const success = entries.reduce((s, e) => s + (e.success_count || 0), 0);
-        const failure = entries.reduce((s, e) => s + (e.failure_count || 0), 0);
-        const total = success + failure;
-        return {
-            hostname, address: dataByHost[hostname].address,
-            avgLatency: latencies.length ? latencies.reduce((a, b) => a + b) / latencies.length : null,
-            minLatency: latencies.length ? Math.min(...latencies) : null,
-            maxLatency: latencies.length ? Math.max(...latencies) : null,
-            successRate: total ? success / total * 100 : 0
-        };
-    });
-
-    // Render per-host stat cards
-    document.getElementById('perHostStats').innerHTML = hostStats.map(s => {
-        const lc = s.avgLatency === null ? '' : s.avgLatency > 100 ? 'danger' : s.avgLatency > 50 ? 'warning' : 'success';
-        const sc = s.successRate >= 99 ? 'success' : s.successRate >= 90 ? 'warning' : 'danger';
-        const bc = { danger: '#dc3545', warning: '#ffc107', success: '#28a745' }[lc] || '#6c757d';
-        return `<div class="hostStatCard" style="border-left-color:${bc}">
-            <div class="hostname">${escapeHtml(s.hostname)}</div>
-            <div class="address">${escapeHtml(s.address)}</div>
-            <div class="stats-row">
-                <div class="stat"><div class="stat-label">Avg Latency</div><div class="stat-value ${lc}">${s.avgLatency !== null ? s.avgLatency.toFixed(1) + ' ms' : '--'}</div></div>
-                <div class="stat"><div class="stat-label">Min/Max</div><div class="stat-value">${s.minLatency !== null ? s.minLatency.toFixed(1) : '--'} / ${s.maxLatency !== null ? s.maxLatency.toFixed(1) : '--'}</div></div>
-                <div class="stat"><div class="stat-label">Success Rate</div><div class="stat-value ${sc}">${s.successRate.toFixed(1)}%</div></div>
-            </div></div>`;
-    }).join('');
-
-    // Update summary stats
-    const allLat = hostStats.filter(s => s.avgLatency !== null).map(s => s.avgLatency);
-    document.getElementById('hostsCount').textContent = hostnames.length;
-    document.getElementById('overallAvgLatency').textContent = allLat.length ? (allLat.reduce((a, b) => a + b) / allLat.length).toFixed(2) + ' ms' : '-- ms';
-    document.getElementById('bestLatency').textContent = allLat.length ? Math.min(...allLat).toFixed(2) + ' ms' : '-- ms';
-    document.getElementById('worstLatency').textContent = allLat.length ? Math.max(...allLat).toFixed(2) + ' ms' : '-- ms';
-    document.getElementById('dataPoints').textContent = data.data.length.toLocaleString();
-
-    // Update charts
-    const latencyOpts = buildChartOptions(hours, { yLabel: 'Latency (ms)', beginAtZero: true, yTickFormatter: v => v.toFixed(1) + ' ms', tooltipLabel: ctx => ctx.dataset.label + ': ' + ctx.parsed.y.toFixed(2) + ' ms' });
-    updateOrCreateChart(charts, 'latency', 'latencyChart', 'line', createHostDatasets(dataByHost, e => ({ x: e.timestamp * 1000, y: e.avg_latency })), latencyOpts);
-
-    const successOpts = buildChartOptions(hours, { yLabel: 'Success Rate (%)', yMax: 100, yTickFormatter: v => v + '%', tooltipLabel: ctx => ctx.dataset.label + ': ' + ctx.parsed.y.toFixed(1) + '%' });
-    const successDatasets = createHostDatasets(dataByHost, e => {
-        const t = (e.success_count || 0) + (e.failure_count || 0);
-        return { x: e.timestamp * 1000, y: t ? e.success_count / t * 100 : 100 };
-    });
-    updateOrCreateChart(charts, 'success', 'successChart', 'line', successDatasets, successOpts);
-}
-
-setInterval(() => { if (!isRefreshing) loadAllMetrics(); }, 60000);
-document.addEventListener('DOMContentLoaded', loadAllMetrics);
-</script>
-<?php endif; ?>
+<?php if ($access['show']) renderWatcherJS(); ?>
