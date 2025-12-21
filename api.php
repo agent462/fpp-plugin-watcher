@@ -23,6 +23,7 @@
 // Load class autoloader
 require_once __DIR__ . '/classes/autoload.php';
 
+use Watcher\Core\Settings;
 use Watcher\Http\ApiClient;
 use Watcher\Http\CurlMultiHandler;
 use Watcher\Metrics\PingCollector;
@@ -438,8 +439,7 @@ function fpppluginWatcherFalconConfigSave() {
         }
     }
 
-    /** @disregard P1010 */
-    WriteSettingToFile('falconControllers', $hosts, WATCHERPLUGINNAME);
+    Settings::getInstance()->writeSettingToFile('falconControllers', $hosts, WATCHERPLUGINNAME);
 
     return apiSuccess([
         'message' => 'Configuration saved',

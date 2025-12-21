@@ -7,9 +7,9 @@
 include_once __DIR__ . "/../lib/core/watcherCommon.php";
 include_once __DIR__ . "/../lib/core/config.php";
 
-// Load class autoloader
-require_once __DIR__ . '/../classes/autoload.php';
+require_once __DIR__ . '/../classes/autoload.php'; // Load class autoloader
 
+use Watcher\Core\Settings;
 use Watcher\Http\ApiClient;
 use Watcher\Controllers\EfuseHardware;
 
@@ -86,7 +86,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['save_settings'])) {
     }
 
     if (empty($errors)) {
-        // Save settings using FPP's WriteSettingToFile
+        // Save settings using WatcherWriteSettingToFile
         $settingsToSave = [
             'connectivityCheckEnabled' => $connectivityCheckEnabled,
             'checkInterval' => $checkInterval,
@@ -109,9 +109,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['save_settings'])) {
             'efuseRetentionDays' => $efuseRetentionDays
         ];
 
+        $settings = Settings::getInstance();
         foreach ($settingsToSave as $settingName => $settingValue) {
-            /** @disregard P1010 */
-            WriteSettingToFile($settingName, $settingValue, WATCHERPLUGINNAME);
+            $settings->writeSettingToFile($settingName, (string)$settingValue, WATCHERPLUGINNAME);
         }
 
         // Configure FPP MQTT settings based on enable/disable state
@@ -123,8 +123,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['save_settings'])) {
         // Only set FPP restart flag if settings that require restart have changed
         // (collectd or MQTT changes still need restart; connectivity settings are hot-reloaded)
         if (settingsRequireRestart($oldConfig, $settingsToSave)) {
-            /** @disregard P1010 */
-            WriteSettingToFile('restartFlag', 1);
+            $settings->writeSettingToFile('restartFlag', '1', WATCHERPLUGINNAME);
             $statusMessage = 'Settings saved! FPP restart required for collectd/MQTT/efuse process changes.';
         } else {
             $statusMessage = 'Settings saved! Changes take effect within 60 seconds.';

@@ -36,7 +36,7 @@ class EfuseHardware
     {
         $this->logger = Logger::getInstance();
         $this->fileManager = FileManager::getInstance();
-        $this->efuseDir = '/home/fpp/media/plugin-data/fpp-plugin-watcher/watcher-efuse';
+        $this->efuseDir = WATCHEREFUSEDIR;
         $this->cacheFile = $this->efuseDir . '/hardware-cache.json';
     }
 
@@ -67,8 +67,6 @@ class EfuseHardware
             'ports' => 0,
             'details' => []
         ];
-
-        // Check in order of priority (all are fast file reads)
 
         // 1. Check for BBB/PB/Pi capes with eFuse support via cape-info.json + string configs
         $capeResult = $this->detectCapeEfuse();

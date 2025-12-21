@@ -162,8 +162,6 @@ class EfuseCollector extends BaseMetricsCollector
 
         $fp = @fopen($this->metricsFile, 'a');
         if (!$fp) {
-            // Ensure directory exists
-            ensureDataDirectories();
             $fp = @fopen($this->metricsFile, 'a');
             if (!$fp) {
                 $this->logger->error("Unable to open eFuse raw metrics file for writing");

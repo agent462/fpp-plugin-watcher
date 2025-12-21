@@ -7,7 +7,6 @@ namespace Watcher\Core;
  * FPP Settings access
  *
  * Provides access to FPP directory paths and plugin settings.
- * Computes paths using the same logic as FPP's config.php for portability.
  *
  * @package Watcher\Core
  * @since 1.0.0

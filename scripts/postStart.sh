@@ -12,11 +12,6 @@ echo "Watcher: Ensuring data directories exist..."
 mkdir -p "$DATA_DIR/ping" "$DATA_DIR/multisync-ping" "$DATA_DIR/network-quality" "$DATA_DIR/mqtt" "$DATA_DIR/connectivity" "$DATA_DIR/efuse"
 chown -R fpp:fpp "$DATA_DIR"
 
-# Run one-time data migration (script checks marker file internally)
-if [ -f "$PLUGIN_DIR/scripts/migrateData.php" ]; then
-    /usr/bin/php "$PLUGIN_DIR/scripts/migrateData.php"
-fi
-
 if [ -f "$CONFIG_FILE" ]; then
     # Read collectdEnabled setting from config file (trim whitespace and quotes)
     # Match both "collectdEnabled=value" and "collectdEnabled = value" formats

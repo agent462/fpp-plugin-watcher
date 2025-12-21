@@ -1,6 +1,7 @@
 <?php
 include_once __DIR__ . '/watcherCommon.php';
 
+use Watcher\Core\Settings;
 use Watcher\Http\ApiClient;
 
 /**
@@ -9,10 +10,10 @@ use Watcher\Http\ApiClient;
 function setDefaultWatcherSettings() {
     logMessage("Setting default Watcher Config");
 
+    $settings = Settings::getInstance();
     foreach (WATCHERDEFAULTSETTINGS as $settingName => $settingValue) {
         logMessage("Setting $settingName = $settingValue");
-        /** @disregard P1010 */
-        WriteSettingToFile($settingName, $settingValue, $plugin = WATCHERPLUGINNAME);
+        $settings->writeSettingToFile($settingName, (string)$settingValue, WATCHERPLUGINNAME);
     }
 }
 
@@ -106,7 +107,7 @@ function prepareConfig($config) {
     if (isset($config['testHosts'])) {
         $config['testHosts'] = array_map('trim', explode(',', $config['testHosts']));
     } else {
-        $config['testHosts'] = ['8.8.8.8']; // Default host
+        $config['testHosts'] = ['8.8.8.8'];
     }
 
     return $config;

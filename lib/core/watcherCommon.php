@@ -1,30 +1,30 @@
 <?php
-include_once __DIR__ . "/fppSettings.php";
-
 // Load class autoloader for Watcher classes
 require_once __DIR__ . '/../../classes/autoload.php';
 
-// API timeout constants (in seconds)
-define("WATCHER_TIMEOUT_STATUS", 2);    // Quick status checks (fppd/status, playback sync)
-define("WATCHER_TIMEOUT_STANDARD", 5);  // Standard API requests (info, version, plugins)
-define("WATCHER_TIMEOUT_LONG", 10);     // Longer operations (metrics/all, state changes)
-
+use Watcher\Core\Settings;
 use Watcher\Http\ApiClient;
 
-global $settings;
+// API timeout constants (in seconds)
+define("WATCHER_TIMEOUT_STATUS", 2);    // Quick status checks (fppd/status, playback sync)
+define("WATCHER_TIMEOUT_STANDARD", 2);  // Standard API requests (info, version, plugins)
+define("WATCHER_TIMEOUT_LONG", 5);     // Longer operations (metrics/all, state changes)
 
-$_watcherPluginInfo = @json_decode(file_get_contents(__DIR__ . '/../../pluginInfo.json'), true); // Parse version from pluginInfo.json
+// Get settings from the Settings singleton
+$_watcherSettings = Settings::getInstance();
+
+$_watcherPluginInfo = @json_decode(file_get_contents(__DIR__ . '/../../pluginInfo.json'), true); // Parse version from pluginInfo.json so it's one source of truth
 define("WATCHERPLUGINNAME", 'fpp-plugin-watcher');
 define("WATCHERVERSION", 'v' . ($_watcherPluginInfo['version'] ?? '0.0.0'));
-define("WATCHERPLUGINDIR", $settings['pluginDirectory']."/".WATCHERPLUGINNAME."/");
-define("WATCHERCONFIGFILELOCATION", $settings['configDirectory']."/plugin.".WATCHERPLUGINNAME);
-define("WATCHERLOGDIR", $settings['logDirectory']);
+define("WATCHERPLUGINDIR", $_watcherSettings->getPluginDirectory()."/".WATCHERPLUGINNAME."/");
+define("WATCHERCONFIGFILELOCATION", $_watcherSettings->getConfigDirectory()."/plugin.".WATCHERPLUGINNAME);
+define("WATCHERLOGDIR", $_watcherSettings->getLogDirectory());
 define("WATCHERLOGFILE", WATCHERLOGDIR."/".WATCHERPLUGINNAME.".log");
 define("WATCHERFPPUSER", 'fpp');
 define("WATCHERFPPGROUP", 'fpp');
 
 // Data directory for metrics storage (plugin-data location)
-define("WATCHERDATADIR", $settings['mediaDirectory']."/plugin-data/".WATCHERPLUGINNAME);
+define("WATCHERDATADIR", $_watcherSettings->getMediaDirectory()."/plugin-data/".WATCHERPLUGINNAME);
 define("WATCHERPINGDIR", WATCHERDATADIR."/ping");
 define("WATCHERMULTISYNCPINGDIR", WATCHERDATADIR."/multisync-ping");
 define("WATCHERNETWORKQUALITYDIR", WATCHERDATADIR."/network-quality");
@@ -66,17 +66,16 @@ define("WATCHERDEFAULTSETTINGS",
         'issueCheckOutputs' => true,
         'issueCheckSequences' => true,
         'issueCheckOutputHostsNotInSync' => true,
-        'efuseMonitorEnabled' => false,
+        'efuseMonitorEnabled' => true,
         'efuseCollectionInterval' => 5,   // seconds (1-60)
-        'efuseRetentionDays' => 7)        // days (1-90)
+        'efuseRetentionDays' => 14)        // days (1-90)
         );
 
 // Settings that require FPP restart when changed
-// Most connectivity settings now support hot-reload (checked every 60 seconds by daemon)
-// Only collectd and MQTT require restart as they are separate services
+// Most connectivity settings support hot-reload (every 60 seconds by daemon)
 define("WATCHERSETTINGSRESTARTREQUIRED",
     array(
-        'connectivityCheckEnabled' => false,  // Hot-reloadable (daemon exits gracefully if disabled)
+        'connectivityCheckEnabled' => true,   // Daemon exits gracefully if disabled, but need it to start daemon
         'checkInterval' => false,             // Hot-reloadable
         'maxFailures' => false,               // Hot-reloadable
         'networkAdapter' => false,            // Hot-reloadable
@@ -96,6 +95,19 @@ define("WATCHERSETTINGSRESTARTREQUIRED",
         'efuseCollectionInterval' => false,   // Hot-reloadable
         'efuseRetentionDays' => false         // Hot-reloadable
     ));
+
+// eFuse collector constants
+// Collection configuration
+define('EFUSE_ROLLUP_INTERVAL', 60);        // Process rollups every 60 seconds
+define('EFUSE_CONFIG_CHECK_INTERVAL', 60);  // Check config every 60 seconds
+define('EFUSE_MAX_AMPERAGE', 6000);         // Max 6A per port in mA
+
+// Error handling configuration
+define('EFUSE_MAX_BACKOFF_SECONDS', 60);    // Max backoff when fppd unavailable
+define('EFUSE_ERROR_LOG_INTERVAL', 60);     // Only log errors every N seconds to avoid spam
+
+// Log file for eFuse collector
+define('EFUSE_LOG_FILE', WATCHERLOGDIR . '/fpp-plugin-watcher-efuse.log');
 
 // Ensure plugin-created files are owned by the FPP user/group for web access
 function ensureFppOwnership($path) {
@@ -615,6 +627,8 @@ function ensureDataDirectories() {
         }
     }
 }
+// Ensure data directories exist
+ensureDataDirectories();
 
 /**
  * Get data category definitions for file management

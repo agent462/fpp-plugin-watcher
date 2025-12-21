@@ -1,12 +1,10 @@
 #!/usr/bin/php
 <?php
-// Load class autoloader
-require_once __DIR__ . '/classes/autoload.php';
-
-// Core (watcherCommon.php loads fppSettings.php for $settings and WriteSettingToFile)
+require_once __DIR__ . '/classes/autoload.php'; // Load class autoloader
 include_once __DIR__ ."/lib/core/watcherCommon.php";
 include_once __DIR__ ."/lib/core/config.php";
 
+use Watcher\Core\Settings;
 use Watcher\Metrics\MetricsStorage;
 use Watcher\Controllers\NetworkAdapter;
 use Watcher\Metrics\PingCollector;
@@ -90,8 +88,7 @@ function checkAndReloadConfig() {
 if ($config['networkAdapter'] === 'default') {
     $actualNetworkAdapter = detectActiveNetworkInterface();
     // Save the detected interface to config so it's persistent
-    /** @disregard P1010 */
-    WriteSettingToFile('networkAdapter', $actualNetworkAdapter, WATCHERPLUGINNAME);
+    Settings::getInstance()->writeSettingToFile('networkAdapter', $actualNetworkAdapter, WATCHERPLUGINNAME);
     logMessage("Auto-detected network adapter '$actualNetworkAdapter' from 'default' setting and saved to config");
     $networkAdapterDisplay = "default (detected: $actualNetworkAdapter)";
 } else {

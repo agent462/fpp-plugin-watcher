@@ -3,7 +3,7 @@
 /**
  * eFuse Metrics Collection Daemon
  *
- * Runs in the background collecting eFuse current readings every 5 seconds.
+ * Runs in the background collecting eFuse current readings every X seconds.
  * Writes raw metrics and triggers rollup processing.
  *
  * Usage: php efuseCollector.php
@@ -11,52 +11,28 @@
  * @package fpp-plugin-watcher
  */
 
-// Load class autoloader
-require_once __DIR__ . '/classes/autoload.php';
-
-// Include required files (watcherCommon.php loads fppSettings.php for $settings)
+require_once __DIR__ . '/classes/autoload.php'; // Load class autoloader
 require_once __DIR__ . '/lib/core/watcherCommon.php';
 require_once __DIR__ . '/lib/core/config.php';
 
 use Watcher\Metrics\EfuseCollector;
 use Watcher\Controllers\EfuseHardware;
 
-// Collection configuration (fixed values)
-define('EFUSE_ROLLUP_INTERVAL', 60);        // Process rollups every 60 seconds
-define('EFUSE_CONFIG_CHECK_INTERVAL', 60);  // Check config every 60 seconds
-define('EFUSE_MAX_AMPERAGE', 6000);         // Max 6A per port in mA
-
-// Error handling configuration
-define('EFUSE_MAX_BACKOFF_SECONDS', 60);    // Max backoff when fppd unavailable
-define('EFUSE_ERROR_LOG_INTERVAL', 60);     // Only log errors every N seconds to avoid spam
-
-// Log file for eFuse collector
-define('EFUSE_LOG_FILE', WATCHERLOGDIR . '/fpp-plugin-watcher-efuse.log');
-
 // Config hot-reload tracking (global for checkAndReloadEfuseConfig)
 $lastConfigMtime = file_exists(WATCHERCONFIGFILELOCATION) ? filemtime(WATCHERCONFIGFILELOCATION) : 0;
 $config = readPluginConfig();
 $collectionInterval = $config['efuseCollectionInterval'] ?? 5;
-$retentionDays = $config['efuseRetentionDays'] ?? 7;
+$retentionDays = $config['efuseRetentionDays'] ?? 14;
 
-/**
- * Log a message with timestamp
- */
 function efuseLog($message) {
     logMessage("[eFuse Collector] $message", EFUSE_LOG_FILE);
 }
 
-/**
- * Check if eFuse monitoring is enabled in config
- */
 function isEfuseEnabled() {
     $config = readPluginConfig(true); // Force refresh
     return !empty($config['efuseMonitorEnabled']);
 }
 
-/**
- * Check if compatible hardware is present
- */
 function hasEfuseHardware() {
     $hardware = EfuseHardware::getInstance()->detectHardware();
     return $hardware['supported'];
@@ -126,9 +102,6 @@ function runCollector() {
     efuseLog("Hardware detected: {$hardware['type']} with {$hardware['ports']} ports");
     efuseLog("Collection method: " . ($hardware['details']['method'] ?? 'unknown'));
     efuseLog("Collection interval: {$collectionInterval}s, Retention: {$retentionDays} days");
-
-    // Ensure data directories exist
-    ensureDataDirectories();
 
     $lastRollupTime = 0;
     $lastConfigCheckTime = 0;
