@@ -20,6 +20,9 @@ class EfuseHardware
     public const HARDWARE_CACHE_TTL = 3600; // 1 hour
     public const RESET_DELAY_US = 100000; // 100ms delay for fuse reset
 
+    // Smart receiver subport letters
+    public const SMART_RECEIVER_SUBPORTS = ['A', 'B', 'C', 'D', 'E', 'F'];
+
     // FPP directories
     public const FPP_TMP_DIR = '/home/fpp/media/tmp';
     public const FPP_CONFIG_DIR = '/home/fpp/media/config';
@@ -30,7 +33,6 @@ class EfuseHardware
     private FileManager $fileManager;
     private string $efuseDir;
     private string $cacheFile;
-    private ?array $cachedHardware = null;
 
     private function __construct()
     {
@@ -47,7 +49,7 @@ class EfuseHardware
 
     /**
      * Detect eFuse-capable hardware on this system
-     * Uses file-based caching and ONLY reads config files - never calls APIs or i2cdetect
+     * Uses file-based caching and ONLY reads config files
      */
     public function detectHardware(bool $forceRefresh = false): array
     {
@@ -75,7 +77,7 @@ class EfuseHardware
             return $capeResult;
         }
 
-        // 2. Check for smart receivers via channel output config files (no API)
+        // 2. Check for smart receivers via channel output config files
         $smartResult = $this->detectSmartReceiversFromConfig();
         if ($smartResult['supported']) {
             $this->saveHardwareCache($smartResult);
@@ -117,7 +119,7 @@ class EfuseHardware
             'details' => []
         ];
 
-        // Step 1: Check for cape-info.json
+        // Check for cape-info.json
         $capeInfoFile = self::FPP_TMP_DIR . '/cape-info.json';
         $capeInfo = null;
 
@@ -125,60 +127,40 @@ class EfuseHardware
             $capeInfo = @json_decode(file_get_contents($capeInfoFile), true);
         }
 
-        // Step 2: Check if cape explicitly provides currentMonitoring
+        // Check if cape explicitly provides currentMonitoring
         $providesCurrentMonitoring = false;
         if ($capeInfo && isset($capeInfo['provides']) && is_array($capeInfo['provides'])) {
             $providesCurrentMonitoring = in_array('currentMonitoring', $capeInfo['provides']);
         }
 
-        // Step 3: Get the subType from channel output config
+        // Get the subType from channel output config
         $channelOutputInfo = $this->getChannelOutputConfig();
-
-        // If cape provides currentMonitoring but we have no channel config, still report support
-        if ($providesCurrentMonitoring && !$channelOutputInfo) {
-            $capeName = $capeInfo['name'] ?? $capeInfo['id'] ?? 'Unknown Cape';
-            $portCount = $this->countEfusePortsFromFppd();
-            if ($portCount === 0) {
-                $portCount = 16;
-            }
-            $result['supported'] = true;
-            $result['type'] = 'cape';
-            $result['ports'] = $portCount;
-            $result['details'] = [
-                'cape' => $capeName,
-                'subType' => $capeInfo['id'] ?? '',
-                'outputType' => 'unknown',
-                'hasCurrentMonitor' => true,
-                'method' => 'cape_provides'
-            ];
-            return $result;
-        }
-
-        if (!$channelOutputInfo) {
-            return $result;
-        }
-
         $subType = $channelOutputInfo['subType'] ?? '';
         $outputType = $channelOutputInfo['type'] ?? '';
 
-        // If cape provides currentMonitoring, we're done
+        // If cape provides currentMonitoring, build result
         if ($providesCurrentMonitoring) {
-            $capeName = $capeInfo['name'] ?? $subType;
+            $capeName = $capeInfo['name'] ?? ($channelOutputInfo ? $subType : ($capeInfo['id'] ?? 'Unknown Cape'));
             $portCount = $this->countEfusePortsFromFppd();
             if ($portCount === 0) {
                 $portCount = 16;
             }
 
-            $result['supported'] = true;
-            $result['type'] = 'cape';
-            $result['ports'] = $portCount;
-            $result['details'] = [
-                'cape' => $capeName,
-                'subType' => $subType,
-                'outputType' => $outputType,
-                'hasCurrentMonitor' => true,
-                'method' => 'cape_provides'
+            return [
+                'supported' => true,
+                'type' => 'cape',
+                'ports' => $portCount,
+                'details' => [
+                    'cape' => $capeName,
+                    'subType' => $channelOutputInfo ? $subType : ($capeInfo['id'] ?? ''),
+                    'outputType' => $channelOutputInfo ? $outputType : 'unknown',
+                    'hasCurrentMonitor' => true,
+                    'method' => 'cape_provides'
+                ]
             ];
+        }
+
+        if (!$channelOutputInfo) {
             return $result;
         }
 
@@ -234,9 +216,6 @@ class EfuseHardware
         return $result;
     }
 
-    /**
-     * Get channel output configuration from config files
-     */
     private function getChannelOutputConfig(): ?array
     {
         $configFiles = [
@@ -312,9 +291,6 @@ class EfuseHardware
         return null;
     }
 
-    /**
-     * Detect platform type
-     */
     private function detectPlatform(): string
     {
         if (file_exists('/proc/device-tree/model')) {
@@ -332,9 +308,6 @@ class EfuseHardware
         return 'pi';
     }
 
-    /**
-     * Detect smart receivers from channel output config files
-     */
     private function detectSmartReceiversFromConfig(): array
     {
         $result = [
@@ -411,9 +384,6 @@ class EfuseHardware
         return $result;
     }
 
-    /**
-     * Read current eFuse port data
-     */
     public function readEfuseData(): array
     {
         $hardware = $this->detectHardware();
@@ -429,9 +399,6 @@ class EfuseHardware
         return $this->readEfuseFromFppdPorts();
     }
 
-    /**
-     * Get fppd/ports data with in-request caching
-     */
     public function getFppdPortsCached(): ?array
     {
         static $cachedPorts = null;
@@ -456,9 +423,6 @@ class EfuseHardware
         return $cachedPorts;
     }
 
-    /**
-     * Count eFuse-capable ports from fppd/ports endpoint
-     */
     public function countEfusePortsFromFppd(): int
     {
         $portNames = $this->getEfuseCapablePortNames();
@@ -466,7 +430,7 @@ class EfuseHardware
     }
 
     /**
-     * Get list of port names that have eFuse/current monitoring capability
+     * Uses FPP's native naming: "Port 1" for regular, "Port 9A" for smart receiver subports
      */
     public function getEfuseCapablePortNames(): array
     {
@@ -476,42 +440,22 @@ class EfuseHardware
         }
 
         $capablePorts = [];
-        foreach ($portsList as $port) {
-            $name = $port['name'] ?? '';
-            if (empty($name)) {
-                continue;
+        $this->iterateAllPorts($portsList, function (string $portName, array $portData, bool $isSmartReceiver) use (&$capablePorts) {
+            if (isset($portData['ma'])) {
+                $capablePorts[] = $portName;
             }
-
-            if (isset($port['smartReceivers']) && $port['smartReceivers']) {
-                $hasSubportData = false;
-                foreach (['A', 'B', 'C', 'D', 'E', 'F'] as $sub) {
-                    if (isset($port[$sub]) && isset($port[$sub]['ma'])) {
-                        $hasSubportData = true;
-                        break;
-                    }
-                }
-                if ($hasSubportData) {
-                    $capablePorts[] = $name;
-                }
-            } else {
-                if (isset($port['ma'])) {
-                    $capablePorts[] = $name;
-                }
-            }
-        }
+        });
 
         return $capablePorts;
     }
 
     /**
-     * Read eFuse data from FPP's fppd/ports endpoint
+     * Uses FPP's native naming: "Port 1" for regular, "Port 9A" for smart receiver subports
      */
     private function readEfuseFromFppdPorts(): array
     {
-        $ports = [];
-
-        $portsData = @file_get_contents('http://127.0.0.1/api/fppd/ports');
-        if ($portsData === false) {
+        $portsList = $this->fetchPortsData();
+        if ($portsList === null) {
             return [
                 'success' => false,
                 'error' => 'Could not connect to fppd',
@@ -519,38 +463,13 @@ class EfuseHardware
             ];
         }
 
-        $portsList = @json_decode($portsData, true);
-        if (!is_array($portsList)) {
-            return [
-                'success' => false,
-                'error' => 'Invalid response from fppd',
-                'ports' => []
-            ];
-        }
-
-        foreach ($portsList as $port) {
-            $name = $port['name'] ?? '';
-            if (empty($name)) {
-                continue;
+        $ports = [];
+        $this->iterateAllPorts($portsList, function (string $portName, array $portData, bool $isSmartReceiver) use (&$ports) {
+            $ma = intval($portData['ma'] ?? 0);
+            if ($ma > 0) {
+                $ports[$portName] = $ma;
             }
-
-            if (isset($port['smartReceivers']) && $port['smartReceivers']) {
-                foreach (['A', 'B', 'C', 'D', 'E', 'F'] as $sub) {
-                    if (isset($port[$sub]) && isset($port[$sub]['ma'])) {
-                        $subName = $name . '-' . $sub;
-                        $ma = intval($port[$sub]['ma']);
-                        if ($ma > 0) {
-                            $ports[$subName] = $ma;
-                        }
-                    }
-                }
-            } else {
-                $ma = $port['ma'] ?? 0;
-                if ($ma > 0) {
-                    $ports[$name] = intval($ma);
-                }
-            }
-        }
+        });
 
         return [
             'success' => true,
@@ -586,9 +505,6 @@ class EfuseHardware
         ];
     }
 
-    /**
-     * Clear the hardware detection cache
-     */
     public function clearHardwareCache(): void
     {
         if (file_exists($this->cacheFile)) {
@@ -597,16 +513,198 @@ class EfuseHardware
     }
 
     // =========================================================================
+    // PORT DATA HELPERS
+    // =========================================================================
+
+    /**
+     * Accepts: "Port 1", "Port 16", "Port 9A", etc.
+     */
+    public function isValidPortName(string $portName): bool
+    {
+        return (bool) preg_match('/^Port \d+[A-F]?$/', $portName);
+    }
+
+    /**
+     * Parse port name into components
+     * Returns ['base' => 'Port 9', 'subport' => 'A'] or ['base' => 'Port 1', 'subport' => null]
+     */
+    public function parsePortName(string $portName): ?array
+    {
+        if (!preg_match('/^(Port \d+)([A-F])?$/', $portName, $matches)) {
+            return null;
+        }
+        return [
+            'base' => $matches[1],
+            'subport' => $matches[2] ?? null
+        ];
+    }
+
+    public function isSmartReceiverSubport(string $portName): bool
+    {
+        return (bool) preg_match('/^Port \d+[A-F]$/', $portName);
+    }
+
+    /**
+     * Fetch fresh ports data from fppd API; bypasses cache
+     */
+    public function fetchPortsData(): ?array
+    {
+        $portsData = @file_get_contents('http://127.0.0.1/api/fppd/ports');
+        if ($portsData === false) {
+            return null;
+        }
+        $portsList = @json_decode($portsData, true);
+        return is_array($portsList) ? $portsList : null;
+    }
+
+    /**
+     * Callback receives: (string $portName, array $portData, bool $isSmartReceiver)
+     */
+    public function iterateAllPorts(array $portsList, callable $callback): void
+    {
+        foreach ($portsList as $port) {
+            $name = $port['name'] ?? '';
+            if (empty($name)) {
+                continue;
+            }
+
+            if (isset($port['smartReceivers']) && $port['smartReceivers']) {
+                // Smart receiver: iterate subports
+                foreach (self::SMART_RECEIVER_SUBPORTS as $sub) {
+                    if (isset($port[$sub])) {
+                        $callback($name . $sub, $port[$sub], true);
+                    }
+                }
+            } else {
+                // Regular port
+                $callback($name, $port, false);
+            }
+        }
+    }
+
+    /**
+     * Get port data from a ports list for a specific port name
+     * Handles both regular ports and smart receiver subports
+     */
+    public function getPortDataFromList(string $portName, array $portsList): ?array
+    {
+        $parsed = $this->parsePortName($portName);
+        if ($parsed === null) {
+            return null;
+        }
+
+        foreach ($portsList as $port) {
+            $name = $port['name'] ?? '';
+
+            if ($parsed['subport'] !== null) {
+                // Smart receiver subport
+                if ($name === $parsed['base'] && isset($port['smartReceivers']) && $port['smartReceivers']) {
+                    if (isset($port[$parsed['subport']])) {
+                        return [
+                            'data' => $port[$parsed['subport']],
+                            'isSmartReceiver' => true,
+                            'basePort' => $port
+                        ];
+                    }
+                }
+            } else {
+                // Regular port
+                if ($name === $portName) {
+                    return [
+                        'data' => $port,
+                        'isSmartReceiver' => false,
+                        'basePort' => null
+                    ];
+                }
+            }
+        }
+
+        return null;
+    }
+
+    // =========================================================================
     // EFUSE CONTROL FUNCTIONS
     // =========================================================================
+
+    /**
+     * Send port command with retry logic for smart receivers
+     *
+     * @param string $portName Port name (e.g., "Port 9A" or "Port 1")
+     * @param bool $targetEnabled Target state (true = on, false = off)
+     * @param int $maxRetries Maximum retry attempts
+     * @param int $settleTimeUs Microseconds to wait after command before verification
+     * @return array Result with success, verified state, and retry count
+     */
+    private function sendPortCommandWithRetry(
+        string $portName,
+        bool $targetEnabled,
+        int $maxRetries = 3,
+        int $settleTimeUs = 500000
+    ): array {
+        $url = "http://127.0.0.1/api/command";
+
+        $postData = json_encode([
+            'command' => 'Set Port Status',
+            'args' => [$portName, $targetEnabled]
+        ]);
+
+        $lastError = null;
+        $retryCount = 0;
+
+        for ($attempt = 1; $attempt <= $maxRetries; $attempt++) {
+            $retryCount = $attempt;
+
+            $response = @file_get_contents($url, false, stream_context_create([
+                'http' => [
+                    'method' => 'POST',
+                    'header' => 'Content-Type: application/json',
+                    'content' => $postData,
+                    'timeout' => 5
+                ]
+            ]));
+
+            if ($response === false) {
+                $lastError = 'Failed to communicate with FPP';
+                continue;
+            }
+
+            if (trim($response) !== 'OK') {
+                $lastError = $response ?: 'Command failed';
+                continue;
+            }
+
+            // Wait for hardware to settle
+            usleep($settleTimeUs);
+
+            // Verify state changed
+            $currentStatus = $this->getPortStatus($portName);
+            if ($currentStatus !== null && $currentStatus['enabled'] === $targetEnabled) {
+                return [
+                    'success' => true,
+                    'verified' => true,
+                    'retries' => $retryCount
+                ];
+            }
+
+            // State didn't change, retry
+            $lastError = 'State verification failed';
+            usleep(250000); // 250ms delay before retry
+        }
+
+        return [
+            'success' => false,
+            'verified' => false,
+            'retries' => $retryCount,
+            'error' => $lastError ?? 'Max retries exceeded'
+        ];
+    }
 
     /**
      * Toggle a port on/off using FPP's command API
      */
     public function togglePort(string $portName, ?string $state = null): array
     {
-        // Validate port name
-        if (empty($portName) || !preg_match('/^Port \d+(-[A-F])?$/', $portName)) {
+        if (empty($portName) || !$this->isValidPortName($portName)) {
             return [
                 'success' => false,
                 'error' => 'Invalid port name format'
@@ -625,13 +723,11 @@ class EfuseHardware
             $state = $currentStatus['enabled'] ? 'off' : 'on';
         }
 
-        // Normalize state
-        if ($state === true || $state === 'true' || $state === '1' || $state === 1) {
+        $state = strtolower($state);
+        if ($state === 'true' || $state === '1') {
             $state = 'on';
-        } elseif ($state === false || $state === 'false' || $state === '0' || $state === 0) {
+        } elseif ($state === 'false' || $state === '0') {
             $state = 'off';
-        } else {
-            $state = strtolower($state);
         }
 
         if (!in_array($state, ['on', 'off'])) {
@@ -641,32 +737,14 @@ class EfuseHardware
             ];
         }
 
-        $url = "http://127.0.0.1/api/command";
-        $postData = json_encode([
-            'command' => 'Set Port Status',
-            'args' => [$portName, $state === 'on']
-        ]);
+        $targetEnabled = ($state === 'on');
+        // Use 5 retries and 750ms settle time for reliability with smart receivers
+        $result = $this->sendPortCommandWithRetry($portName, $targetEnabled, 5, 750000);
 
-        $response = @file_get_contents($url, false, stream_context_create([
-            'http' => [
-                'method' => 'POST',
-                'header' => 'Content-Type: application/json',
-                'content' => $postData,
-                'timeout' => 5
-            ]
-        ]));
-
-        if ($response === false) {
+        if (!$result['success']) {
             return [
                 'success' => false,
-                'error' => 'Failed to communicate with FPP'
-            ];
-        }
-
-        if (trim($response) !== 'OK') {
-            return [
-                'success' => false,
-                'error' => $response ?: 'Command failed'
+                'error' => $result['error'] ?? 'Toggle failed after retries'
             ];
         }
 
@@ -685,7 +763,7 @@ class EfuseHardware
      */
     public function resetPort(string $portName): array
     {
-        if (empty($portName) || !preg_match('/^Port \d+(-[A-F])?$/', $portName)) {
+        if (empty($portName) || !$this->isValidPortName($portName)) {
             return [
                 'success' => false,
                 'error' => 'Invalid port name format'
@@ -735,6 +813,8 @@ class EfuseHardware
     public function setAllPorts(string $state): array
     {
         $state = strtolower($state);
+        $targetEnabled = ($state === 'on');
+
         if (!in_array($state, ['on', 'off'])) {
             return [
                 'success' => false,
@@ -742,7 +822,22 @@ class EfuseHardware
             ];
         }
 
-        $portNames = $this->getEfuseCapablePortNames();
+        // Fetch ports data once and extract capable port names
+        $portsList = $this->fetchPortsData();
+        if ($portsList === null) {
+            return [
+                'success' => false,
+                'error' => 'Could not connect to fppd'
+            ];
+        }
+
+        $portNames = [];
+        $this->iterateAllPorts($portsList, function (string $portName, array $portData, bool $isSmartReceiver) use (&$portNames) {
+            if (isset($portData['ma'])) {
+                $portNames[] = $portName;
+            }
+        });
+
         if (empty($portNames)) {
             return [
                 'success' => false,
@@ -750,15 +845,70 @@ class EfuseHardware
             ];
         }
 
-        $successCount = 0;
+        $url = "http://127.0.0.1/api/command";
+        $maxRetries = 5;
         $errors = [];
 
+        for ($attempt = 1; $attempt <= $maxRetries; $attempt++) {
+            // Get current state of all ports
+            $currentPortsData = @file_get_contents('http://127.0.0.1/api/fppd/ports');
+            if ($currentPortsData === false) {
+                continue;
+            }
+            $currentPorts = @json_decode($currentPortsData, true);
+            if (!is_array($currentPorts)) {
+                continue;
+            }
+
+            // Find ports that need to be changed
+            $portsToChange = [];
+            foreach ($portNames as $portName) {
+                $status = $this->getPortStatusFromData($portName, $currentPorts);
+                if ($status === null || $status['enabled'] !== $targetEnabled) {
+                    $portsToChange[] = $portName;
+                }
+            }
+
+            // If all ports are in the target state, we're done
+            if (empty($portsToChange)) {
+                break;
+            }
+
+            // Send commands for ports that need changing
+            foreach ($portsToChange as $portName) {
+                $postData = json_encode([
+                    'command' => 'Set Port Status',
+                    'args' => [$portName, $targetEnabled]
+                ]);
+
+                @file_get_contents($url, false, stream_context_create([
+                    'http' => [
+                        'method' => 'POST',
+                        'header' => 'Content-Type: application/json',
+                        'content' => $postData,
+                        'timeout' => 5
+                    ]
+                ]));
+
+                // Delay between commands - smart receivers need extra time to process
+                usleep(250000); // 250ms delay
+            }
+
+            // Wait for hardware to settle before checking state
+            usleep(750000); // 750ms
+        }
+
+        // Final verification - count successes and failures
+        $finalPortsData = @file_get_contents('http://127.0.0.1/api/fppd/ports');
+        $finalPorts = $finalPortsData ? @json_decode($finalPortsData, true) : [];
+        $successCount = 0;
+
         foreach ($portNames as $portName) {
-            $result = $this->togglePort($portName, $state);
-            if ($result['success']) {
+            $status = $this->getPortStatusFromData($portName, $finalPorts ?: []);
+            if ($status !== null && $status['enabled'] === $targetEnabled) {
                 $successCount++;
             } else {
-                $errors[] = "{$portName}: " . ($result['error'] ?? 'Unknown error');
+                $errors[] = "{$portName}: Failed to " . ($targetEnabled ? 'enable' : 'disable');
             }
         }
 
@@ -784,8 +934,32 @@ class EfuseHardware
     }
 
     /**
-     * Reset all tripped fuses
+     * Get port status from already-fetched ports data (avoids API call)
+     * Handles FPP native format: "Port 1" or "Port 9A"
      */
+    private function getPortStatusFromData(string $portName, array $portsList): ?array
+    {
+        $portInfo = $this->getPortDataFromList($portName, $portsList);
+        if ($portInfo === null) {
+            return null;
+        }
+
+        $data = $portInfo['data'];
+        if ($portInfo['isSmartReceiver']) {
+            return [
+                'name' => $portName,
+                'enabled' => $data['fuseOn'] ?? $data['enabled'] ?? false,
+                'isSmartReceiver' => true
+            ];
+        }
+
+        return [
+            'name' => $portName,
+            'enabled' => $data['enabled'] ?? false,
+            'isSmartReceiver' => false
+        ];
+    }
+
     public function resetAllTrippedFuses(): array
     {
         $trippedPorts = $this->getTrippedFuses();
@@ -864,173 +1038,61 @@ class EfuseHardware
      */
     public function getPortStatus(string $portName): ?array
     {
-        $portsData = @file_get_contents('http://127.0.0.1/api/fppd/ports');
-        if ($portsData === false) {
+        $portsList = $this->fetchPortsData();
+        if ($portsList === null) {
             return null;
         }
 
-        $portsList = @json_decode($portsData, true);
-        if (!is_array($portsList)) {
+        $portInfo = $this->getPortDataFromList($portName, $portsList);
+        if ($portInfo === null) {
             return null;
         }
 
-        $isSubPort = preg_match('/^(Port \d+)-([A-F])$/', $portName, $matches);
+        $data = $portInfo['data'];
+        // false for tripped fuses on both regular and smart receiver ports
+        $fuseTripped = isset($data['status']) && $data['status'] === false;
 
-        foreach ($portsList as $port) {
-            $name = $port['name'] ?? '';
-
-            if ($isSubPort) {
-                if ($name === $matches[1] && isset($port['smartReceivers']) && $port['smartReceivers']) {
-                    $sub = $matches[2];
-                    if (isset($port[$sub])) {
-                        return [
-                            'name' => $portName,
-                            'enabled' => $port[$sub]['fuseOn'] ?? $port[$sub]['enabled'] ?? false,
-                            'fuseTripped' => $port[$sub]['fuseBlown'] ?? false,
-                            'currentMa' => $port[$sub]['ma'] ?? $port[$sub]['current'] ?? 0,
-                            'isSmartReceiver' => true
-                        ];
-                    }
-                }
-            } else {
-                if ($name === $portName) {
-                    return [
-                        'name' => $portName,
-                        'enabled' => $port['enabled'] ?? false,
-                        'fuseTripped' => isset($port['status']) && $port['status'] === false,
-                        'currentMa' => $port['ma'] ?? 0,
-                        'isSmartReceiver' => false
-                    ];
-                }
-            }
+        if ($portInfo['isSmartReceiver']) {
+            return [
+                'name' => $portName,
+                'enabled' => $data['fuseOn'] ?? $data['enabled'] ?? false,
+                'fuseTripped' => $fuseTripped,
+                'currentMa' => $data['ma'] ?? $data['current'] ?? 0,
+                'isSmartReceiver' => true
+            ];
         }
 
-        return null;
+        return [
+            'name' => $portName,
+            'enabled' => $data['enabled'] ?? false,
+            'fuseTripped' => $fuseTripped,
+            'currentMa' => $data['ma'] ?? 0,
+            'isSmartReceiver' => false
+        ];
     }
 
-    /**
-     * Get all tripped fuses
-     */
     public function getTrippedFuses(): array
     {
+        $portsList = $this->fetchPortsData();
+        if ($portsList === null) {
+            return [];
+        }
+
         $tripped = [];
-        $portsData = @file_get_contents('http://127.0.0.1/api/fppd/ports');
-        if ($portsData === false) {
-            return $tripped;
-        }
-
-        $portsList = @json_decode($portsData, true);
-        if (!is_array($portsList)) {
-            return $tripped;
-        }
-
-        foreach ($portsList as $port) {
-            $name = $port['name'] ?? '';
-            if (empty($name)) continue;
-
-            if (isset($port['smartReceivers']) && $port['smartReceivers']) {
-                foreach (['A', 'B', 'C', 'D', 'E', 'F'] as $sub) {
-                    if (isset($port[$sub]) && isset($port[$sub]['fuseBlown']) && $port[$sub]['fuseBlown']) {
-                        $tripped[] = $name . '-' . $sub;
-                    }
-                }
-            } else {
-                if (isset($port['status']) && $port['status'] === false) {
-                    $tripped[] = $name;
-                }
+        $this->iterateAllPorts($portsList, function (string $portName, array $portData, bool $isSmartReceiver) use (&$tripped) {
+            // FPP uses status: false for tripped fuses on both regular and smart receiver ports
+            if (isset($portData['status']) && $portData['status'] === false) {
+                $tripped[] = $portName;
             }
-        }
+        });
 
         return $tripped;
     }
 
-    /**
-     * Log eFuse control action
-     */
     private function logControl(string $action, string $target, string $result): void
     {
         $message = sprintf("CONTROL: %s on %s - %s", strtoupper($action), $target, $result);
         $this->logger->info($message);
     }
 
-    /**
-     * Get port current summary with labels and status
-     * Returns ALL configured ports, with current readings merged in
-     *
-     * @param array $currentReadings Port data [portName => mA value] (only non-zero values)
-     * @return array Port summary with labels, current, and status for ALL ports
-     */
-    public function getPortCurrentSummary(array $currentReadings): array
-    {
-        $outputConfig = \Watcher\Controllers\EfuseOutputConfig::getInstance()->getOutputConfig();
-        $summary = [];
-
-        // Iterate over all configured ports, not just ones with current readings
-        foreach ($outputConfig['ports'] as $portName => $portConfig) {
-            $mA = $currentReadings[$portName] ?? 0;
-            $label = $portConfig['label'] ?? $portConfig['description'] ?? $portName;
-            $portStatus = $this->getPortStatus($portName);
-
-            $summary[$portName] = [
-                'name' => $portName,
-                'label' => $label,
-                'currentMa' => $mA,
-                'currentA' => round($mA / 1000, 2),
-                'status' => $portStatus,
-                // Flatten key status fields for JS compatibility
-                'portEnabled' => $portStatus['enabled'] ?? true,
-                'fuseTripped' => $portStatus['fuseTripped'] ?? false,
-                // Output config fields
-                'enabled' => $portConfig['enabled'] ?? false,
-                'pixelCount' => $portConfig['pixelCount'] ?? 0,
-                'expectedCurrentMa' => $portConfig['expectedCurrentMa'] ?? 0,
-                'maxCurrentMa' => $portConfig['maxCurrentMa'] ?? 0,
-                'protocol' => $portConfig['protocol'] ?? null,
-                'brightness' => $portConfig['brightness'] ?? null,
-                'colorOrder' => $portConfig['colorOrder'] ?? null,
-                'description' => $portConfig['description'] ?? null
-            ];
-        }
-
-        return $summary;
-    }
-
-    /**
-     * Calculate total current from all ports
-     *
-     * @param array $currentReadings Port data [portName => mA value] (only non-zero values)
-     * @return array Total current values
-     */
-    public function calculateTotalCurrent(array $currentReadings): array
-    {
-        $outputConfig = \Watcher\Controllers\EfuseOutputConfig::getInstance()->getOutputConfig();
-        $totalMa = 0;
-        $activePorts = 0;
-
-        // Sum current from readings
-        foreach ($currentReadings as $portName => $mA) {
-            if ($portName === '_total') {
-                continue;
-            }
-            $totalMa += $mA;
-            if ($mA > 0) {
-                $activePorts++;
-            }
-        }
-
-        return [
-            'totalMa' => $totalMa,
-            'totalAmps' => round($totalMa / 1000, 2),
-            'portCount' => count($outputConfig['ports']),
-            'activePortCount' => $activePorts
-        ];
-    }
-
-    /**
-     * Alias for getHardwareSummary for backward compatibility
-     */
-    public function getSummary(): array
-    {
-        return $this->getHardwareSummary();
-    }
 }

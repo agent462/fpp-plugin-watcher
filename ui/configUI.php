@@ -1,17 +1,19 @@
-<link rel="stylesheet" href="/css/fpp-bootstrap/dist-new/fpp-bootstrap-5-3.css">
-<link rel="stylesheet" href="/css/fpp.css">
-<link rel="stylesheet" href="/plugin.php?plugin=fpp-plugin-watcher&file=css/commonUI.css&nopage=1">
-<link rel="stylesheet" href="/plugin.php?plugin=fpp-plugin-watcher&file=css/configUI.css&nopage=1">
-
 <?php
 include_once __DIR__ . "/../lib/core/watcherCommon.php";
 include_once __DIR__ . "/../lib/core/config.php";
 
 require_once __DIR__ . '/../classes/autoload.php'; // Load class autoloader
+require_once __DIR__ . '/../classes/Watcher/UI/ViewHelpers.php'; // For renderWatcherJS()
 
 use Watcher\Core\Settings;
 use Watcher\Http\ApiClient;
 use Watcher\Controllers\EfuseHardware;
+
+// Render CSS includes (consistent with other UI pages)
+renderCSSIncludes(false);
+?>
+<link rel="stylesheet" href="/plugin.php?plugin=fpp-plugin-watcher&file=css/configUI.css&nopage=1">
+<?php
 
 $statusMessage = '';
 $statusType = '';
@@ -493,7 +495,7 @@ window.watcherConfig = {
                 </div>
                 <div class="panelBody">
                     <div class="panelDesc" style="margin-bottom: 1rem;">
-                        Track per-port current draw with heatmap visualization. Detected hardware: <?php echo htmlspecialchars(EfuseHardware::getInstance()->getSummary()['typeLabel'] ?? 'Unknown'); ?>
+                        Track per-port current draw with heatmap visualization. Detected hardware: <?php echo htmlspecialchars(EfuseHardware::getInstance()->getHardwareSummary()['typeLabel'] ?? 'Unknown'); ?>
                         (<?php echo $efuseHardware['ports']; ?> ports). View trends in the eFuse Monitor dashboard.
                     </div>
                     <div id="efuseOptionsContainer" style="<?php echo empty($config['efuseMonitorEnabled']) ? 'display:none;' : ''; ?>">
@@ -512,12 +514,12 @@ window.watcherConfig = {
                             <div class="formGroup">
                                 <label class="formLabel">Data Retention</label>
                                 <select id="efuseRetentionDays" name="efuseRetentionDays" class="form-control" onchange="page.updateEfuseStorageEstimate()">
-                                    <option value="1" <?php echo ($config['efuseRetentionDays'] ?? 7) == 1 ? 'selected' : ''; ?>>1 day</option>
-                                    <option value="3" <?php echo ($config['efuseRetentionDays'] ?? 7) == 3 ? 'selected' : ''; ?>>3 days</option>
-                                    <option value="7" <?php echo ($config['efuseRetentionDays'] ?? 7) == 7 ? 'selected' : ''; ?>>7 days</option>
-                                    <option value="14" <?php echo ($config['efuseRetentionDays'] ?? 7) == 14 ? 'selected' : ''; ?>>14 days</option>
-                                    <option value="30" <?php echo ($config['efuseRetentionDays'] ?? 7) == 30 ? 'selected' : ''; ?>>30 days</option>
-                                    <option value="90" <?php echo ($config['efuseRetentionDays'] ?? 7) == 90 ? 'selected' : ''; ?>>90 days</option>
+                                    <option value="1" <?php echo ($config['efuseRetentionDays'] ?? 14) == 1 ? 'selected' : ''; ?>>1 day</option>
+                                    <option value="3" <?php echo ($config['efuseRetentionDays'] ?? 14) == 3 ? 'selected' : ''; ?>>3 days</option>
+                                    <option value="7" <?php echo ($config['efuseRetentionDays'] ?? 14) == 7 ? 'selected' : ''; ?>>7 days</option>
+                                    <option value="14" <?php echo ($config['efuseRetentionDays'] ?? 14) == 14 ? 'selected' : ''; ?>>14 days</option>
+                                    <option value="30" <?php echo ($config['efuseRetentionDays'] ?? 14) == 30 ? 'selected' : ''; ?>>30 days</option>
+                                    <option value="90" <?php echo ($config['efuseRetentionDays'] ?? 14) == 90 ? 'selected' : ''; ?>>90 days</option>
                                 </select>
                             </div>
                         </div>
@@ -606,7 +608,6 @@ window.watcherConfig = {
             </div>
         </div>
     </div>
-
 
     <!-- Terminal Modal for viewing files -->
     <div id="terminalModal" class="terminalModal" onclick="if(event.target === this) page.closeTerminalModal()">

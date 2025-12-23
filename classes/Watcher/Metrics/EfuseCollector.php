@@ -402,14 +402,14 @@ class EfuseCollector extends BaseMetricsCollector
         $efuseOutputConfig = \Watcher\Controllers\EfuseOutputConfig::getInstance();
 
         $outputConfig = $efuseOutputConfig->getOutputConfig();
-        $portSummary = $efuseHardware->getPortCurrentSummary($reading['ports']);
-        $totals = $efuseHardware->calculateTotalCurrent($reading['ports']);
+        $portSummary = $efuseOutputConfig->getPortCurrentSummary($reading['ports']);
+        $totals = $efuseOutputConfig->calculateTotalCurrent($reading['ports']);
 
         return [
             'success' => true,
             'supported' => true,
             'timestamp' => $reading['timestamp'],
-            'hardware' => $efuseHardware->getSummary(),
+            'hardware' => $efuseHardware->getHardwareSummary(),
             'ports' => $portSummary,
             'totals' => $totals,
             'outputConfig' => $outputConfig

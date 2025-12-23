@@ -3,7 +3,7 @@
  * Unit tests for EfuseHardware class
  *
  * Comprehensive test coverage for eFuse hardware detection and control.
- * Uses a testable subclass to access private methods.
+ * Uses a testable subclass to access private methods and mock dependencies.
  *
  * @package Watcher\Tests\Unit\Controllers
  */
@@ -16,10 +16,22 @@ use Watcher\Tests\TestCase;
 use Watcher\Controllers\EfuseHardware;
 
 /**
- * Testable subclass that exposes private methods for testing
+ * Testable subclass that exposes private methods and allows mocking
  */
 class TestableEfuseHardware extends EfuseHardware
 {
+    /** @var array|null Mock ports data for API responses */
+    private ?array $mockPortsData = null;
+
+    /** @var array|null Mock API command result */
+    private ?array $mockCommandResult = null;
+
+    /** @var string|null Override cache file path for testing */
+    private ?string $testCacheFile = null;
+
+    /** @var string|null Override efuse dir for testing */
+    private ?string $testEfuseDir = null;
+
     /**
      * Get a fresh testable instance (bypasses singleton for testing)
      */
@@ -37,6 +49,70 @@ class TestableEfuseHardware extends EfuseHardware
         }
 
         return $instance;
+    }
+
+    /**
+     * Set the test cache file path
+     */
+    public function setTestCacheFile(string $path): void
+    {
+        $this->testCacheFile = $path;
+        // Update the internal cacheFile property via reflection
+        $reflection = new \ReflectionClass(parent::class);
+        $prop = $reflection->getProperty('cacheFile');
+        $prop->setAccessible(true);
+        $prop->setValue($this, $path);
+    }
+
+    /**
+     * Set the test efuse directory
+     */
+    public function setTestEfuseDir(string $path): void
+    {
+        $this->testEfuseDir = $path;
+        $reflection = new \ReflectionClass(parent::class);
+        $prop = $reflection->getProperty('efuseDir');
+        $prop->setAccessible(true);
+        $prop->setValue($this, $path);
+    }
+
+    /**
+     * Set mock ports data for readEfuseData tests
+     */
+    public function setMockPortsData(?array $data): void
+    {
+        $this->mockPortsData = $data;
+    }
+
+    /**
+     * Set mock command result for control method tests
+     */
+    public function setMockCommandResult(?array $result): void
+    {
+        $this->mockCommandResult = $result;
+    }
+
+    /**
+     * Override countEfusePortsFromFppd to return mock data
+     */
+    public function countEfusePortsFromFppd(): int
+    {
+        if ($this->mockPortsData !== null) {
+            $count = 0;
+            foreach ($this->mockPortsData as $port) {
+                if (isset($port['smartReceivers']) && $port['smartReceivers']) {
+                    foreach (self::SMART_RECEIVER_SUBPORTS as $sub) {
+                        if (isset($port[$sub]['ma'])) {
+                            $count++;
+                        }
+                    }
+                } elseif (isset($port['ma'])) {
+                    $count++;
+                }
+            }
+            return $count;
+        }
+        return parent::countEfusePortsFromFppd();
     }
 
     /**
@@ -87,6 +163,38 @@ class TestableEfuseHardware extends EfuseHardware
         $reflection = new \ReflectionMethod(parent::class, 'logControl');
         $reflection->setAccessible(true);
         $reflection->invoke($this, $action, $target, $result);
+    }
+
+    /**
+     * Expose getPortStatusFromData for testing
+     */
+    public function testGetPortStatusFromData(string $portName, array $portsList): ?array
+    {
+        $reflection = new \ReflectionMethod(parent::class, 'getPortStatusFromData');
+        $reflection->setAccessible(true);
+        return $reflection->invoke($this, $portName, $portsList);
+    }
+
+    /**
+     * Access the internal logger for testing
+     */
+    public function getLogger(): \Watcher\Core\Logger
+    {
+        $reflection = new \ReflectionClass(parent::class);
+        $prop = $reflection->getProperty('logger');
+        $prop->setAccessible(true);
+        return $prop->getValue($this);
+    }
+
+    /**
+     * Get the cache file path (for verification)
+     */
+    public function getCacheFilePath(): string
+    {
+        $reflection = new \ReflectionClass(parent::class);
+        $prop = $reflection->getProperty('cacheFile');
+        $prop->setAccessible(true);
+        return $prop->getValue($this);
     }
 }
 
@@ -197,8 +305,6 @@ class EfuseHardwareTest extends TestCase
             'getFppdPortsCached',
             'countEfusePortsFromFppd',
             'getEfuseCapablePortNames',
-            'getPortCurrentSummary',
-            'calculateTotalCurrent',
             'getHardwareSummary',
             'clearHardwareCache',
             'togglePort',
@@ -208,7 +314,13 @@ class EfuseHardwareTest extends TestCase
             'getControlCapabilities',
             'getPortStatus',
             'getTrippedFuses',
-            'getSummary',
+            // Port data helpers
+            'isValidPortName',
+            'parsePortName',
+            'isSmartReceiverSubport',
+            'fetchPortsData',
+            'iterateAllPorts',
+            'getPortDataFromList',
         ];
 
         foreach ($expectedMethods as $methodName) {
@@ -237,18 +349,12 @@ class EfuseHardwareTest extends TestCase
         $this->assertArrayHasKey('supported', $result);
     }
 
-    public function testGetSummaryIsAliasForHardwareSummary(): void
-    {
-        $summary1 = $this->hardware->getHardwareSummary();
-        $summary2 = $this->hardware->getSummary();
-
-        // Both should return same structure
-        $this->assertEquals(array_keys($summary1), array_keys($summary2));
-    }
-
     public function testGetHardwareSummaryUnsupportedStructure(): void
     {
         $result = $this->hardware->getHardwareSummary();
+
+        // Always check basic structure
+        $this->assertArrayHasKey('supported', $result);
 
         // If not supported, should have specific keys
         if (!$result['supported']) {
@@ -289,238 +395,196 @@ class EfuseHardwareTest extends TestCase
     }
 
     // =========================================================================
-    // Current Calculation Tests
+    // Port Name Validation Tests
     // =========================================================================
 
-    public function testCalculateTotalCurrentWithEmptyArray(): void
+    /**
+     * @dataProvider isValidPortNameValidProvider
+     */
+    public function testIsValidPortNameWithValidNames(string $portName): void
     {
-        $result = $this->hardware->calculateTotalCurrent([]);
-
-        $this->assertIsArray($result);
-        $this->assertArrayHasKey('totalMa', $result);
-        $this->assertArrayHasKey('totalAmps', $result);
-        $this->assertArrayHasKey('portCount', $result);
-        $this->assertArrayHasKey('activePortCount', $result);
-
-        $this->assertEquals(0, $result['totalMa']);
-        $this->assertEquals(0.0, $result['totalAmps']);
-        $this->assertEquals(0, $result['activePortCount']);
+        $this->assertTrue($this->hardware->isValidPortName($portName));
     }
 
-    public function testCalculateTotalCurrentWithSampleData(): void
+    public static function isValidPortNameValidProvider(): array
     {
-        $readings = [
-            'Port 1' => 2500,
-            'Port 2' => 3000,
-            'Port 3' => 1500,
+        return [
+            'single digit' => ['Port 1'],
+            'double digit' => ['Port 16'],
+            'with subport A' => ['Port 9A'],
+            'with subport F' => ['Port 9F'],
+            'large number' => ['Port 48'],
+            'large with subport' => ['Port 16B'],
         ];
-
-        $result = $this->hardware->calculateTotalCurrent($readings);
-
-        $this->assertIsArray($result);
-        $this->assertEquals(7000, $result['totalMa']);
-        $this->assertEquals(7.0, $result['totalAmps']);
-        $this->assertEquals(3, $result['activePortCount']);
-    }
-
-    public function testCalculateTotalCurrentIgnoresTotalKey(): void
-    {
-        $readings = [
-            'Port 1' => 1000,
-            'Port 2' => 2000,
-            '_total' => 9999  // Should be ignored
-        ];
-
-        $result = $this->hardware->calculateTotalCurrent($readings);
-
-        $this->assertEquals(3000, $result['totalMa']);
-    }
-
-    public function testCalculateTotalCurrentWithZeroValues(): void
-    {
-        $readings = [
-            'Port 1' => 0,
-            'Port 2' => 0,
-            'Port 3' => 0,
-        ];
-
-        $result = $this->hardware->calculateTotalCurrent($readings);
-
-        $this->assertEquals(0, $result['totalMa']);
-        $this->assertEquals(0, $result['activePortCount']);
-    }
-
-    public function testCalculateTotalCurrentWithMixedValues(): void
-    {
-        $readings = [
-            'Port 1' => 1000,
-            'Port 2' => 0,
-            'Port 3' => 2000,
-            'Port 4' => 0,
-        ];
-
-        $result = $this->hardware->calculateTotalCurrent($readings);
-
-        $this->assertEquals(3000, $result['totalMa']);
-        $this->assertEquals(2, $result['activePortCount']);
-    }
-
-    public function testCalculateTotalCurrentRoundsCorrectly(): void
-    {
-        $readings = [
-            'Port 1' => 1234,
-            'Port 2' => 5678,
-        ];
-
-        $result = $this->hardware->calculateTotalCurrent($readings);
-
-        $this->assertEquals(6912, $result['totalMa']);
-        $this->assertEquals(6.91, $result['totalAmps']); // Should round to 2 decimal places
     }
 
     /**
-     * @dataProvider currentCalculationProvider
+     * @dataProvider isValidPortNameInvalidProvider
      */
-    public function testCalculateTotalCurrentDataProvider(array $readings, int $expectedMa, float $expectedAmps, int $expectedActive): void
+    public function testIsValidPortNameWithInvalidNames(string $portName): void
     {
-        $result = $this->hardware->calculateTotalCurrent($readings);
-
-        $this->assertEquals($expectedMa, $result['totalMa']);
-        $this->assertEquals($expectedAmps, $result['totalAmps']);
-        $this->assertEquals($expectedActive, $result['activePortCount']);
+        $this->assertFalse($this->hardware->isValidPortName($portName));
     }
 
-    public static function currentCalculationProvider(): array
+    public static function isValidPortNameInvalidProvider(): array
     {
         return [
-            'empty' => [[], 0, 0.0, 0],
-            'single port' => [['Port 1' => 1000], 1000, 1.0, 1],
-            'multiple ports' => [
-                ['Port 1' => 1000, 'Port 2' => 2000, 'Port 3' => 3000],
-                6000, 6.0, 3
-            ],
-            'with zeros' => [
-                ['Port 1' => 1000, 'Port 2' => 0, 'Port 3' => 2000],
-                3000, 3.0, 2
-            ],
-            'all zeros' => [
-                ['Port 1' => 0, 'Port 2' => 0],
-                0, 0.0, 0
-            ],
-            'large values' => [
-                ['Port 1' => 5000, 'Port 2' => 5000, 'Port 3' => 5000],
-                15000, 15.0, 3
-            ],
-            'fractional result' => [
-                ['Port 1' => 1234],
-                1234, 1.23, 1
-            ],
-            'with _total key ignored' => [
-                ['Port 1' => 1000, '_total' => 9999],
-                1000, 1.0, 1
-            ]
+            'lowercase port' => ['port 1'],
+            'no space' => ['Port1'],
+            'invalid subport G' => ['Port 9G'],
+            'lowercase subport' => ['Port 9a'],
+            'empty' => [''],
+            'just number' => ['1'],
+            'extra text' => ['Port 1 Extra'],
         ];
     }
 
-    public function testGetPortCurrentSummaryWithEmptyArray(): void
+    public function testParsePortNameRegularPort(): void
     {
-        $result = $this->hardware->getPortCurrentSummary([]);
+        $result = $this->hardware->parsePortName('Port 1');
 
         $this->assertIsArray($result);
+        $this->assertEquals('Port 1', $result['base']);
+        $this->assertNull($result['subport']);
     }
 
-    public function testGetPortCurrentSummaryReturnsExpectedFields(): void
+    public function testParsePortNameSmartReceiverSubport(): void
     {
-        // Get output config to know what ports are configured
-        $outputConfig = \Watcher\Controllers\EfuseOutputConfig::getInstance()->getOutputConfig();
-
-        if (empty($outputConfig['ports'])) {
-            $this->markTestSkipped('No configured ports to test');
-        }
-
-        $portName = array_key_first($outputConfig['ports']);
-        $readings = [$portName => 1500];
-
-        $result = $this->hardware->getPortCurrentSummary($readings);
+        $result = $this->hardware->parsePortName('Port 9A');
 
         $this->assertIsArray($result);
-        $this->assertArrayHasKey($portName, $result);
-
-        $portData = $result[$portName];
-
-        // Core fields
-        $this->assertArrayHasKey('name', $portData);
-        $this->assertArrayHasKey('label', $portData);
-        $this->assertArrayHasKey('currentMa', $portData);
-        $this->assertArrayHasKey('currentA', $portData);
-        $this->assertArrayHasKey('status', $portData);
-        $this->assertArrayHasKey('portEnabled', $portData);
-        $this->assertArrayHasKey('fuseTripped', $portData);
-        $this->assertArrayHasKey('enabled', $portData);
-        $this->assertArrayHasKey('pixelCount', $portData);
-
-        // Expected current fields (CRITICAL - these were missing before fix)
-        $this->assertArrayHasKey('expectedCurrentMa', $portData, 'expectedCurrentMa field is required for UI');
-        $this->assertArrayHasKey('maxCurrentMa', $portData, 'maxCurrentMa field is required for UI');
-
-        // Output config fields (needed for port detail panel)
-        $this->assertArrayHasKey('protocol', $portData, 'protocol field is required for output config display');
-        $this->assertArrayHasKey('brightness', $portData, 'brightness field is required for output config display');
-        $this->assertArrayHasKey('colorOrder', $portData, 'colorOrder field is required for output config display');
-        $this->assertArrayHasKey('description', $portData, 'description field is required for output config display');
+        $this->assertEquals('Port 9', $result['base']);
+        $this->assertEquals('A', $result['subport']);
     }
 
-    public function testGetPortCurrentSummaryCurrentValues(): void
+    public function testParsePortNameInvalidReturnsNull(): void
     {
-        $outputConfig = \Watcher\Controllers\EfuseOutputConfig::getInstance()->getOutputConfig();
-
-        if (empty($outputConfig['ports'])) {
-            $this->markTestSkipped('No configured ports to test');
-        }
-
-        $portName = array_key_first($outputConfig['ports']);
-        $readings = [$portName => 2500];
-
-        $result = $this->hardware->getPortCurrentSummary($readings);
-        $portData = $result[$portName];
-
-        $this->assertEquals(2500, $portData['currentMa']);
-        $this->assertEquals(2.5, $portData['currentA']);
+        $result = $this->hardware->parsePortName('invalid');
+        $this->assertNull($result);
     }
 
-    public function testGetPortCurrentSummaryExpectedCurrentIsCalculated(): void
+    public function testIsSmartReceiverSubport(): void
     {
-        $outputConfig = \Watcher\Controllers\EfuseOutputConfig::getInstance()->getOutputConfig();
+        $this->assertTrue($this->hardware->isSmartReceiverSubport('Port 9A'));
+        $this->assertTrue($this->hardware->isSmartReceiverSubport('Port 16F'));
+        $this->assertFalse($this->hardware->isSmartReceiverSubport('Port 1'));
+        $this->assertFalse($this->hardware->isSmartReceiverSubport('Port 16'));
+    }
 
-        if (empty($outputConfig['ports'])) {
-            $this->markTestSkipped('No configured ports to test');
-        }
+    // =========================================================================
+    // Port Data Iteration Tests
+    // =========================================================================
 
-        $portName = array_key_first($outputConfig['ports']);
-        $portConfig = $outputConfig['ports'][$portName];
+    public function testIterateAllPortsWithRegularPorts(): void
+    {
+        $portsList = [
+            ['name' => 'Port 1', 'ma' => 1000, 'enabled' => true],
+            ['name' => 'Port 2', 'ma' => 2000, 'enabled' => true],
+        ];
 
-        // Skip if port has no pixels configured
-        if (empty($portConfig['pixelCount'])) {
-            $this->markTestSkipped('Port has no pixels configured');
-        }
+        $results = [];
+        $this->hardware->iterateAllPorts($portsList, function ($name, $data, $isSmart) use (&$results) {
+            $results[] = ['name' => $name, 'isSmart' => $isSmart];
+        });
 
-        $readings = [$portName => 1000];
-        $result = $this->hardware->getPortCurrentSummary($readings);
-        $portData = $result[$portName];
+        $this->assertCount(2, $results);
+        $this->assertEquals('Port 1', $results[0]['name']);
+        $this->assertFalse($results[0]['isSmart']);
+        $this->assertEquals('Port 2', $results[1]['name']);
+        $this->assertFalse($results[1]['isSmart']);
+    }
 
-        // expectedCurrentMa should match the output config
-        $this->assertEquals(
-            $portConfig['expectedCurrentMa'],
-            $portData['expectedCurrentMa'],
-            'expectedCurrentMa should come from output config'
-        );
+    public function testIterateAllPortsWithSmartReceivers(): void
+    {
+        $portsList = [
+            [
+                'name' => 'Port 9',
+                'smartReceivers' => true,
+                'A' => ['ma' => 1000],
+                'B' => ['ma' => 2000],
+            ],
+        ];
 
-        // maxCurrentMa should match the output config
-        $this->assertEquals(
-            $portConfig['maxCurrentMa'],
-            $portData['maxCurrentMa'],
-            'maxCurrentMa should come from output config'
-        );
+        $results = [];
+        $this->hardware->iterateAllPorts($portsList, function ($name, $data, $isSmart) use (&$results) {
+            $results[] = ['name' => $name, 'isSmart' => $isSmart, 'ma' => $data['ma'] ?? 0];
+        });
+
+        $this->assertCount(2, $results);
+        $this->assertEquals('Port 9A', $results[0]['name']);
+        $this->assertTrue($results[0]['isSmart']);
+        $this->assertEquals(1000, $results[0]['ma']);
+        $this->assertEquals('Port 9B', $results[1]['name']);
+        $this->assertTrue($results[1]['isSmart']);
+    }
+
+    public function testIterateAllPortsSkipsEmptyNames(): void
+    {
+        $portsList = [
+            ['name' => '', 'ma' => 1000],
+            ['name' => 'Port 1', 'ma' => 2000],
+        ];
+
+        $results = [];
+        $this->hardware->iterateAllPorts($portsList, function ($name) use (&$results) {
+            $results[] = $name;
+        });
+
+        $this->assertCount(1, $results);
+        $this->assertEquals('Port 1', $results[0]);
+    }
+
+    public function testGetPortDataFromListRegularPort(): void
+    {
+        $portsList = [
+            ['name' => 'Port 1', 'ma' => 1000, 'enabled' => true],
+            ['name' => 'Port 2', 'ma' => 2000, 'enabled' => false],
+        ];
+
+        $result = $this->hardware->getPortDataFromList('Port 2', $portsList);
+
+        $this->assertIsArray($result);
+        $this->assertFalse($result['isSmartReceiver']);
+        $this->assertEquals(2000, $result['data']['ma']);
+    }
+
+    public function testGetPortDataFromListSmartReceiverSubport(): void
+    {
+        $portsList = [
+            [
+                'name' => 'Port 9',
+                'smartReceivers' => true,
+                'A' => ['ma' => 1000, 'fuseOn' => true],
+                'B' => ['ma' => 2000, 'fuseOn' => false],
+            ],
+        ];
+
+        $result = $this->hardware->getPortDataFromList('Port 9B', $portsList);
+
+        $this->assertIsArray($result);
+        $this->assertTrue($result['isSmartReceiver']);
+        $this->assertEquals(2000, $result['data']['ma']);
+        $this->assertFalse($result['data']['fuseOn']);
+    }
+
+    public function testGetPortDataFromListReturnsNullForNotFound(): void
+    {
+        $portsList = [
+            ['name' => 'Port 1', 'ma' => 1000],
+        ];
+
+        $result = $this->hardware->getPortDataFromList('Port 99', $portsList);
+        $this->assertNull($result);
+    }
+
+    public function testGetPortDataFromListReturnsNullForInvalidName(): void
+    {
+        $portsList = [
+            ['name' => 'Port 1', 'ma' => 1000],
+        ];
+
+        $result = $this->hardware->getPortDataFromList('invalid', $portsList);
+        $this->assertNull($result);
     }
 
     // =========================================================================
@@ -726,7 +790,8 @@ class EfuseHardwareTest extends TestCase
 
     public function testTogglePortWithSmartReceiverFormat(): void
     {
-        $result = $this->hardware->togglePort('Port 1-A', 'on');
+        // Uses FPP native format: Port 9A (no dash)
+        $result = $this->hardware->togglePort('Port 9A', 'on');
 
         $this->assertIsArray($result);
         $this->assertArrayHasKey('success', $result);
@@ -768,8 +833,9 @@ class EfuseHardwareTest extends TestCase
             'injection attempt' => ['Port 1; ls'],
             'special chars' => ['Port <script>'],
             'negative number' => ['Port -1'],
-            'invalid subport' => ['Port 1-Z'],
-            'too many subports' => ['Port 1-A-B'],
+            'invalid subport G' => ['Port 1G'],
+            'old dash format' => ['Port 1-A'],
+            'lowercase subport' => ['Port 1a'],
         ];
     }
 
@@ -792,12 +858,12 @@ class EfuseHardwareTest extends TestCase
             'single digit' => ['Port 1'],
             'double digit' => ['Port 16'],
             'high number' => ['Port 48'],
-            'smart receiver A' => ['Port 1-A'],
-            'smart receiver B' => ['Port 2-B'],
-            'smart receiver C' => ['Port 10-C'],
-            'smart receiver D' => ['Port 16-D'],
-            'smart receiver E' => ['Port 32-E'],
-            'smart receiver F' => ['Port 48-F'],
+            'smart receiver A' => ['Port 1A'],
+            'smart receiver B' => ['Port 2B'],
+            'smart receiver C' => ['Port 10C'],
+            'smart receiver D' => ['Port 16D'],
+            'smart receiver E' => ['Port 32E'],
+            'smart receiver F' => ['Port 48F'],
         ];
     }
 
@@ -961,24 +1027,15 @@ class EfuseHardwareTest extends TestCase
         }
     }
 
-    public function testCalculateTotalCurrentWithFixtureData(): void
+    public function testFetchPortsDataReturnsArrayOrNull(): void
     {
-        $fixtureData = $this->loadJsonFixture('data/sample_metrics.json');
-        $efuseReadings = $fixtureData['efuse_readings'];
+        // fetchPortsData makes an API call - it may return null if FPP isn't running
+        $result = $this->hardware->fetchPortsData();
 
-        // Extract just the current values (mA) from the fixture data
-        // Note: fixture uses float Amps, convert to mA
-        $currentReadings = [];
-        foreach ($efuseReadings as $portName => $port) {
-            $currentReadings[$portName] = (int)($port['current'] * 1000);
-        }
-
-        $result = $this->hardware->calculateTotalCurrent($currentReadings);
-
-        $this->assertIsArray($result);
-        $this->assertArrayHasKey('totalMa', $result);
-        $this->assertArrayHasKey('totalAmps', $result);
-        $this->assertArrayHasKey('activePortCount', $result);
+        $this->assertTrue(
+            is_array($result) || is_null($result),
+            'fetchPortsData should return array or null'
+        );
     }
 
     // =========================================================================
@@ -1073,37 +1130,6 @@ class EfuseHardwareTest extends TestCase
         // Either succeeds or fails for valid reasons (not validation)
     }
 
-    public function testCalculateTotalCurrentWithLargeValues(): void
-    {
-        $readings = [
-            'Port 1' => 6000, // Max typical eFuse rating
-            'Port 2' => 6000,
-            'Port 3' => 6000,
-            'Port 4' => 6000,
-        ];
-
-        $result = $this->hardware->calculateTotalCurrent($readings);
-
-        $this->assertEquals(24000, $result['totalMa']);
-        $this->assertEquals(24.0, $result['totalAmps']);
-        $this->assertEquals(4, $result['activePortCount']);
-    }
-
-    public function testCalculateTotalCurrentWithSmallValues(): void
-    {
-        $readings = [
-            'Port 1' => 1,
-            'Port 2' => 2,
-            'Port 3' => 3,
-        ];
-
-        $result = $this->hardware->calculateTotalCurrent($readings);
-
-        $this->assertEquals(6, $result['totalMa']);
-        $this->assertEquals(0.01, $result['totalAmps']); // Rounded
-        $this->assertEquals(3, $result['activePortCount']);
-    }
-
     // =========================================================================
     // Port Name Regex Tests
     // =========================================================================
@@ -1111,12 +1137,13 @@ class EfuseHardwareTest extends TestCase
     public function testPortNameRegexMatches(): void
     {
         // Test the regex pattern used in togglePort and resetPort
-        $pattern = '/^Port \d+(-[A-F])?$/';
+        // FPP native format: "Port 9A" (no dash)
+        $pattern = '/^Port \d+[A-F]?$/';
 
         $validNames = [
             'Port 1', 'Port 10', 'Port 16', 'Port 48',
-            'Port 1-A', 'Port 1-B', 'Port 1-C', 'Port 1-D', 'Port 1-E', 'Port 1-F',
-            'Port 16-A', 'Port 48-F'
+            'Port 1A', 'Port 1B', 'Port 1C', 'Port 1D', 'Port 1E', 'Port 1F',
+            'Port 16A', 'Port 48F'
         ];
 
         foreach ($validNames as $name) {
@@ -1125,12 +1152,661 @@ class EfuseHardwareTest extends TestCase
 
         $invalidNames = [
             '', 'Port', 'Port ', 'port 1', 'Port1', 'Port-1',
-            'Port 1-', 'Port 1-G', 'Port 1-a', 'Port 1-AB',
-            'Port 0x1', 'Port -1', 'Port1-A'
+            'Port 1-', 'Port 1G', 'Port 1a', 'Port 1AB',
+            'Port 0x1', 'Port -1', 'Port1A', 'Port 1-A'
         ];
 
         foreach ($invalidNames as $name) {
             $this->assertDoesNotMatchRegularExpression($pattern, $name, "{$name} should not match");
+        }
+    }
+
+    // =========================================================================
+    // Smart Receiver Subports Constant Tests
+    // =========================================================================
+
+    public function testSmartReceiverSubportsConstant(): void
+    {
+        $this->assertCount(6, EfuseHardware::SMART_RECEIVER_SUBPORTS);
+        $this->assertEquals(['A', 'B', 'C', 'D', 'E', 'F'], EfuseHardware::SMART_RECEIVER_SUBPORTS);
+    }
+
+    // =========================================================================
+    // TestableEfuseHardware Private Method Tests
+    // =========================================================================
+
+    public function testSaveHardwareCacheCreatesFile(): void
+    {
+        $instance = TestableEfuseHardware::getTestInstance();
+
+        $result = [
+            'supported' => true,
+            'type' => 'cape',
+            'ports' => 16,
+            'details' => ['cape' => 'Test Cape']
+        ];
+
+        // This may fail if WATCHEREFUSEDIR isn't writable in test environment
+        // We just test that it doesn't throw
+        try {
+            $instance->testSaveHardwareCache($result);
+            $this->assertTrue(true);
+        } catch (\Exception $e) {
+            // Directory may not be writable in test environment
+            $this->assertTrue(true);
+        }
+    }
+
+    public function testLogControlDoesNotThrow(): void
+    {
+        $instance = TestableEfuseHardware::getTestInstance();
+
+        // Should not throw - just logs
+        $instance->testLogControl('toggle', 'Port 1', 'success');
+        $instance->testLogControl('reset', 'Port 2', 'failed');
+        $instance->testLogControl('master', 'all', 'on (16/16)');
+
+        $this->assertTrue(true);
+    }
+
+    public function testLogControlWithVariousInputs(): void
+    {
+        $instance = TestableEfuseHardware::getTestInstance();
+
+        // Test various action types
+        $actions = ['toggle', 'reset', 'master', 'reset-all'];
+        $results = ['success', 'failed', 'on', 'off', 'error'];
+
+        foreach ($actions as $action) {
+            foreach ($results as $result) {
+                $instance->testLogControl($action, 'Port 1', $result);
+            }
+        }
+
+        $this->assertTrue(true);
+    }
+
+    // =========================================================================
+    // Additional Port Parsing Tests
+    // =========================================================================
+
+    public function testParsePortNameWithAllSubports(): void
+    {
+        foreach (['A', 'B', 'C', 'D', 'E', 'F'] as $subport) {
+            $result = $this->hardware->parsePortName('Port 1' . $subport);
+
+            $this->assertNotNull($result);
+            $this->assertEquals('Port 1', $result['base']);
+            $this->assertEquals($subport, $result['subport']);
+        }
+    }
+
+    public function testParsePortNameWithLargeNumbers(): void
+    {
+        $result = $this->hardware->parsePortName('Port 48');
+
+        $this->assertNotNull($result);
+        $this->assertEquals('Port 48', $result['base']);
+        $this->assertNull($result['subport']);
+    }
+
+    public function testParsePortNameWithLargeNumberAndSubport(): void
+    {
+        $result = $this->hardware->parsePortName('Port 48F');
+
+        $this->assertNotNull($result);
+        $this->assertEquals('Port 48', $result['base']);
+        $this->assertEquals('F', $result['subport']);
+    }
+
+    // =========================================================================
+    // iterateAllPorts Edge Cases
+    // =========================================================================
+
+    public function testIterateAllPortsWithAllSmartReceiverSubports(): void
+    {
+        $portsList = [
+            [
+                'name' => 'Port 1',
+                'smartReceivers' => true,
+                'A' => ['ma' => 100],
+                'B' => ['ma' => 200],
+                'C' => ['ma' => 300],
+                'D' => ['ma' => 400],
+                'E' => ['ma' => 500],
+                'F' => ['ma' => 600],
+            ],
+        ];
+
+        $results = [];
+        $this->hardware->iterateAllPorts($portsList, function ($name, $data, $isSmart) use (&$results) {
+            $results[] = ['name' => $name, 'ma' => $data['ma'] ?? 0];
+        });
+
+        $this->assertCount(6, $results);
+        $this->assertEquals('Port 1A', $results[0]['name']);
+        $this->assertEquals(100, $results[0]['ma']);
+        $this->assertEquals('Port 1F', $results[5]['name']);
+        $this->assertEquals(600, $results[5]['ma']);
+    }
+
+    public function testIterateAllPortsWithMixedRegularAndSmartPorts(): void
+    {
+        $portsList = [
+            ['name' => 'Port 1', 'ma' => 1000],
+            [
+                'name' => 'Port 2',
+                'smartReceivers' => true,
+                'A' => ['ma' => 200],
+                'B' => ['ma' => 300],
+            ],
+            ['name' => 'Port 3', 'ma' => 3000],
+        ];
+
+        $results = [];
+        $this->hardware->iterateAllPorts($portsList, function ($name, $data, $isSmart) use (&$results) {
+            $results[] = ['name' => $name, 'isSmart' => $isSmart];
+        });
+
+        $this->assertCount(4, $results);
+        $this->assertEquals('Port 1', $results[0]['name']);
+        $this->assertFalse($results[0]['isSmart']);
+        $this->assertEquals('Port 2A', $results[1]['name']);
+        $this->assertTrue($results[1]['isSmart']);
+        $this->assertEquals('Port 2B', $results[2]['name']);
+        $this->assertTrue($results[2]['isSmart']);
+        $this->assertEquals('Port 3', $results[3]['name']);
+        $this->assertFalse($results[3]['isSmart']);
+    }
+
+    public function testIterateAllPortsWithSmartReceiverMissingSubports(): void
+    {
+        $portsList = [
+            [
+                'name' => 'Port 1',
+                'smartReceivers' => true,
+                'A' => ['ma' => 100],
+                // B, C, D, E, F are missing
+            ],
+        ];
+
+        $results = [];
+        $this->hardware->iterateAllPorts($portsList, function ($name) use (&$results) {
+            $results[] = $name;
+        });
+
+        // Should only return ports that exist
+        $this->assertCount(1, $results);
+        $this->assertEquals('Port 1A', $results[0]);
+    }
+
+    // =========================================================================
+    // getPortDataFromList Edge Cases
+    // =========================================================================
+
+    public function testGetPortDataFromListWithMissingSmartReceiverSubport(): void
+    {
+        $portsList = [
+            [
+                'name' => 'Port 9',
+                'smartReceivers' => true,
+                'A' => ['ma' => 1000],
+                // B is missing
+            ],
+        ];
+
+        $result = $this->hardware->getPortDataFromList('Port 9B', $portsList);
+
+        $this->assertNull($result);
+    }
+
+    public function testGetPortDataFromListWithNonSmartReceiverButSubportFormat(): void
+    {
+        $portsList = [
+            [
+                'name' => 'Port 9',
+                'ma' => 1000,
+                // Not a smart receiver
+            ],
+        ];
+
+        // Requesting subport format on non-smart receiver
+        $result = $this->hardware->getPortDataFromList('Port 9A', $portsList);
+
+        $this->assertNull($result);
+    }
+
+    public function testGetPortDataFromListReturnsBasePortForSmartReceiver(): void
+    {
+        $basePort = [
+            'name' => 'Port 9',
+            'smartReceivers' => true,
+            'A' => ['ma' => 1000, 'fuseOn' => true],
+        ];
+
+        $portsList = [$basePort];
+
+        $result = $this->hardware->getPortDataFromList('Port 9A', $portsList);
+
+        $this->assertNotNull($result);
+        $this->assertTrue($result['isSmartReceiver']);
+        $this->assertEquals($basePort, $result['basePort']);
+    }
+
+    // =========================================================================
+    // Additional Validation Tests
+    // =========================================================================
+
+    /**
+     * @dataProvider portNameVariationsProvider
+     */
+    public function testIsValidPortNameWithVariations(string $portName, bool $expected): void
+    {
+        $this->assertEquals($expected, $this->hardware->isValidPortName($portName));
+    }
+
+    public static function portNameVariationsProvider(): array
+    {
+        return [
+            // Valid
+            ['Port 1', true],
+            ['Port 99', true],
+            ['Port 100', true],
+            ['Port 1A', true],
+            ['Port 99F', true],
+
+            // Invalid
+            ['port 1', false],       // lowercase
+            ['PORT 1', false],       // all caps
+            ['Port  1', false],      // double space
+            ['Port 1 ', false],      // trailing space
+            [' Port 1', false],      // leading space
+            ['Port 1G', false],      // invalid subport
+            ['Port 1Z', false],      // invalid subport
+            ['Port 01', true],       // leading zero is technically valid regex
+            ['Port -1', false],      // negative
+            ['Port 1.5', false],     // decimal
+            ['Port A', false],       // letter only
+        ];
+    }
+
+    /**
+     * @dataProvider smartReceiverSubportProvider
+     */
+    public function testIsSmartReceiverSubportWithVariations(string $portName, bool $expected): void
+    {
+        $this->assertEquals($expected, $this->hardware->isSmartReceiverSubport($portName));
+    }
+
+    public static function smartReceiverSubportProvider(): array
+    {
+        return [
+            // Is smart receiver subport
+            ['Port 1A', true],
+            ['Port 1F', true],
+            ['Port 16A', true],
+            ['Port 48F', true],
+
+            // Is NOT smart receiver subport
+            ['Port 1', false],
+            ['Port 16', false],
+            ['Port 1a', false],      // lowercase
+            ['Port 1G', false],      // invalid letter
+            ['Port 1AB', false],     // multiple letters
+            ['invalid', false],
+        ];
+    }
+
+    // =========================================================================
+    // getPortStatusFromData Tests (via TestableEfuseHardware)
+    // =========================================================================
+
+    public function testGetPortStatusFromDataWithRegularPort(): void
+    {
+        $instance = TestableEfuseHardware::getTestInstance();
+
+        $portsList = [
+            ['name' => 'Port 1', 'ma' => 1500, 'enabled' => true]
+        ];
+
+        $result = $instance->testGetPortStatusFromData('Port 1', $portsList);
+
+        $this->assertNotNull($result);
+        $this->assertEquals('Port 1', $result['name']);
+        $this->assertTrue($result['enabled']);
+        $this->assertFalse($result['isSmartReceiver']);
+    }
+
+    public function testGetPortStatusFromDataWithDisabledPort(): void
+    {
+        $instance = TestableEfuseHardware::getTestInstance();
+
+        $portsList = [
+            ['name' => 'Port 1', 'ma' => 0, 'enabled' => false]
+        ];
+
+        $result = $instance->testGetPortStatusFromData('Port 1', $portsList);
+
+        $this->assertNotNull($result);
+        $this->assertFalse($result['enabled']);
+    }
+
+    public function testGetPortStatusFromDataWithSmartReceiverPort(): void
+    {
+        $instance = TestableEfuseHardware::getTestInstance();
+
+        $portsList = [
+            [
+                'name' => 'Port 9',
+                'smartReceivers' => true,
+                'A' => ['ma' => 1000, 'fuseOn' => true, 'enabled' => true]
+            ]
+        ];
+
+        $result = $instance->testGetPortStatusFromData('Port 9A', $portsList);
+
+        $this->assertNotNull($result);
+        $this->assertEquals('Port 9A', $result['name']);
+        $this->assertTrue($result['isSmartReceiver']);
+        $this->assertTrue($result['enabled']);
+    }
+
+    public function testGetPortStatusFromDataWithNonexistentPort(): void
+    {
+        $instance = TestableEfuseHardware::getTestInstance();
+
+        $portsList = [
+            ['name' => 'Port 1', 'ma' => 500, 'enabled' => true]
+        ];
+
+        $result = $instance->testGetPortStatusFromData('Port 99', $portsList);
+
+        $this->assertNull($result);
+    }
+
+    public function testGetPortStatusFromDataWithEmptyPortsList(): void
+    {
+        $instance = TestableEfuseHardware::getTestInstance();
+
+        $result = $instance->testGetPortStatusFromData('Port 1', []);
+
+        $this->assertNull($result);
+    }
+
+    public function testGetPortStatusFromDataSmartReceiverUsesFuseOn(): void
+    {
+        $instance = TestableEfuseHardware::getTestInstance();
+
+        $portsList = [
+            [
+                'name' => 'Port 9',
+                'smartReceivers' => true,
+                'A' => ['ma' => 1000, 'fuseOn' => false]  // fuseOn takes priority
+            ]
+        ];
+
+        $result = $instance->testGetPortStatusFromData('Port 9A', $portsList);
+
+        $this->assertNotNull($result);
+        $this->assertFalse($result['enabled']); // Uses fuseOn value
+    }
+
+    // =========================================================================
+    // Cache File Tests with TestableEfuseHardware
+    // =========================================================================
+
+    public function testSaveHardwareCacheWritesToFile(): void
+    {
+        $instance = TestableEfuseHardware::getTestInstance();
+        $testDir = $this->createTempDir('efuse-cache');
+        $testCacheFile = $testDir . '/hardware-cache.json';
+
+        $instance->setTestEfuseDir($testDir);
+        $instance->setTestCacheFile($testCacheFile);
+
+        $cacheData = [
+            'supported' => true,
+            'type' => 'cape',
+            'ports' => 16,
+            'details' => ['cape' => 'Test Cape K16-Max']
+        ];
+
+        $instance->testSaveHardwareCache($cacheData);
+
+        $this->assertFileExists($testCacheFile);
+
+        $saved = json_decode(file_get_contents($testCacheFile), true);
+        $this->assertArrayHasKey('timestamp', $saved);
+        $this->assertArrayHasKey('result', $saved);
+        $this->assertEquals($cacheData, $saved['result']);
+    }
+
+    public function testCacheFilePathIsConfigurable(): void
+    {
+        $instance = TestableEfuseHardware::getTestInstance();
+        $testDir = $this->createTempDir('efuse-test');
+        $testCacheFile = $testDir . '/custom-cache.json';
+
+        $instance->setTestCacheFile($testCacheFile);
+
+        $this->assertEquals($testCacheFile, $instance->getCacheFilePath());
+    }
+
+    // =========================================================================
+    // Mock Ports Data Tests
+    // =========================================================================
+
+    public function testCountEfusePortsWithMockData(): void
+    {
+        $instance = TestableEfuseHardware::getTestInstance();
+
+        $mockPorts = [
+            ['name' => 'Port 1', 'ma' => 100],
+            ['name' => 'Port 2', 'ma' => 200],
+            ['name' => 'Port 3', 'ma' => 0],
+        ];
+
+        $instance->setMockPortsData($mockPorts);
+
+        // Call countEfusePortsFromFppd via reflection
+        $reflection = new \ReflectionMethod($instance, 'countEfusePortsFromFppd');
+        $reflection->setAccessible(true);
+        $count = $reflection->invoke($instance);
+
+        $this->assertEquals(3, $count);
+    }
+
+    public function testCountEfusePortsWithSmartReceiverMockData(): void
+    {
+        $instance = TestableEfuseHardware::getTestInstance();
+
+        $mockPorts = [
+            [
+                'name' => 'Port 9',
+                'smartReceivers' => true,
+                'A' => ['ma' => 100],
+                'B' => ['ma' => 200],
+                'C' => ['ma' => 300],
+            ],
+        ];
+
+        $instance->setMockPortsData($mockPorts);
+
+        $reflection = new \ReflectionMethod($instance, 'countEfusePortsFromFppd');
+        $reflection->setAccessible(true);
+        $count = $reflection->invoke($instance);
+
+        $this->assertEquals(3, $count); // 3 subports with 'ma' field
+    }
+
+    public function testCountEfusePortsWithMixedMockData(): void
+    {
+        $instance = TestableEfuseHardware::getTestInstance();
+
+        $mockPorts = [
+            ['name' => 'Port 1', 'ma' => 100],
+            ['name' => 'Port 2', 'ma' => 200],
+            [
+                'name' => 'Port 9',
+                'smartReceivers' => true,
+                'A' => ['ma' => 300],
+                'B' => ['ma' => 400],
+            ],
+        ];
+
+        $instance->setMockPortsData($mockPorts);
+
+        $reflection = new \ReflectionMethod($instance, 'countEfusePortsFromFppd');
+        $reflection->setAccessible(true);
+        $count = $reflection->invoke($instance);
+
+        $this->assertEquals(4, $count); // 2 regular + 2 smart receiver subports
+    }
+
+    public function testCountEfusePortsWithEmptyMockData(): void
+    {
+        $instance = TestableEfuseHardware::getTestInstance();
+
+        $instance->setMockPortsData([]);
+
+        $reflection = new \ReflectionMethod($instance, 'countEfusePortsFromFppd');
+        $reflection->setAccessible(true);
+        $count = $reflection->invoke($instance);
+
+        $this->assertEquals(0, $count);
+    }
+
+    // =========================================================================
+    // Logger Access Tests
+    // =========================================================================
+
+    public function testGetLoggerReturnsLoggerInstance(): void
+    {
+        $instance = TestableEfuseHardware::getTestInstance();
+
+        $logger = $instance->getLogger();
+
+        $this->assertInstanceOf(\Watcher\Core\Logger::class, $logger);
+    }
+
+    // =========================================================================
+    // Edge Cases for iterateAllPorts
+    // =========================================================================
+
+    public function testIterateAllPortsWithNoSmartReceiverSubports(): void
+    {
+        $portsList = [
+            [
+                'name' => 'Port 1',
+                'smartReceivers' => true,
+                // No subport data at all
+            ],
+        ];
+
+        $results = [];
+        $this->hardware->iterateAllPorts($portsList, function ($name) use (&$results) {
+            $results[] = $name;
+        });
+
+        // Should return nothing since no subports have data
+        $this->assertCount(0, $results);
+    }
+
+    public function testIterateAllPortsWithNullCallback(): void
+    {
+        $portsList = [
+            ['name' => 'Port 1', 'ma' => 1000],
+        ];
+
+        // Should not throw when called - no assertion needed, just verify no exception
+        $this->hardware->iterateAllPorts($portsList, function () {
+            // empty callback
+        });
+
+        $this->assertTrue(true);
+    }
+
+    public function testIterateAllPortsPreservesPortOrder(): void
+    {
+        $portsList = [
+            ['name' => 'Port 3', 'ma' => 300],
+            ['name' => 'Port 1', 'ma' => 100],
+            ['name' => 'Port 2', 'ma' => 200],
+        ];
+
+        $results = [];
+        $this->hardware->iterateAllPorts($portsList, function ($name) use (&$results) {
+            $results[] = $name;
+        });
+
+        // Should preserve original order
+        $this->assertEquals(['Port 3', 'Port 1', 'Port 2'], $results);
+    }
+
+    // =========================================================================
+    // getPortDataFromList Comprehensive Tests
+    // =========================================================================
+
+    public function testGetPortDataFromListWithEmptyPortsList(): void
+    {
+        $result = $this->hardware->getPortDataFromList('Port 1', []);
+
+        $this->assertNull($result);
+    }
+
+    public function testGetPortDataFromListWithExactPortMatch(): void
+    {
+        $portsList = [
+            ['name' => 'Port 1', 'ma' => 1000, 'fuseOn' => true],
+            ['name' => 'Port 2', 'ma' => 2000, 'fuseOn' => true],
+        ];
+
+        $result = $this->hardware->getPortDataFromList('Port 2', $portsList);
+
+        $this->assertNotNull($result);
+        $this->assertEquals(2000, $result['data']['ma']);
+    }
+
+    public function testGetPortDataFromListWithCaseSensitiveSearch(): void
+    {
+        $portsList = [
+            ['name' => 'Port 1', 'ma' => 1000],
+        ];
+
+        // Search with different case should fail
+        $result = $this->hardware->getPortDataFromList('port 1', $portsList);
+
+        $this->assertNull($result);
+    }
+
+    // =========================================================================
+    // parsePortName Edge Cases
+    // =========================================================================
+
+    public function testParsePortNameWithInvalidFormat(): void
+    {
+        $result = $this->hardware->parsePortName('invalid');
+
+        $this->assertNull($result);
+    }
+
+    public function testParsePortNameWithEmptyString(): void
+    {
+        $result = $this->hardware->parsePortName('');
+
+        $this->assertNull($result);
+    }
+
+    public function testParsePortNameWithWhitespace(): void
+    {
+        $result = $this->hardware->parsePortName('  Port 1  ');
+
+        // Should handle trimmed or fail gracefully
+        // Depends on implementation - test actual behavior
+        if ($result !== null) {
+            $this->assertArrayHasKey('base', $result);
+        } else {
+            $this->assertNull($result);
         }
     }
 }

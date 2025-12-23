@@ -1221,7 +1221,7 @@ function fpppluginWatcherEfuseHeatmap() {
 
 // GET /api/plugin/fpp-plugin-watcher/efuse/config
 function fpppluginWatcherEfuseConfig() {
-    return apiSuccess(EfuseHardware::getInstance()->getSummary());
+    return apiSuccess(EfuseHardware::getInstance()->getHardwareSummary());
 }
 
 // GET /api/plugin/fpp-plugin-watcher/efuse/outputs

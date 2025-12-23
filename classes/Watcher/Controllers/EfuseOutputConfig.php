@@ -37,14 +37,21 @@ class EfuseOutputConfig
 
     private static ?self $instance = null;
     private ApiClient $apiClient;
-    private EfuseHardware $efuseHardware;
+    private ?EfuseHardware $efuseHardware = null;
     private ?array $configCache = null;
     private int $configCacheTime = 0;
 
     private function __construct()
     {
         $this->apiClient = ApiClient::getInstance();
-        $this->efuseHardware = EfuseHardware::getInstance();
+    }
+
+    /**
+     * Get EfuseHardware instance (lazy initialization for testability)
+     */
+    private function getEfuseHardware(): EfuseHardware
+    {
+        return $this->efuseHardware ??= EfuseHardware::getInstance();
     }
 
     public static function getInstance(): self
@@ -90,47 +97,69 @@ class EfuseOutputConfig
     }
 
     /**
-     * Get FPP channel output configuration for all ports
-     * Only returns ports that have actual eFuse/current monitoring capability
+     * Find matching eFuse capable ports for a base port name
+     * Returns matching port names (e.g., "Port 9" -> ["Port 9A"] for smart receivers)
      */
-    public function getOutputConfig(bool $forceRefresh = false): array
+    private function findMatchingEfusePorts(string $basePortName, array $efuseCapablePorts): array
     {
-        // Return cached result if fresh
-        if (!$forceRefresh && $this->configCache !== null &&
-            (time() - $this->configCacheTime) < self::OUTPUT_CONFIG_CACHE_TTL) {
-            return $this->configCache;
+        // Exact match for regular ports
+        if (in_array($basePortName, $efuseCapablePorts)) {
+            return [$basePortName];
         }
 
-        $result = [
-            'success' => true,
-            'ports' => [],
-            'totalPorts' => 0,
-            'timestamp' => time()
-        ];
+        // Check for smart receiver subports (e.g., "Port 9" matches "Port 9A", "Port 9B")
+        $matches = [];
+        foreach ($efuseCapablePorts as $capablePort) {
+            if (preg_match('/^' . preg_quote($basePortName, '/') . '[A-F]$/', $capablePort)) {
+                $matches[] = $capablePort;
+            }
+        }
 
-        // Get list of ports that have actual eFuse/current monitoring
-        $efuseCapablePorts = $this->efuseHardware->getEfuseCapablePortNames();
+        return $matches;
+    }
 
-        // Get pixel string outputs
-        $pixelOutputs = $this->apiClient->get('http://127.0.0.1/api/channel/output/co-pixelStrings', 5);
+    /**
+     * Process channel outputs and add to result
+     */
+    private function processChannelOutputs(
+        array $channelOutputs,
+        array $efuseCapablePorts,
+        array &$result,
+        bool $usePortFallback,
+        ?callable $typeFilter = null
+    ): void {
+        foreach ($channelOutputs as $output) {
+            $outputType = $output['type'] ?? '';
 
-        if ($pixelOutputs && isset($pixelOutputs['channelOutputs'])) {
-            foreach ($pixelOutputs['channelOutputs'] as $output) {
-                $outputType = $output['type'] ?? '';
-                $outputs = $output['outputs'] ?? [];
+            // Apply type filter if provided
+            if ($typeFilter !== null && !$typeFilter($outputType)) {
+                continue;
+            }
 
-                foreach ($outputs as $portIndex => $portConfig) {
-                    $portNumber = ($portConfig['portNumber'] ?? $portIndex) + 1;
-                    $portName = 'Port ' . $portNumber;
+            $outputs = $output['outputs'] ?? [];
 
-                    // Skip if this port doesn't have eFuse/current monitoring capability
-                    if (!empty($efuseCapablePorts) && !in_array($portName, $efuseCapablePorts)) {
+            foreach ($outputs as $portIndex => $portConfig) {
+                $portNumber = intval($portConfig['portNumber'] ?? $portIndex) + 1;
+                $basePortName = 'Port ' . $portNumber;
+
+                // Find matching eFuse capable ports (handles smart receivers)
+                $matchingPorts = $this->findMatchingEfusePorts($basePortName, $efuseCapablePorts);
+                if (!empty($efuseCapablePorts) && empty($matchingPorts)) {
+                    continue;
+                }
+
+                $vsConfig = $this->extractVirtualStringConfig($portConfig, $usePortFallback);
+                $virtualStrings = $portConfig['virtualStrings'] ?? [];
+                $expectedCurrent = $this->estimatePortCurrent($vsConfig['totalPixels'], $vsConfig['protocol']);
+
+                // If no matching ports found (efuseCapablePorts is empty), use base name
+                $portNames = !empty($matchingPorts) ? $matchingPorts : [$basePortName];
+
+                foreach ($portNames as $portName) {
+                    // Skip if already have this port
+                    if (isset($result['ports'][$portName])) {
                         continue;
                     }
-
-                    $vsConfig = $this->extractVirtualStringConfig($portConfig, true);
-                    $virtualStrings = $portConfig['virtualStrings'] ?? [];
-                    $expectedCurrent = $this->estimatePortCurrent($vsConfig['totalPixels'], $vsConfig['protocol']);
 
                     $result['ports'][$portName] = [
                         'portNumber' => $portNumber,
@@ -151,57 +180,58 @@ class EfuseOutputConfig
                 }
             }
         }
+    }
+
+    /**
+     * Get FPP channel output configuration for all ports
+     * Only returns ports that have actual eFuse/current monitoring capability
+     */
+    public function getOutputConfig(bool $forceRefresh = false): array
+    {
+        // Return cached result if fresh
+        if (!$forceRefresh && $this->configCache !== null &&
+            (time() - $this->configCacheTime) < self::OUTPUT_CONFIG_CACHE_TTL) {
+            return $this->configCache;
+        }
+
+        $result = [
+            'success' => true,
+            'ports' => [],
+            'totalPorts' => 0,
+            'timestamp' => time()
+        ];
+
+        // Get list of ports that have actual eFuse/current monitoring
+        $efuseCapablePorts = $this->getEfuseHardware()->getEfuseCapablePortNames();
+
+        // Get pixel string outputs
+        $pixelOutputs = $this->apiClient->get('http://127.0.0.1/api/channel/output/co-pixelStrings', 5);
+        if ($pixelOutputs && isset($pixelOutputs['channelOutputs'])) {
+            $this->processChannelOutputs($pixelOutputs['channelOutputs'], $efuseCapablePorts, $result, true);
+        }
 
         // Also check for BBB-specific outputs
         $bbbOutputs = $this->apiClient->get('http://127.0.0.1/api/channel/output/co-bbbStrings', 5);
-
         if ($bbbOutputs && isset($bbbOutputs['channelOutputs'])) {
-            foreach ($bbbOutputs['channelOutputs'] as $output) {
-                $type = $output['type'] ?? '';
-
-                if (stripos($type, 'BB') !== false || stripos($type, 'PB') !== false || stripos($type, 'Shift') !== false) {
-                    $outputs = $output['outputs'] ?? [];
-
-                    foreach ($outputs as $portIndex => $portConfig) {
-                        $portNumber = intval($portConfig['portNumber'] ?? $portIndex) + 1;
-                        $portName = 'Port ' . $portNumber;
-
-                        if (isset($result['ports'][$portName])) {
-                            continue;
-                        }
-
-                        if (!empty($efuseCapablePorts) && !in_array($portName, $efuseCapablePorts)) {
-                            continue;
-                        }
-
-                        $vsConfig = $this->extractVirtualStringConfig($portConfig, false);
-                        $virtualStrings = $portConfig['virtualStrings'] ?? [];
-                        $expectedCurrent = $this->estimatePortCurrent($vsConfig['totalPixels'], $vsConfig['protocol']);
-
-                        $result['ports'][$portName] = [
-                            'portNumber' => $portNumber,
-                            'portName' => $portName,
-                            'outputType' => $type,
-                            'protocol' => $vsConfig['protocol'],
-                            'brightness' => $vsConfig['brightness'],
-                            'pixelCount' => $vsConfig['totalPixels'],
-                            'startChannel' => intval($virtualStrings[0]['startChannel'] ?? 0),
-                            'colorOrder' => $virtualStrings[0]['colorOrder'] ?? 'RGB',
-                            'description' => implode(', ', $vsConfig['descriptions']),
-                            'expectedCurrentMa' => $expectedCurrent['typical'],
-                            'maxCurrentMa' => $expectedCurrent['max'],
-                            'enabled' => !empty($vsConfig['totalPixels'])
-                        ];
-
-                        $result['totalPorts']++;
-                    }
-                }
-            }
+            $this->processChannelOutputs(
+                $bbbOutputs['channelOutputs'],
+                $efuseCapablePorts,
+                $result,
+                false,
+                fn($type) => stripos($type, 'BB') !== false || stripos($type, 'PB') !== false || stripos($type, 'Shift') !== false
+            );
         }
 
-        // Sort ports by number
+        // Sort ports by port number and subport letter
         uksort($result['ports'], function($a, $b) {
-            return intval(substr($a, 5)) - intval(substr($b, 5));
+            preg_match('/^Port (\d+)([A-F])?$/', $a, $ma);
+            preg_match('/^Port (\d+)([A-F])?$/', $b, $mb);
+            $numA = intval($ma[1] ?? 0);
+            $numB = intval($mb[1] ?? 0);
+            if ($numA !== $numB) {
+                return $numA - $numB;
+            }
+            return strcmp($ma[2] ?? '', $mb[2] ?? '');
         });
 
         $this->configCache = $result;
@@ -228,9 +258,6 @@ class EfuseOutputConfig
         ];
     }
 
-    /**
-     * Get output configuration for a specific port
-     */
     public function getPortOutputConfig(string $portName): ?array
     {
         $config = $this->getOutputConfig();
@@ -301,67 +328,55 @@ class EfuseOutputConfig
         return $summary;
     }
 
-    /**
-     * Get fuse status for all ports from fppd/ports API
-     */
     public function getPortFuseStatus(): array
     {
+        $portsList = $this->getEfuseHardware()->fetchPortsData();
+        if ($portsList === null) {
+            return [];
+        }
+
         $result = [];
+        $this->getEfuseHardware()->iterateAllPorts($portsList, function (string $portName, array $portData, bool $isSmartReceiver) use (&$result) {
+            // false for tripped fuses on both regular and smart receiver ports
+            $fuseTripped = isset($portData['status']) && $portData['status'] === false;
 
-        $portsData = @file_get_contents('http://127.0.0.1/api/fppd/ports');
-        if ($portsData === false) {
-            return $result;
-        }
-
-        $portsList = @json_decode($portsData, true);
-        if (!is_array($portsList)) {
-            return $result;
-        }
-
-        foreach ($portsList as $port) {
-            $name = $port['name'] ?? '';
-            if (empty($name)) continue;
-
-            if (isset($port['smartReceivers']) && $port['smartReceivers']) {
-                foreach (['A', 'B', 'C', 'D', 'E', 'F'] as $sub) {
-                    if (isset($port[$sub])) {
-                        $subName = $name . '-' . $sub;
-                        $result[$subName] = [
-                            'enabled' => $port[$sub]['fuseOn'] ?? $port[$sub]['enabled'] ?? false,
-                            'fuseTripped' => $port[$sub]['fuseBlown'] ?? false
-                        ];
-                    }
-                }
+            if ($isSmartReceiver) {
+                $result[$portName] = [
+                    'enabled' => $portData['fuseOn'] ?? $portData['enabled'] ?? false,
+                    'fuseTripped' => $fuseTripped
+                ];
             } else {
-                $result[$name] = [
-                    'enabled' => $port['enabled'] ?? false,
-                    'fuseTripped' => isset($port['status']) ? ($port['status'] === false) : false
+                $result[$portName] = [
+                    'enabled' => $portData['enabled'] ?? false,
+                    'fuseTripped' => $fuseTripped
                 ];
             }
-        }
+        });
 
         return $result;
     }
 
-    /**
-     * Calculate total current across all ports
-     */
     public function calculateTotalCurrent(array $currentReadings): array
     {
-        $total = 0;
+        $totalMa = 0;
         $activeCount = 0;
+        $portCount = 0;
 
         foreach ($currentReadings as $portName => $mA) {
-            $total += $mA;
+            if ($portName === '_total') {
+                continue;
+            }
+            $portCount++;
+            $totalMa += $mA;
             if ($mA > 0) {
                 $activeCount++;
             }
         }
 
         return [
-            'total' => $total,
-            'totalAmps' => round($total / 1000, 2),
-            'portCount' => count($currentReadings),
+            'totalMa' => $totalMa,
+            'totalAmps' => round($totalMa / 1000, 2),
+            'portCount' => $portCount,
             'activePortCount' => $activeCount
         ];
     }

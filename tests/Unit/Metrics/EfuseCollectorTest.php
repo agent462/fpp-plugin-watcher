@@ -1394,4 +1394,351 @@ class EfuseCollectorTest extends TestCase
             ],
         ];
     }
+
+    // =========================================================================
+    // aggregateForRollup Alias Tests
+    // =========================================================================
+
+    public function testAggregateForRollupIsAliasForAggregateBucket(): void
+    {
+        $metrics = [
+            ['ports' => ['Port 1' => 100, 'Port 2' => 200]]
+        ];
+        $bucketStart = time();
+        $interval = 60;
+
+        $result1 = $this->collector->aggregateBucket($metrics, $bucketStart, $interval);
+        $result2 = $this->collector->aggregateForRollup($metrics, $bucketStart, $interval);
+
+        $this->assertEquals($result1, $result2);
+    }
+
+    public function testAggregateForRollupWithEmptyArray(): void
+    {
+        $result = $this->collector->aggregateForRollup([], time(), 60);
+
+        $this->assertNull($result);
+    }
+
+    // =========================================================================
+    // getHeatmapData Tests
+    // =========================================================================
+
+    public function testGetHeatmapDataReturnsErrorWhenNoHardware(): void
+    {
+        // The default test environment has no hardware
+        $result = $this->collector->getHeatmapData(24);
+
+        // When no hardware is detected, should return error
+        if (!$result['success']) {
+            $this->assertFalse($result['success']);
+            $this->assertArrayHasKey('error', $result);
+        } else {
+            // If hardware is detected (running on actual FPP), verify structure
+            $this->assertTrue($result['success']);
+            $this->assertArrayHasKey('hours', $result);
+            $this->assertArrayHasKey('hardware', $result);
+        }
+    }
+
+    public function testGetHeatmapDataReturnsExpectedStructureWhenSupported(): void
+    {
+        // Create rollup data
+        $rollupFile = $this->dataDir . '/1min.log';
+        $now = time();
+        $entries = [];
+
+        for ($i = 0; $i < 10; $i++) {
+            $entries[] = [
+                'timestamp' => $now - (6 * 3600) + ($i * 60),
+                'interval' => 60,
+                'ports' => [
+                    'Port 1' => ['avg' => 100 + $i, 'min' => 90, 'max' => 110 + $i, 'samples' => 12],
+                    '_total' => ['avg' => 100 + $i, 'min' => 90, 'max' => 110 + $i, 'samples' => 12]
+                ]
+            ];
+        }
+        $this->writeJsonLinesFile($rollupFile, $entries);
+
+        $result = $this->collector->getHeatmapData(6);
+
+        // Result structure when hardware is not detected
+        if (!$result['success']) {
+            $this->assertArrayHasKey('error', $result);
+        } else {
+            // When supported
+            $this->assertArrayHasKey('hours', $result);
+            $this->assertArrayHasKey('hardware', $result);
+            $this->assertArrayHasKey('portCount', $result);
+            $this->assertArrayHasKey('ports', $result);
+            $this->assertArrayHasKey('outputConfig', $result);
+            $this->assertArrayHasKey('timeSeries', $result);
+            $this->assertArrayHasKey('totalHistory', $result);
+            $this->assertArrayHasKey('peaks', $result);
+            $this->assertArrayHasKey('timestamps', $result);
+            $this->assertArrayHasKey('tier_info', $result);
+        }
+    }
+
+    // =========================================================================
+    // getCurrentStatus Tests
+    // =========================================================================
+
+    public function testGetCurrentStatusReturnsErrorWhenNoHardware(): void
+    {
+        $result = $this->collector->getCurrentStatus();
+
+        // When no hardware is detected, should return not supported
+        if (!$result['success']) {
+            $this->assertFalse($result['success']);
+            $this->assertArrayHasKey('supported', $result);
+            $this->assertFalse($result['supported']);
+        } else {
+            // If hardware is detected (running on actual FPP), verify structure
+            $this->assertTrue($result['success']);
+            $this->assertTrue($result['supported']);
+        }
+    }
+
+    public function testGetCurrentStatusReturnsExpectedStructureWhenSupported(): void
+    {
+        $result = $this->collector->getCurrentStatus();
+
+        // Always has these keys
+        $this->assertArrayHasKey('success', $result);
+        $this->assertArrayHasKey('supported', $result);
+
+        if ($result['success'] && $result['supported']) {
+            $this->assertArrayHasKey('timestamp', $result);
+            $this->assertArrayHasKey('hardware', $result);
+            $this->assertArrayHasKey('ports', $result);
+            $this->assertArrayHasKey('totals', $result);
+            $this->assertArrayHasKey('outputConfig', $result);
+        } else {
+            // Not supported - should have error
+            $this->assertArrayHasKey('error', $result);
+        }
+    }
+
+    // =========================================================================
+    // Tier Info Labels Tests
+    // =========================================================================
+
+    public function testGetRollupTiersInfoHasCorrectLabels(): void
+    {
+        $info = $this->collector->getRollupTiersInfo();
+
+        // Check that labels are human-readable
+        $this->assertStringContainsString('minute', $info['1min']['interval_label']);
+        $this->assertStringContainsString('minute', $info['5min']['interval_label']);
+        $this->assertStringContainsString('minute', $info['30min']['interval_label']);
+        $this->assertStringContainsString('hour', $info['2hour']['interval_label']);
+    }
+
+    // =========================================================================
+    // Port History with Rollup Tier Info Tests
+    // =========================================================================
+
+    public function testGetPortHistoryIncludesTierInfo(): void
+    {
+        // Create rollup data
+        $rollupFile = $this->dataDir . '/1min.log';
+        $now = time();
+        $entries = [];
+
+        for ($i = 0; $i < 60; $i++) {
+            $entries[] = [
+                'timestamp' => $now - (6 * 3600) + ($i * 60),
+                'interval' => 60,
+                'ports' => ['Port 1' => ['avg' => 100, 'min' => 90, 'max' => 110, 'samples' => 12]]
+            ];
+        }
+        $this->writeJsonLinesFile($rollupFile, $entries);
+
+        $result = $this->collector->getPortHistory('Port 1', 6);
+
+        $this->assertTrue($result['success']);
+        $this->assertEquals('rollup', $result['source']);
+        $this->assertArrayHasKey('tier_info', $result);
+        $this->assertIsArray($result['tier_info']);
+    }
+
+    public function testGetPortHistoryRawSourceHasNoTierInfo(): void
+    {
+        // Create raw data
+        $now = time();
+        $entries = [
+            ['timestamp' => $now - 300, 'ports' => ['Port 1' => 100]],
+            ['timestamp' => $now, 'ports' => ['Port 1' => 200]],
+        ];
+        $this->writeJsonLinesFile($this->rawFile, $entries);
+
+        $result = $this->collector->getPortHistory('Port 1', 1);
+
+        $this->assertTrue($result['success']);
+        $this->assertEquals('raw', $result['source']);
+        // tier_info should be null for raw data
+        $this->assertNull($result['tier_info']);
+    }
+
+    // =========================================================================
+    // Aggregate Bucket with Total Tests
+    // =========================================================================
+
+    public function testAggregateBucketCalculatesTotalCorrectly(): void
+    {
+        $metrics = [
+            ['ports' => ['Port 1' => 100, 'Port 2' => 200, '_total' => 300]],
+            ['ports' => ['Port 1' => 150, 'Port 2' => 250, '_total' => 400]],
+        ];
+        $bucketStart = time();
+
+        $result = $this->collector->aggregateBucket($metrics, $bucketStart, 60);
+
+        $this->assertArrayHasKey('_total', $result['ports']);
+        // _total avg should be (300 + 400) / 2 = 350
+        $this->assertEquals(350, $result['ports']['_total']['avg']);
+    }
+
+    // =========================================================================
+    // Multiple Port Read/Write Tests
+    // =========================================================================
+
+    public function testWriteRawMetricWithSmartReceiverPorts(): void
+    {
+        $ports = [
+            'Port 9A' => 500,
+            'Port 9B' => 600,
+            'Port 9C' => 700,
+        ];
+        $result = $this->collector->writeRawMetric($ports);
+
+        $this->assertTrue($result);
+        $this->assertFileExists($this->rawFile);
+
+        $content = file_get_contents($this->rawFile);
+        $this->assertStringContainsString('"Port 9A":500', $content);
+        $this->assertStringContainsString('"Port 9B":600', $content);
+        $this->assertStringContainsString('"Port 9C":700', $content);
+        $this->assertStringContainsString('"_total":1800', $content);
+    }
+
+    public function testWriteRawMetricWithManyPorts(): void
+    {
+        $ports = [];
+        for ($i = 1; $i <= 16; $i++) {
+            $ports["Port {$i}"] = $i * 100;
+        }
+        $result = $this->collector->writeRawMetric($ports);
+
+        $this->assertTrue($result);
+
+        $content = file_get_contents($this->rawFile);
+        // Total should be sum of 100 + 200 + ... + 1600 = 13600
+        $this->assertStringContainsString('"_total":13600', $content);
+    }
+
+    // =========================================================================
+    // Edge Case: Large Time Ranges
+    // =========================================================================
+
+    public function testGetBestTierForVeryLargeHours(): void
+    {
+        $this->assertEquals('2hour', $this->collector->getBestTierForHours(10000));
+        $this->assertEquals('2hour', $this->collector->getBestTierForHours(100000));
+    }
+
+    public function testGetBestTierForBoundaryValues(): void
+    {
+        // Test boundary values exactly
+        $this->assertEquals('1min', $this->collector->getBestTierForHours(6));
+        $this->assertEquals('5min', $this->collector->getBestTierForHours(7));
+        $this->assertEquals('5min', $this->collector->getBestTierForHours(48));
+        $this->assertEquals('30min', $this->collector->getBestTierForHours(49));
+        $this->assertEquals('30min', $this->collector->getBestTierForHours(336));
+        $this->assertEquals('2hour', $this->collector->getBestTierForHours(337));
+    }
+
+    // =========================================================================
+    // Timestamp Alignment Tests
+    // =========================================================================
+
+    public function testReadRawMetricsRespectsTimeRange(): void
+    {
+        $now = time();
+        $entries = [
+            ['timestamp' => $now - 86400, 'ports' => ['Port 1' => 100]], // 24 hours ago
+            ['timestamp' => $now - 3600, 'ports' => ['Port 1' => 200]],  // 1 hour ago
+            ['timestamp' => $now - 1800, 'ports' => ['Port 1' => 300]],  // 30 min ago
+            ['timestamp' => $now - 60, 'ports' => ['Port 1' => 400]],    // 1 min ago
+        ];
+        $this->writeJsonLinesFile($this->rawFile, $entries);
+
+        // Request last 2 hours
+        $result = $this->collector->readRawMetrics(2);
+
+        $this->assertCount(3, $result); // Should get entries from last 2 hours
+    }
+
+    // =========================================================================
+    // State File Edge Cases
+    // =========================================================================
+
+    public function testGetRollupStateCreatesStateForAllTiers(): void
+    {
+        $state = $this->collector->getRollupState();
+
+        $expectedTiers = ['1min', '5min', '30min', '2hour'];
+        foreach ($expectedTiers as $tier) {
+            $this->assertArrayHasKey($tier, $state, "State should have key for tier: $tier");
+        }
+    }
+
+    public function testGetRollupStateInitializesWithZeroValues(): void
+    {
+        // Clear any existing state file
+        if (file_exists($this->stateFile)) {
+            unlink($this->stateFile);
+        }
+
+        $state = $this->collector->getRollupState();
+
+        foreach ($state as $tierState) {
+            $this->assertEquals(0, $tierState['last_processed']);
+            $this->assertEquals(0, $tierState['last_bucket_end']);
+        }
+    }
+
+    // =========================================================================
+    // Rollup File Path Consistency Tests
+    // =========================================================================
+
+    public function testRollupFilePathsAreConsistent(): void
+    {
+        $tiers = ['1min', '5min', '30min', '2hour'];
+
+        foreach ($tiers as $tier) {
+            $path = $this->collector->getRollupFilePath($tier);
+
+            // Should be in data directory
+            $this->assertStringContainsString($this->dataDir, $path);
+
+            // Should have .log extension
+            $this->assertStringEndsWith('.log', $path);
+
+            // Should contain tier name
+            $this->assertStringContainsString($tier, $path);
+        }
+    }
+
+    public function testRollupFilePathsAreUnique(): void
+    {
+        $paths = [];
+        foreach (['1min', '5min', '30min', '2hour'] as $tier) {
+            $paths[] = $this->collector->getRollupFilePath($tier);
+        }
+
+        // All paths should be unique
+        $this->assertEquals(count($paths), count(array_unique($paths)));
+    }
 }
