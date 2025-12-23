@@ -35,9 +35,7 @@ class ViewHelpers
     public static function renderCSSIncludes(bool $includeChartJs = false): void
     {
         ?>
-<link rel="stylesheet" href="/css/fpp-bootstrap/dist-new/fpp-bootstrap-5-3.css">
-<link rel="stylesheet" href="/css/fpp.css">
-<link rel="stylesheet" href="/plugin.php?plugin=fpp-plugin-watcher&file=css/commonUI.css&nopage=1">
+<link rel="stylesheet" href="/plugin.php?plugin=fpp-plugin-watcher&file=css/watcher.css&nopage=1">
 <?php if ($includeChartJs): ?>
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/chartjs-adapter-date-fns@3.0.0/dist/chartjs-adapter-date-fns.bundle.min.js"></script>

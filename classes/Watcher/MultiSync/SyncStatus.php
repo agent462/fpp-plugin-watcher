@@ -28,9 +28,6 @@ class SyncStatus
         return self::$instance ??= new self();
     }
 
-    /**
-     * Get multi-sync status from the C++ plugin
-     */
     public function getStatus(): array
     {
         $response = $this->apiClient->get(self::API_BASE . '/status', 5);
@@ -40,9 +37,6 @@ class SyncStatus
         return $response;
     }
 
-    /**
-     * Get all multi-sync metrics from the C++ plugin
-     */
     public function getMetrics(): array
     {
         $response = $this->apiClient->get(self::API_BASE . '/metrics', 5);
@@ -52,9 +46,7 @@ class SyncStatus
         return $response;
     }
 
-    /**
-     * Get active issues from the C++ plugin
-     */
+
     public function getIssues(): array
     {
         $response = $this->apiClient->get(self::API_BASE . '/issues', 5);
@@ -64,9 +56,6 @@ class SyncStatus
         return $response;
     }
 
-    /**
-     * Get metrics for a specific host
-     */
     public function getHostMetrics(string $hostOrIp): array
     {
         $response = $this->apiClient->get(self::API_BASE . '/host/' . urlencode($hostOrIp), 5);
@@ -137,9 +126,6 @@ class SyncStatus
         }
     }
 
-    /**
-     * Get issue severity CSS class
-     */
     public static function getIssueSeverityClass(int $severity): string
     {
         return match ($severity) {
@@ -150,9 +136,6 @@ class SyncStatus
         };
     }
 
-    /**
-     * Get issue severity label
-     */
     public static function getIssueSeverityLabel(int $severity): string
     {
         return match ($severity) {

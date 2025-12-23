@@ -334,9 +334,7 @@ class ViewHelpersTest extends TestCase
         ViewHelpers::renderCSSIncludes(false);
         $output = ob_get_clean();
 
-        $this->assertStringContainsString('fpp-bootstrap', $output);
-        $this->assertStringContainsString('fpp.css', $output);
-        $this->assertStringContainsString('commonUI.css', $output);
+        $this->assertStringContainsString('watcher.css', $output);
         $this->assertStringNotContainsString('chart.js', $output);
     }
 

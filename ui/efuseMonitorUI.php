@@ -38,8 +38,6 @@ if ($retentionDays >= 90) {
 
 renderCSSIncludes(true);
 ?>
-<link rel="stylesheet" href="/plugin.php?plugin=fpp-plugin-watcher&file=css/efuseHeatmap.css&nopage=1">
-
 <script>
     window.watcherConfig = {
         supported: <?php echo json_encode($hardware['supported']); ?>,

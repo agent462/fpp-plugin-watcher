@@ -12,9 +12,6 @@ use Watcher\Controllers\EfuseHardware;
 
 // Render CSS includes (consistent with other UI pages)
 renderCSSIncludes(false);
-?>
-<link rel="stylesheet" href="/plugin.php?plugin=fpp-plugin-watcher&file=css/configUI.css&nopage=1">
-<?php
 
 $statusMessage = '';
 $statusType = '';
