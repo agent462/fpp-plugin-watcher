@@ -2,17 +2,18 @@
 include_once __DIR__ . '/watcherCommon.php';
 
 use Watcher\Core\Settings;
+use Watcher\Core\Logger;
 use Watcher\Http\ApiClient;
 
 /**
  * Bootstrap default settings
  */
 function setDefaultWatcherSettings() {
-    logMessage("Setting default Watcher Config");
+    Logger::getInstance()->info("Setting default Watcher Config");
 
     $settings = Settings::getInstance();
     foreach (WATCHERDEFAULTSETTINGS as $settingName => $settingValue) {
-        logMessage("Setting $settingName = $settingValue");
+        Logger::getInstance()->info("Setting $settingName = $settingValue");
         $settings->writeSettingToFile($settingName, (string)$settingValue, WATCHERPLUGINNAME);
     }
 }
@@ -60,7 +61,7 @@ function settingsRequireRestart($oldConfig, $newSettings) {
         }
 
         if ($oldNormalized !== $newNormalized) {
-            logMessage("Setting '$key' changed from '$oldNormalized' to '$newNormalized' - restart required");
+            Logger::getInstance()->info("Setting '$key' changed from '$oldNormalized' to '$newNormalized' - restart required");
             return true;
         }
     }
@@ -173,16 +174,16 @@ function readPluginConfig($forceReload = false) {
     $configFile = WATCHERCONFIGFILELOCATION;
 
     if (!file_exists($configFile)) {
-        logMessage('Watcher config file does not exist. Creating default config file.');
+        Logger::getInstance()->info('Watcher config file does not exist. Creating default config file.');
         setDefaultWatcherSettings();
     }
 
     ensureFppOwnership($configFile);
 
-    #logMessage("Loading Watcher config file: ".WATCHERCONFIGFILELOCATION); \\ make this debug in future
+    // Logger::getInstance()->debug("Loading Watcher config file: " . WATCHERCONFIGFILELOCATION);
     $fd = fopen($configFile, 'r');
     if ($fd === false) {
-        logMessage("ERROR: Failed to open config file: " . WATCHERCONFIGFILELOCATION);
+        Logger::getInstance()->error("Failed to open config file: " . WATCHERCONFIGFILELOCATION);
         return prepareConfig(WATCHERDEFAULTSETTINGS);
     }
 

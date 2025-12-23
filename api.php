@@ -24,6 +24,7 @@
 require_once __DIR__ . '/classes/autoload.php';
 
 use Watcher\Core\Settings;
+use Watcher\Core\Logger;
 use Watcher\Http\ApiClient;
 use Watcher\Http\CurlMultiHandler;
 use Watcher\Metrics\PingCollector;
@@ -851,7 +852,7 @@ function fpppluginWatcherConnectivityStateClear() {
         return apiError('Failed to clear reset state');
     }
 
-    logMessage("Reset state cleared via API, restarting connectivity daemon");
+    Logger::getInstance()->info("Reset state cleared via API, restarting connectivity daemon");
     restartConnectivityDaemon();
 
     return apiSuccess(['message' => 'Reset state cleared and connectivity daemon restarted']);
@@ -873,7 +874,7 @@ function fpppluginWatcherConnectivityReload() {
         return apiError('Failed to trigger configuration reload');
     }
 
-    logMessage("Configuration reload triggered via API");
+    Logger::getInstance()->info("Configuration reload triggered via API");
 
     return apiSuccess([
         'message' => 'Configuration reload triggered. Daemon will reload within 60 seconds.',
@@ -1163,7 +1164,7 @@ function fpppluginWatcherConfigSave() {
     }
 
     ensureFppOwnership($configPath);
-    logMessage("Watcher configuration updated via API");
+    Logger::getInstance()->info("Watcher configuration updated via API");
 
     return apiSuccess([
         'message' => 'Configuration saved successfully. Some changes may require FPP restart.',

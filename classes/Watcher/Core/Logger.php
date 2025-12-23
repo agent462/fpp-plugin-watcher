@@ -18,9 +18,6 @@ class Logger
     private string $logFile;
     private bool $debugEnabled = false;
 
-    /** @var array<string, bool> Track files whose ownership has been verified this session */
-    private array $ownershipVerified = [];
-
     /**
      * Private constructor - use getInstance()
      */
@@ -110,10 +107,9 @@ class Logger
             fclose($fp);
         }
 
-        // Only set ownership once per file per session (when file is new or not yet verified)
-        if (!$fileExisted || !isset($this->ownershipVerified[$logFile])) {
-            $this->ensureFppOwnership($logFile);
-            $this->ownershipVerified[$logFile] = true;
+        // Only set ownership when file is newly created (FileManager handles session caching)
+        if (!$fileExisted) {
+            FileManager::getInstance()->ensureFppOwnership($logFile);
         }
     }
 
@@ -147,24 +143,5 @@ class Logger
     public function debug(string $message, ?string $file = null): void
     {
         $this->log($message, 'DEBUG', $file);
-    }
-
-    /**
-     * Ensure file is owned by fpp:fpp
-     */
-    private function ensureFppOwnership(string $path): bool
-    {
-        if (!$path || !file_exists($path)) {
-            return false;
-        }
-
-        // Use constants if available (from watcherCommon.php)
-        $fppUser = defined('WATCHERFPPUSER') ? WATCHERFPPUSER : 'fpp';
-        $fppGroup = defined('WATCHERFPPGROUP') ? WATCHERFPPGROUP : 'fpp';
-
-        @chown($path, $fppUser);
-        @chgrp($path, $fppGroup);
-
-        return true;
     }
 }

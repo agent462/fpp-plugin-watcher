@@ -15,6 +15,7 @@ require_once __DIR__ . '/classes/autoload.php'; // Load class autoloader
 require_once __DIR__ . '/lib/core/watcherCommon.php';
 require_once __DIR__ . '/lib/core/config.php';
 
+use Watcher\Core\Logger;
 use Watcher\Metrics\EfuseCollector;
 use Watcher\Controllers\EfuseHardware;
 
@@ -25,7 +26,7 @@ $collectionInterval = $config['efuseCollectionInterval'] ?? 5;
 $retentionDays = $config['efuseRetentionDays'] ?? 14;
 
 function efuseLog($message) {
-    logMessage("[eFuse Collector] $message", EFUSE_LOG_FILE);
+    Logger::getInstance()->info("[eFuse Collector] $message", EFUSE_LOG_FILE);
 }
 
 function isEfuseEnabled() {

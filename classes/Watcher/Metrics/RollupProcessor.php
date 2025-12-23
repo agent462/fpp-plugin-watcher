@@ -316,16 +316,16 @@ class RollupProcessor
             return $state;
         };
 
-        if (!file_exists($stateFile)) {
+        $state = $this->fileManager->readJsonFile($stateFile);
+
+        if ($state === null) {
+            // File doesn't exist or is empty - create fresh state
             $state = $buildFreshState();
             $this->saveState($stateFile, $state);
             return $state;
         }
 
-        $content = file_get_contents($stateFile);
-        $state = json_decode($content, true);
-
-        if (!$state || !is_array($state)) {
+        if (!is_array($state) || empty($state)) {
             $this->logger->info("Corrupted rollup state file detected: {$stateFile}. Rebuilding fresh state.");
             $state = $buildFreshState();
             $this->saveState($stateFile, $state);
@@ -365,21 +365,10 @@ class RollupProcessor
      */
     public function saveState(string $stateFile, array $state): bool
     {
-        $fp = fopen($stateFile, 'c');
-        if (!$fp) {
-            $this->logger->error("Unable to open rollup state file for writing: {$stateFile}");
+        if (!$this->fileManager->writeJsonFile($stateFile, $state)) {
+            $this->logger->error("Unable to write rollup state file: {$stateFile}");
             return false;
         }
-
-        if (flock($fp, LOCK_EX)) {
-            ftruncate($fp, 0);
-            fwrite($fp, json_encode($state, JSON_PRETTY_PRINT));
-            fflush($fp);
-            flock($fp, LOCK_UN);
-        }
-
-        fclose($fp);
-        $this->fileManager->ensureFppOwnership($stateFile);
         return true;
     }
 

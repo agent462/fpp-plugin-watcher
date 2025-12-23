@@ -6,6 +6,7 @@ require_once __DIR__ . '/../classes/autoload.php'; // Load class autoloader
 require_once __DIR__ . '/../classes/Watcher/UI/ViewHelpers.php'; // For renderWatcherJS()
 
 use Watcher\Core\Settings;
+use Watcher\Core\Logger;
 use Watcher\Http\ApiClient;
 use Watcher\Controllers\EfuseHardware;
 
@@ -46,7 +47,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['save_settings'])) {
     // If 'default' is selected, auto-detect and save the actual interface
     if ($networkAdapter === 'default') {
         $networkAdapter = detectActiveNetworkInterface();
-        logMessage("Auto-detected network adapter '$networkAdapter' from 'default' setting");
+        Logger::getInstance()->info("Auto-detected network adapter '$networkAdapter' from 'default' setting");
     }
 
     // Process test hosts (comes as array from form)
@@ -119,7 +120,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['save_settings'])) {
         // Configure FPP MQTT settings based on enable/disable state
         $mqttConfigResult = configureFppMqttSettings($mqttMonitorEnabled === 'true');
         if (!$mqttConfigResult['success']) {
-            logMessage("Warning: Some FPP MQTT settings may not have been configured: " . implode(', ', $mqttConfigResult['messages']));
+            Logger::getInstance()->info("Warning: Some FPP MQTT settings may not have been configured: " . implode(', ', $mqttConfigResult['messages']));
         }
 
         // Only set FPP restart flag if settings that require restart have changed

@@ -3,6 +3,7 @@
 require_once __DIR__ . '/../../classes/autoload.php';
 
 use Watcher\Core\Settings;
+use Watcher\Core\Logger;
 use Watcher\Http\ApiClient;
 
 // API timeout constants (in seconds)
@@ -110,50 +111,18 @@ define('EFUSE_ERROR_LOG_INTERVAL', 60);     // Only log errors every N seconds t
 define('EFUSE_LOG_FILE', WATCHERLOGDIR . '/fpp-plugin-watcher-efuse.log');
 
 // Ensure plugin-created files are owned by the FPP user/group for web access
+// Delegates to FileManager singleton for centralized ownership handling
 function ensureFppOwnership($path) {
-    if (!$path || !file_exists($path)) {
-        return;
-    }
-
-    @chown($path, WATCHERFPPUSER);
-    @chgrp($path, WATCHERFPPGROUP);
+    \Watcher\Core\FileManager::getInstance()->ensureFppOwnership($path);
 }
 
-// Track files whose ownership has been verified this session
-$_watcherOwnershipVerified = [];
-
-// Function to log messages
-function logMessage($message, $file = WATCHERLOGFILE) {
-    global $_watcherOwnershipVerified;
-
-    $timestamp = date('Y-m-d H:i:s');
-    $logEntry = "[$timestamp] $message\n";
-    $fileExisted = file_exists($file);
-
-    // Serialize writes to avoid interleaving across processes
-    $fp = @fopen($file, 'a');
-    if ($fp) {
-        if (flock($fp, LOCK_EX)) {
-            fwrite($fp, $logEntry);
-            fflush($fp);
-            flock($fp, LOCK_UN);
-        }
-        fclose($fp);
-    }
-
-    // Only set ownership once per file per session (when file is new or not yet verified)
-    if (!$fileExisted || !isset($_watcherOwnershipVerified[$file])) {
-        ensureFppOwnership($file);
-        $_watcherOwnershipVerified[$file] = true;
-    }
-}
 
 // Function to fetch network interfaces from FPP API
 function fetchWatcherNetworkInterfaces() {
     $result = ApiClient::getInstance()->get('http://127.0.0.1/api/network/interface');
 
     if ($result === false || !is_array($result)) {
-        logMessage("Failed to retrieve network interfaces from FPP API");
+        Logger::getInstance()->info("Failed to retrieve network interfaces from FPP API");
         return [];
     }
 
@@ -166,7 +135,7 @@ function detectActiveNetworkInterface() {
 
     // If API call failed or no interfaces returned
     if (empty($interfaces) || !is_array($interfaces)) {
-        logMessage("Network interface detection: API call failed or returned invalid data, using fallback");
+        Logger::getInstance()->info("Network interface detection: API call failed or returned invalid data, using fallback");
         return 'eth0';
     }
 
@@ -208,7 +177,7 @@ function detectActiveNetworkInterface() {
         }
 
         if (empty($ipv4Candidates)) {
-            logMessage("Network interface detection: Skipping '$ifname' (no usable IPv4 in addr_info)");
+            Logger::getInstance()->info("Network interface detection: Skipping '$ifname' (no usable IPv4 in addr_info)");
             continue; // Skip interfaces without a usable IPv4 address
         }
 
@@ -240,16 +209,16 @@ function detectActiveNetworkInterface() {
             return $c['ip'] . ($c['scope'] !== 'global' ? " ({$c['scope']})" : '');
         }, $ipv4Candidates);
         $stateSummary = "state={$operState}, flags=" . implode(',', $flags ?? []);
-        logMessage("Network interface detection: Candidate '$ifname' with IP(s): " . implode(', ', $candidateIps) . " | $stateSummary | score=$score");
+        Logger::getInstance()->info("Network interface detection: Candidate '$ifname' with IP(s): " . implode(', ', $candidateIps) . " | $stateSummary | score=$score");
     }
 
     if ($bestInterface) {
-        logMessage("Network interface detection: Selected interface '$bestInterface' (score $bestScore)");
+        Logger::getInstance()->info("Network interface detection: Selected interface '$bestInterface' (score $bestScore)");
         return $bestInterface;
     }
 
     // No interface found with IPv4, fallback to eth0
-    logMessage("Network interface detection: No interface with IPv4 found, using fallback 'eth0'");
+    Logger::getInstance()->info("Network interface detection: No interface with IPv4 found, using fallback 'eth0'");
     return 'eth0';
 }
 
@@ -278,7 +247,7 @@ function detectGatewayForInterface($interface) {
     }
 
     if (!$gateway) {
-        logMessage("Gateway detection: No default route found for interface '$interface'");
+        Logger::getInstance()->info("Gateway detection: No default route found for interface '$interface'");
         return null;
     }
 
@@ -286,11 +255,11 @@ function detectGatewayForInterface($interface) {
     $pingResult = pingHost($gateway, $interface, 1);
 
     if (!$pingResult['success']) {
-        logMessage("Gateway detection: Found gateway '$gateway' for interface '$interface' but ping failed");
+        Logger::getInstance()->info("Gateway detection: Found gateway '$gateway' for interface '$interface' but ping failed");
         return null;
     }
 
-    logMessage("Gateway detection: Found reachable gateway '$gateway' for interface '$interface'");
+    Logger::getInstance()->info("Gateway detection: Found reachable gateway '$gateway' for interface '$interface'");
     return $gateway;
 }
 
@@ -299,7 +268,7 @@ function isPlayerMode() {
     $result = ApiClient::getInstance()->get('http://127.0.0.1/api/fppd/status', 5);
 
     if ($result === false || !isset($result['mode_name'])) {
-        logMessage("isPlayerMode: Failed to determine mode from FPP status");
+        Logger::getInstance()->info("isPlayerMode: Failed to determine mode from FPP status");
         return false;
     }
 
@@ -601,7 +570,7 @@ function restartConnectivityDaemon() {
     $cmd = '/usr/bin/php ' . WATCHERPLUGINDIR . 'connectivityCheck.php > /dev/null 2>&1 &';
     exec($cmd, $output, $returnVar);
 
-    logMessage("Connectivity daemon restarted");
+    Logger::getInstance()->info("Connectivity daemon restarted");
 
     return true;
 }
@@ -738,30 +707,12 @@ function getDataDirectoryStats() {
 
 /**
  * Calculate total size of a directory recursively
+ * Delegates to FileManager singleton
  * @param string $dir Directory path
  * @return array ['size' => int, 'count' => int]
  */
 function getDirectorySizeRecursive($dir) {
-    $size = 0;
-    $count = 0;
-
-    if (!is_dir($dir)) {
-        return ['size' => 0, 'count' => 0];
-    }
-
-    $iterator = new RecursiveIteratorIterator(
-        new RecursiveDirectoryIterator($dir, RecursiveDirectoryIterator::SKIP_DOTS),
-        RecursiveIteratorIterator::LEAVES_ONLY
-    );
-
-    foreach ($iterator as $file) {
-        if ($file->isFile()) {
-            $size += $file->getSize();
-            $count++;
-        }
-    }
-
-    return ['size' => $size, 'count' => $count];
+    return \Watcher\Core\FileManager::getInstance()->getDirectorySizeRecursive($dir);
 }
 
 /**
@@ -806,7 +757,7 @@ function clearDataCategory($category) {
         }
     }
 
-    logMessage("Cleared data category '$category': deleted $deleted files" . (count($errors) > 0 ? ", errors: " . implode(', ', $errors) : ''));
+    Logger::getInstance()->info("Cleared data category '$category': deleted $deleted files" . (count($errors) > 0 ? ", errors: " . implode(', ', $errors) : ''));
 
     return [
         'success' => count($errors) === 0,
@@ -817,34 +768,12 @@ function clearDataCategory($category) {
 
 /**
  * Recursively delete all files in a directory (keeps directory structure)
+ * Delegates to FileManager singleton
  * @param string $dir Directory path
  * @return array ['deleted' => int, 'errors' => []]
  */
 function clearDirectoryRecursive($dir) {
-    $deleted = 0;
-    $errors = [];
-
-    if (!is_dir($dir)) {
-        return ['deleted' => 0, 'errors' => []];
-    }
-
-    $iterator = new RecursiveIteratorIterator(
-        new RecursiveDirectoryIterator($dir, RecursiveDirectoryIterator::SKIP_DOTS),
-        RecursiveIteratorIterator::LEAVES_ONLY
-    );
-
-    foreach ($iterator as $file) {
-        if ($file->isFile()) {
-            $filePath = $file->getPathname();
-            if (@unlink($filePath)) {
-                $deleted++;
-            } else {
-                $errors[] = "Failed to delete: " . $file->getFilename();
-            }
-        }
-    }
-
-    return ['deleted' => $deleted, 'errors' => $errors];
+    return \Watcher\Core\FileManager::getInstance()->clearDirectoryRecursive($dir);
 }
 
 /**
@@ -878,7 +807,7 @@ function clearDataFile($category, $filename) {
     }
 
     if (@unlink($filePath)) {
-        logMessage("Deleted file '$filename' from category '$category'");
+        Logger::getInstance()->info("Deleted file '$filename' from category '$category'");
         return ['success' => true, 'error' => null];
     }
 
@@ -907,7 +836,7 @@ function acquireDaemonLock($daemonName, $logFile = null) {
 
     $lockFp = @fopen($lockFile, 'c');
     if (!$lockFp) {
-        logMessage("[{$daemonName}] Failed to open lock file: $lockFile", $logFile);
+        Logger::getInstance()->info("[{$daemonName}] Failed to open lock file: $lockFile", $logFile);
         return false;
     }
 
@@ -927,7 +856,7 @@ function acquireDaemonLock($daemonName, $logFile = null) {
         // posix_kill with signal 0 tests process existence without sending a signal
         if (!posix_kill($stalePid, 0)) {
             // Process doesn't exist - lock is stale
-            logMessage("[{$daemonName}] Detected stale lock from PID $stalePid (process no longer exists). Clearing stale lock...", $logFile);
+            Logger::getInstance()->info("[{$daemonName}] Detected stale lock from PID $stalePid (process no longer exists). Clearing stale lock...", $logFile);
             @fclose($lockFp);
             @unlink($lockFile);
 
@@ -937,18 +866,18 @@ function acquireDaemonLock($daemonName, $logFile = null) {
                 ftruncate($lockFp, 0);
                 fwrite($lockFp, getmypid());
                 fflush($lockFp);
-                logMessage("[{$daemonName}] Successfully acquired lock after clearing stale lock.", $logFile);
+                Logger::getInstance()->info("[{$daemonName}] Successfully acquired lock after clearing stale lock.", $logFile);
                 return $lockFp;
             }
 
-            logMessage("[{$daemonName}] Failed to acquire lock even after clearing stale lock. Exiting.", $logFile);
+            Logger::getInstance()->info("[{$daemonName}] Failed to acquire lock even after clearing stale lock. Exiting.", $logFile);
             return false;
         }
 
         // Process is alive
-        logMessage("[{$daemonName}] Another instance (PID $stalePid) is already running. Exiting.", $logFile);
+        Logger::getInstance()->info("[{$daemonName}] Another instance (PID $stalePid) is already running. Exiting.", $logFile);
     } else {
-        logMessage("[{$daemonName}] Another instance is already running. Exiting.", $logFile);
+        Logger::getInstance()->info("[{$daemonName}] Another instance is already running. Exiting.", $logFile);
     }
 
     @fclose($lockFp);
@@ -994,36 +923,13 @@ function tailDataFile($category, $filename, $lines = 100) {
     $dir = $categories[$category]['dir'];
     $filePath = $dir . '/' . $filename;
 
-    if (!file_exists($filePath)) {
-        return ['success' => false, 'content' => '', 'error' => 'File not found'];
-    }
+    // Delegate to FileManager for the actual file reading
+    $result = \Watcher\Core\FileManager::getInstance()->tailFile($filePath, $lines);
 
-    if (!is_file($filePath) || !is_readable($filePath)) {
-        return ['success' => false, 'content' => '', 'error' => 'Cannot read file'];
-    }
+    // Add category/filename metadata to the result
+    $result['filename'] = $filename;
+    $result['category'] = $category;
 
-    // Use tail command for efficiency on large files
-    $output = [];
-    $returnVar = 0;
-    exec('tail -n ' . intval($lines) . ' ' . escapeshellarg($filePath) . ' 2>&1', $output, $returnVar);
-
-    if ($returnVar !== 0) {
-        // Fallback to PHP if tail fails
-        $content = file_get_contents($filePath);
-        if ($content === false) {
-            return ['success' => false, 'content' => '', 'error' => 'Failed to read file'];
-        }
-        $allLines = explode("\n", $content);
-        $output = array_slice($allLines, -$lines);
-    }
-
-    return [
-        'success' => true,
-        'content' => implode("\n", $output),
-        'filename' => $filename,
-        'category' => $category,
-        'lines' => count($output),
-        'error' => null
-    ];
+    return $result;
 }
 ?>

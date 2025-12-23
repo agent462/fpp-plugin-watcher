@@ -10,6 +10,7 @@
 // Load class autoloader
 require_once __DIR__ . '/classes/autoload.php';
 
+use Watcher\Core\Logger;
 use Watcher\Utils\MqttEventLogger;
 
 include_once __DIR__ . "/lib/core/watcherCommon.php";
@@ -28,7 +29,7 @@ define('MQTT_EVENT_WARNING', MqttEventLogger::EVENT_WARNING);
 $config = readPluginConfig();
 
 if (!$config['mqttMonitorEnabled']) {
-    logMessage("MQTT Monitor is disabled. Exiting.");
+    Logger::getInstance()->info("MQTT Monitor is disabled. Exiting.");
     exit(0);
 }
 
@@ -59,9 +60,9 @@ $rotationInterval = 3600; // Check rotation every hour
 $sequenceStartTimes = [];  // host => ['sequence' => name, 'start' => timestamp, 'duration' => seconds]
 $currentMedia = [];        // host => ['title' => title, 'artist' => artist]
 
-logMessage("=== MQTT Subscriber Started ===");
-logMessage("Retention: {$config['mqttRetentionDays']} days");
-logMessage("Topics: " . implode(', ', $topics));
+Logger::getInstance()->info("=== MQTT Subscriber Started ===");
+Logger::getInstance()->info("Retention: {$config['mqttRetentionDays']} days");
+Logger::getInstance()->info("Topics: " . implode(', ', $topics));
 
 /**
  * Parse MQTT topic to extract hostname
@@ -306,7 +307,7 @@ function runMqttSubscriber($host, $port, $user, $pass, $topics) {
         $topicArgs
     );
 
-    logMessage("Starting mosquitto_sub: mosquitto_sub -h $host -p $port -u $user -P *** -v ...");
+    Logger::getInstance()->info("Starting mosquitto_sub: mosquitto_sub -h $host -p $port -u $user -P *** -v ...");
 
     // Open process
     $descriptors = [
@@ -318,7 +319,7 @@ function runMqttSubscriber($host, $port, $user, $pass, $topics) {
     $process = proc_open($cmd, $descriptors, $pipes);
 
     if (!is_resource($process)) {
-        logMessage("ERROR: Failed to start mosquitto_sub process");
+        Logger::getInstance()->info("ERROR: Failed to start mosquitto_sub process");
         return false;
     }
 
@@ -328,14 +329,14 @@ function runMqttSubscriber($host, $port, $user, $pass, $topics) {
     // Set stdout to non-blocking
     stream_set_blocking($pipes[1], false);
 
-    logMessage("MQTT subscriber connected and listening...");
+    Logger::getInstance()->info("MQTT subscriber connected and listening...");
 
     // Read loop
     while (true) {
         // Check if process is still running
         $status = proc_get_status($process);
         if (!$status['running']) {
-            logMessage("mosquitto_sub process exited with code: " . $status['exitcode']);
+            Logger::getInstance()->info("mosquitto_sub process exited with code: " . $status['exitcode']);
             break;
         }
 
@@ -383,9 +384,9 @@ while (true) {
     $result = runMqttSubscriber($mqttHost, $mqttPort, $mqttUser, $mqttPass, $topics);
 
     if ($result === false) {
-        logMessage("MQTT connection failed, retrying in {$reconnectDelay}s...");
+        Logger::getInstance()->info("MQTT connection failed, retrying in {$reconnectDelay}s...");
     } else {
-        logMessage("MQTT subscriber disconnected, reconnecting in {$reconnectDelay}s...");
+        Logger::getInstance()->info("MQTT subscriber disconnected, reconnecting in {$reconnectDelay}s...");
     }
 
     sleep($reconnectDelay);
@@ -401,7 +402,7 @@ while (true) {
     // Reload config in case settings changed
     $config = readPluginConfig(true);
     if (!$config['mqttMonitorEnabled']) {
-        logMessage("MQTT Monitor disabled via config. Exiting.");
+        Logger::getInstance()->info("MQTT Monitor disabled via config. Exiting.");
         exit(0);
     }
 }

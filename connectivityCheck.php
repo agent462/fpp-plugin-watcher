@@ -5,6 +5,7 @@ include_once __DIR__ ."/lib/core/watcherCommon.php";
 include_once __DIR__ ."/lib/core/config.php";
 
 use Watcher\Core\Settings;
+use Watcher\Core\Logger;
 use Watcher\Metrics\MetricsStorage;
 use Watcher\Controllers\NetworkAdapter;
 use Watcher\Metrics\PingCollector;
@@ -32,7 +33,7 @@ function checkAndReloadConfig() {
         return false;
     }
 
-    logMessage("Config file changed (mtime: $lastConfigMtime -> $currentMtime), reloading configuration...");
+    Logger::getInstance()->info("Config file changed (mtime: $lastConfigMtime -> $currentMtime), reloading configuration...");
     $lastConfigMtime = $currentMtime;
 
     // Force reload config (bypass cache)
@@ -40,7 +41,7 @@ function checkAndReloadConfig() {
 
     // Check if connectivity check was disabled
     if (!$newConfig['connectivityCheckEnabled']) {
-        logMessage("Connectivity check disabled via config reload. Exiting gracefully.");
+        Logger::getInstance()->info("Connectivity check disabled via config reload. Exiting gracefully.");
         exit(0);
     }
 
@@ -54,23 +55,23 @@ function checkAndReloadConfig() {
     }
 
     if ($newAdapter !== $actualNetworkAdapter) {
-        logMessage("Network adapter changed: $actualNetworkAdapter -> $newAdapter");
+        Logger::getInstance()->info("Network adapter changed: $actualNetworkAdapter -> $newAdapter");
         $actualNetworkAdapter = $newAdapter;
         $networkAdapterDisplay = $newDisplay;
     }
 
     // Log significant changes
     if ($newConfig['checkInterval'] !== $config['checkInterval']) {
-        logMessage("Check interval changed: {$config['checkInterval']} -> {$newConfig['checkInterval']} seconds");
+        Logger::getInstance()->info("Check interval changed: {$config['checkInterval']} -> {$newConfig['checkInterval']} seconds");
     }
     if ($newConfig['maxFailures'] !== $config['maxFailures']) {
-        logMessage("Max failures changed: {$config['maxFailures']} -> {$newConfig['maxFailures']}");
+        Logger::getInstance()->info("Max failures changed: {$config['maxFailures']} -> {$newConfig['maxFailures']}");
     }
     if ($newConfig['testHosts'] !== $config['testHosts']) {
-        logMessage("Test hosts changed: " . implode(',', $config['testHosts']) . " -> " . implode(',', $newConfig['testHosts']));
+        Logger::getInstance()->info("Test hosts changed: " . implode(',', $config['testHosts']) . " -> " . implode(',', $newConfig['testHosts']));
     }
     if ($newConfig['multiSyncPingEnabled'] !== $config['multiSyncPingEnabled']) {
-        logMessage("Multi-sync ping " . ($newConfig['multiSyncPingEnabled'] ? 'enabled' : 'disabled'));
+        Logger::getInstance()->info("Multi-sync ping " . ($newConfig['multiSyncPingEnabled'] ? 'enabled' : 'disabled'));
     }
 
     // Clear cached remote systems to force refresh on next cycle
@@ -80,7 +81,7 @@ function checkAndReloadConfig() {
     // Apply new config
     $config = $newConfig;
 
-    logMessage("Configuration reloaded successfully");
+    Logger::getInstance()->info("Configuration reloaded successfully");
     return true;
 }
 
@@ -89,7 +90,7 @@ if ($config['networkAdapter'] === 'default') {
     $actualNetworkAdapter = detectActiveNetworkInterface();
     // Save the detected interface to config so it's persistent
     Settings::getInstance()->writeSettingToFile('networkAdapter', $actualNetworkAdapter, WATCHERPLUGINNAME);
-    logMessage("Auto-detected network adapter '$actualNetworkAdapter' from 'default' setting and saved to config");
+    Logger::getInstance()->info("Auto-detected network adapter '$actualNetworkAdapter' from 'default' setting and saved to config");
     $networkAdapterDisplay = "default (detected: $actualNetworkAdapter)";
 } else {
     $actualNetworkAdapter = $config['networkAdapter'];
@@ -164,7 +165,7 @@ function checkConnectivity($testHosts, $networkAdapter) {
 }
 
 if (!$config['connectivityCheckEnabled']) {
-    logMessage("Watcher Plugin connectivity check is disabled. Exiting.");    exit(0);
+    Logger::getInstance()->info("Watcher Plugin connectivity check is disabled. Exiting.");    exit(0);
 }
 
 // Main monitoring loop
@@ -176,7 +177,7 @@ $resetState = readResetState();
 $hasResetAdapter = ($resetState !== null && !empty($resetState['hasResetAdapter']));
 if ($hasResetAdapter) {
     $resetTime = date('Y-m-d H:i:s', $resetState['resetTimestamp'] ?? 0);
-    logMessage("Previous adapter reset detected from $resetTime - will exit if max failures reached again");
+    Logger::getInstance()->info("Previous adapter reset detected from $resetTime - will exit if max failures reached again");
 }
 $lastRotationCheck = 0; // Track when rotation was last checked
 $lastRollupCheck = 0; // Track when rollup was last processed
@@ -196,12 +197,12 @@ $lastNetworkQualityRollupCheck = 0; // Track when network quality rollups were p
 $lastNetworkQualityRotationCheck = 0; // Track when network quality metrics rotation was checked
 $networkQualityCheckInterval = 60; // Collect network quality every 60 seconds
 
-logMessage("=== Watcher Plugin Started ===");
-logMessage("Check Interval: {$config['checkInterval']} seconds");
-logMessage("Max Failures: {$config['maxFailures']}");
-logMessage("Network Adapter: $networkAdapterDisplay");
-logMessage("Test Hosts: " . implode(', ', $config['testHosts']));
-logMessage("Multi-Sync Ping Monitoring: " . ($config['multiSyncPingEnabled'] ? 'Enabled' : 'Disabled'));
+Logger::getInstance()->info("=== Watcher Plugin Started ===");
+Logger::getInstance()->info("Check Interval: {$config['checkInterval']} seconds");
+Logger::getInstance()->info("Max Failures: {$config['maxFailures']}");
+Logger::getInstance()->info("Network Adapter: $networkAdapterDisplay");
+Logger::getInstance()->info("Test Hosts: " . implode(', ', $config['testHosts']));
+Logger::getInstance()->info("Multi-Sync Ping Monitoring: " . ($config['multiSyncPingEnabled'] ? 'Enabled' : 'Disabled'));
 
 while (true) {
     $currentTime = time(); // Single timestamp for this iteration
@@ -214,7 +215,7 @@ while (true) {
 
     if (checkConnectivity($config['testHosts'], $actualNetworkAdapter)) {
         if ($failureCount > 0) {
-            logMessage("Internet connectivity restored");
+            Logger::getInstance()->info("Internet connectivity restored");
         }
         $failureCount = 0;
 
@@ -240,7 +241,7 @@ while (true) {
                 $cachedRemoteSystems = getMultiSyncRemoteSystems();
                 $lastRemoteSystemsFetch = $currentTime;
                 if (!empty($cachedRemoteSystems)) {
-                    logMessage("Multi-sync: Found " . count($cachedRemoteSystems) . " remote systems to monitor");
+                    Logger::getInstance()->info("Multi-sync: Found " . count($cachedRemoteSystems) . " remote systems to monitor");
                 }
             }
 
@@ -285,18 +286,18 @@ while (true) {
         }
     } else {
         $failureCount++;
-        logMessage("Connection FAILED (Failure count: $failureCount/{$config['maxFailures']})");
+        Logger::getInstance()->info("Connection FAILED (Failure count: $failureCount/{$config['maxFailures']})");
 
         if ($failureCount >= $config['maxFailures'] && !$hasResetAdapter) {
-            logMessage("Maximum failures reached. Resetting network adapter...");
+            Logger::getInstance()->info("Maximum failures reached. Resetting network adapter...");
             NetworkAdapter::getInstance()->resetAdapter($actualNetworkAdapter);
             $hasResetAdapter = true;
             writeResetState($actualNetworkAdapter, 'Max failures reached');
             $failureCount = 0;
             sleep(10);
         } elseif ($failureCount >= $config['maxFailures'] && $hasResetAdapter) {
-            logMessage("Network adapter has already been reset once. Exiting...");
-            logMessage("Script stopped. Manual intervention required.");
+            Logger::getInstance()->info("Network adapter has already been reset once. Exiting...");
+            Logger::getInstance()->info("Script stopped. Manual intervention required.");
             exit(1);
         }
     }
