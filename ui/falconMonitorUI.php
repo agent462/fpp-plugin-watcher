@@ -6,11 +6,13 @@ require_once __DIR__ . '/../classes/autoload.php';
 require_once __DIR__ . '/../classes/Watcher/UI/ViewHelpers.php';
 include_once __DIR__ . '/../lib/core/config.php';
 
+use Watcher\UI\ViewHelpers;
+
 $watcherConfig = readPluginConfig();
 $falconHosts = !empty($watcherConfig['falconControllers']) ? $watcherConfig['falconControllers'] : '';
 $hostsArray = array_filter(array_map('trim', explode(',', $falconHosts)));
 
-renderCSSIncludes(false);
+ViewHelpers::renderCSSIncludes(false);
 ?>
 <script>
 window.watcherConfig = {
@@ -76,10 +78,7 @@ window.watcherConfig = {
     </div>
 
     <!-- Loading Indicator -->
-    <div id="loadingIndicator" class="loadingSpinner">
-        <i class="fas fa-spinner"></i>
-        <p>Loading Falcon controllers...</p>
-    </div>
+    <?php ViewHelpers::renderLoadingSpinner('Loading Falcon controllers...'); ?>
 
     <!-- No Controllers Message -->
     <div id="noControllersMessage" class="empty-message" style="display: none;">
@@ -95,9 +94,5 @@ window.watcherConfig = {
     <div id="controllersGrid" class="watcher-card-grid" style="display: none;"></div>
 
     <!-- Refresh Button -->
-    <button class="refreshButton" onclick="page.loadAllControllers()" title="Refresh All Controllers">
-        <i class="fas fa-sync-alt"></i>
-    </button>
+    <?php ViewHelpers::renderRefreshButton('page.loadAllControllers()', 'Refresh All Controllers'); ?>
 </div>
-
-<?php renderWatcherJS(); ?>

@@ -531,9 +531,5 @@ ViewHelpers::renderCSSIncludes(true);
     </div>
     <?php endif; ?>
 
-    <button class="msm-refresh-btn" onclick="page.refresh()" title="Refresh Data">
-        <i class="fas fa-sync-alt"></i>
-    </button>
+    <?php ViewHelpers::renderRefreshButton(); ?>
 </div>
-
-<?php ViewHelpers::renderWatcherJS(); ?>

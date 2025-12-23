@@ -2,11 +2,14 @@
 require_once __DIR__ . '/../classes/autoload.php';
 require_once __DIR__ . '/../classes/Watcher/UI/ViewHelpers.php';
 include_once __DIR__ . '/../lib/core/config.php';
+
+use Watcher\UI\ViewHelpers;
+
 $config = readPluginConfig();
 $configuredAdapter = $config['networkAdapter'] ?? 'default';
 $defaultAdapter = $configuredAdapter === 'default' ? detectActiveNetworkInterface() : $configuredAdapter;
 
-renderCSSIncludes(true);
+ViewHelpers::renderCSSIncludes(true);
 ?>
 <script>window.watcherConfig = { defaultAdapter: <?php echo json_encode($defaultAdapter, JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT); ?> };</script>
 
@@ -19,7 +22,7 @@ renderCSSIncludes(true);
     </div>
 
     <div id="metricsContent">
-        <?php renderTimeRangeSelector('timeRange', 'page.updateAllCharts()'); ?>
+        <?php ViewHelpers::renderTimeRangeSelector('timeRange', 'page.updateAllCharts()'); ?>
 
         <!-- CPU Usage Chart -->
         <div class="chartCard" id="cpuCard">
@@ -90,7 +93,5 @@ renderCSSIncludes(true);
         </div>
     </div>
 
-    <button class="refreshButton" onclick="page.refresh()" title="Refresh Data"><i class="fas fa-sync-alt"></i></button>
+    <?php ViewHelpers::renderRefreshButton(); ?>
 </div>
-
-<?php renderWatcherJS(); ?>

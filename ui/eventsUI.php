@@ -5,15 +5,16 @@ include_once __DIR__ . '/../lib/core/config.php';
 include_once __DIR__ . '/../lib/core/watcherCommon.php';
 
 use Watcher\Http\ApiClient;
+use Watcher\UI\ViewHelpers;
 
 $config = readPluginConfig();
 $localSystem = ApiClient::getInstance()->get('http://127.0.0.1/api/fppd/status', 5) ?: [];
-$access = checkDashboardAccess($config, $localSystem, 'mqttMonitorEnabled');
+$access = ViewHelpers::checkDashboardAccess($config, $localSystem, 'mqttMonitorEnabled');
 
-renderCSSIncludes(true);
+ViewHelpers::renderCSSIncludes(true);
 ?>
 
-<?php if (!renderAccessError($access)): ?>
+<?php if (!ViewHelpers::renderAccessError($access)): ?>
 <div class="metricsContainer" data-watcher-page="eventsUI">
     <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1.5rem;">
         <h2 style="margin: 0; color: #212529;">
@@ -22,10 +23,7 @@ renderCSSIncludes(true);
         <span id="lastUpdate" style="font-size: 0.875rem; color: #6c757d;"></span>
     </div>
 
-    <div id="loadingIndicator" class="loadingSpinner">
-        <i class="fas fa-spinner"></i>
-        <p>Loading FPP events...</p>
-    </div>
+    <?php ViewHelpers::renderLoadingSpinner('Loading FPP events...'); ?>
 
     <div id="metricsContent" style="display: none;">
         <!-- Stats Bar -->
@@ -48,18 +46,20 @@ renderCSSIncludes(true);
             </div>
         </div>
 
-        <!-- Time Range Selector -->
-        <div class="chartControls" style="margin-bottom: 1.5rem;">
-            <div class="controlGroup">
-                <label for="timeRange">Time Range:</label>
-                <select id="timeRange" onchange="page.refresh()">
-                    <option value="24" selected>Last 24 Hours</option>
-                    <option value="168">Last 7 Days</option>
-                    <option value="720">Last 30 Days</option>
-                    <option value="1440">Last 60 Days</option>
-                </select>
-            </div>
-        </div>
+        <?php
+        ViewHelpers::renderTimeRangeSelector(
+            'timeRange',
+            'page.refresh()',
+            'Time Range:',
+            [
+                '24' => 'Last 24 Hours',
+                '168' => 'Last 7 Days',
+                '720' => 'Last 30 Days',
+                '1440' => 'Last 60 Days'
+            ],
+            '24'
+        );
+        ?>
 
         <!-- Top Sequences -->
         <div class="chartCard">
@@ -115,9 +115,7 @@ renderCSSIncludes(true);
         </div>
     </div>
 
-    <button class="refreshButton" onclick="page.refresh()" title="Refresh Data">
-        <i class="fas fa-sync-alt"></i>
-    </button>
+    <?php ViewHelpers::renderRefreshButton(); ?>
 </div>
 
 <style>
@@ -204,6 +202,4 @@ renderCSSIncludes(true);
 .eventBadge.media-stop { background: #f3e8ff; color: #7c3aed; }
 .eventBadge.warning { background: #fed7aa; color: #c2410c; }
 </style>
-
-<?php renderWatcherJS(); ?>
 <?php endif; ?>

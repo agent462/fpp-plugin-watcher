@@ -3,15 +3,16 @@ include_once __DIR__ . "/../lib/core/watcherCommon.php";
 include_once __DIR__ . "/../lib/core/config.php";
 
 require_once __DIR__ . '/../classes/autoload.php'; // Load class autoloader
-require_once __DIR__ . '/../classes/Watcher/UI/ViewHelpers.php'; // For renderWatcherJS()
+require_once __DIR__ . '/../classes/Watcher/UI/ViewHelpers.php';
 
 use Watcher\Core\Settings;
 use Watcher\Core\Logger;
 use Watcher\Http\ApiClient;
 use Watcher\Controllers\EfuseHardware;
+use Watcher\UI\ViewHelpers;
 
 // Render CSS includes (consistent with other UI pages)
-renderCSSIncludes(false);
+ViewHelpers::renderCSSIncludes(false);
 
 $statusMessage = '';
 $statusType = '';
@@ -683,5 +684,3 @@ window.watcherConfig = {
             </div>
         </div>
     </div>
-
-<?php renderWatcherJS(); ?>

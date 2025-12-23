@@ -5,12 +5,13 @@ include_once __DIR__ . '/../lib/core/config.php';
 include_once __DIR__ . '/../lib/core/watcherCommon.php';
 
 use Watcher\Http\ApiClient;
+use Watcher\UI\ViewHelpers;
 
 $config = readPluginConfig();
 $localSystem = ApiClient::getInstance()->get('http://127.0.0.1/api/fppd/status', 5) ?: [];
-$access = checkDashboardAccess($config, $localSystem, 'multiSyncMetricsEnabled');
+$access = ViewHelpers::checkDashboardAccess($config, $localSystem, 'multiSyncMetricsEnabled');
 
-renderCSSIncludes($access['show']);
+ViewHelpers::renderCSSIncludes($access['show']);
 ?>
 <style>
     .perHostStats { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 1rem; margin-bottom: 1.5rem; }
@@ -34,12 +35,9 @@ renderCSSIncludes($access['show']);
         <span id="lastUpdate" style="font-size: 0.875rem; color: #6c757d;"></span>
     </div>
 
-    <?php if (!renderAccessError($access)): ?>
+    <?php if (!ViewHelpers::renderAccessError($access)): ?>
 
-    <div id="loadingIndicator" class="loadingSpinner">
-        <i class="fas fa-spinner"></i>
-        <p>Loading multi-sync ping metrics data...</p>
-    </div>
+    <?php ViewHelpers::renderLoadingSpinner('Loading multi-sync ping metrics data...'); ?>
 
     <div id="metricsContent" style="display: none;">
         <!-- Raw Ping Chart -->
@@ -47,18 +45,20 @@ renderCSSIncludes($access['show']);
             <div class="chartTitle">
                 <span><i class="fas fa-signal"></i> Real-time Multi-Sync Host Latency <span class="tierBadge">raw samples</span></span>
             </div>
-            <div class="chartControls" style="margin-bottom: 1rem;">
-                <div class="controlGroup">
-                    <label for="rawTimeRange">Time Range:</label>
-                    <select id="rawTimeRange" onchange="page.updateRawPingLatencyChart()">
-                        <option value="2">Last 2 Hours</option>
-                        <option value="4">Last 4 Hours</option>
-                        <option value="8">Last 8 Hours</option>
-                        <option value="12" selected>Last 12 Hours</option>
-                        <option value="24">Last 24 Hours</option>
-                    </select>
-                </div>
-            </div>
+            <?php
+            ViewHelpers::renderTimeRangeSelector(
+                'rawTimeRange',
+                'page.updateRawPingLatencyChart()',
+                'Time Range:',
+                [
+                    '2' => 'Last 2 Hours',
+                    '4' => 'Last 4 Hours',
+                    '8' => 'Last 8 Hours',
+                    '12' => 'Last 12 Hours',
+                    '24' => 'Last 24 Hours'
+                ]
+            );
+            ?>
             <canvas id="rawPingLatencyChart" class="chartCanvas"></canvas>
         </div>
 
@@ -84,24 +84,7 @@ renderCSSIncludes($access['show']);
             </div>
         </div>
 
-        <!-- Time Range Selector -->
-        <div class="chartControls" style="margin-bottom: 1.5rem;">
-            <div class="controlGroup">
-                <label for="timeRange">Rollup Time Range:</label>
-                <select id="timeRange" onchange="page.updateAllCharts()">
-                    <option value="1">Last 1 Hour</option>
-                    <option value="6">Last 6 Hours</option>
-                    <option value="12" selected>Last 12 Hours</option>
-                    <option value="24">Last 24 Hours</option>
-                    <option value="48">Last 2 Days</option>
-                    <option value="72">Last 3 Days</option>
-                    <option value="168">Last 7 Days</option>
-                    <option value="336">Last 2 Weeks</option>
-                    <option value="720">Last 30 Days</option>
-                    <option value="2160">Last 90 Days</option>
-                </select>
-            </div>
-        </div>
+        <?php ViewHelpers::renderTimeRangeSelector('timeRange', 'page.updateAllCharts()', 'Rollup Time Range:'); ?>
 
         <!-- Rollup Charts -->
         <div id="rollupChartsSection" style="display: none;">
@@ -116,8 +99,6 @@ renderCSSIncludes($access['show']);
         </div>
     </div>
 
-    <button class="refreshButton" onclick="page.refresh()" title="Refresh Data"><i class="fas fa-sync-alt"></i></button>
+    <?php ViewHelpers::renderRefreshButton(); ?>
     <?php endif; ?>
 </div>
-
-<?php if ($access['show']) renderWatcherJS(); ?>

@@ -5,14 +5,15 @@ include_once __DIR__ . '/../lib/core/config.php';
 include_once __DIR__ . '/../lib/core/watcherCommon.php';
 
 use Watcher\Http\ApiClient;
+use Watcher\UI\ViewHelpers;
 
 $config = readPluginConfig();
 $localSystem = ApiClient::getInstance()->get('http://127.0.0.1/api/fppd/status', 5) ?: [];
-$access = checkDashboardAccess($config, $localSystem, 'controlUIEnabled');
+$access = ViewHelpers::checkDashboardAccess($config, $localSystem, 'controlUIEnabled');
 $remoteSystems = $access['show'] ? getMultiSyncRemoteSystems() : [];
 $localHostname = gethostname() ?: 'localhost';
 
-renderCSSIncludes(false);
+ViewHelpers::renderCSSIncludes(false);
 ?>
 
 <div class="metricsContainer" data-watcher-page="remoteControlUI">
@@ -20,7 +21,7 @@ renderCSSIncludes(false);
         <i class="fas fa-gamepad"></i> Remote System Control
     </h2>
 
-    <?php if (!renderAccessError($access)): ?>
+    <?php if (!ViewHelpers::renderAccessError($access)): ?>
     <?php if (empty($remoteSystems)): ?>
     <div class="empty-message">
         <i class="fas fa-server"></i>
@@ -73,10 +74,7 @@ renderCSSIncludes(false);
         </div>
     </div>
 
-    <div id="loadingIndicator" class="loadingSpinner">
-        <i class="fas fa-spinner"></i>
-        <p>Loading remote system status...</p>
-    </div>
+    <?php ViewHelpers::renderLoadingSpinner('Loading remote system status...'); ?>
 
     <div id="controlContent" style="display: none;">
         <div class="controlCardsGrid" id="controlCardsGrid">
@@ -377,5 +375,3 @@ renderCSSIncludes(false);
     <?php endif; ?>
     <?php endif; ?>
 </div>
-
-<?php renderWatcherJS(); ?>

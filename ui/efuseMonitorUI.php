@@ -5,6 +5,7 @@ include_once __DIR__ . '/../lib/core/config.php';
 include_once __DIR__ . '/../lib/core/watcherCommon.php';
 
 use Watcher\Controllers\EfuseHardware;
+use Watcher\UI\ViewHelpers;
 
 $config = readPluginConfig();
 $hardware = EfuseHardware::getInstance()->detectHardware();
@@ -36,7 +37,7 @@ if ($retentionDays >= 90) {
     $timeRangeOptions['2160'] = 'Last 90 Days';
 }
 
-renderCSSIncludes(true);
+ViewHelpers::renderCSSIncludes(true);
 ?>
 <script>
     window.watcherConfig = {
@@ -212,9 +213,7 @@ renderCSSIncludes(true);
 
     <?php endif; ?>
 
-    <button class="refreshButton" onclick="page.refresh()" title="Refresh Data">
-        <i class="fas fa-sync-alt"></i>
-    </button>
+    <?php ViewHelpers::renderRefreshButton(); ?>
 
     <!-- Expected Amperage Help Modal -->
     <div id="expectedHelpModal" class="helpModal" style="display: none;" onclick="page.hideExpectedHelp(event)">
@@ -338,5 +337,3 @@ renderCSSIncludes(true);
     <!-- Toast notification container -->
     <div id="toastContainer" class="toastContainer"></div>
 </div>
-
-<?php renderWatcherJS(); ?>

@@ -5,13 +5,14 @@ include_once __DIR__ . '/../lib/core/config.php';
 include_once __DIR__ . '/../lib/core/watcherCommon.php';
 
 use Watcher\Http\ApiClient;
+use Watcher\UI\ViewHelpers;
 
 $config = readPluginConfig();
 $localSystem = ApiClient::getInstance()->get('http://127.0.0.1/api/fppd/status', 5) ?: [];
-$access = checkDashboardAccess($config, $localSystem, 'multiSyncMetricsEnabled');
+$access = ViewHelpers::checkDashboardAccess($config, $localSystem, 'multiSyncMetricsEnabled');
 $remoteSystems = $access['show'] ? getMultiSyncRemoteSystems() : [];
 
-renderCSSIncludes($access['show']);
+ViewHelpers::renderCSSIncludes($access['show']);
 ?>
 <style>
     .systemCard { background: #fff; border-radius: 8px; padding: 1.5rem; margin-bottom: 1.5rem; box-shadow: 0 2px 4px rgba(0,0,0,0.1); }
@@ -53,11 +54,8 @@ renderCSSIncludes($access['show']);
         <span id="lastUpdate" style="font-size: 0.875rem; color: #6c757d;"></span>
     </div>
 
-    <?php if (!renderAccessError($access)): ?>
-    <div id="loadingIndicator" class="loadingSpinner">
-        <i class="fas fa-spinner fa-spin fa-3x"></i>
-        <p>Loading metrics from all systems...</p>
-    </div>
+    <?php if (!ViewHelpers::renderAccessError($access)): ?>
+    <?php ViewHelpers::renderLoadingSpinner('Loading metrics from all systems...'); ?>
 
     <div id="metricsContent" style="display: none;">
         <div class="chartControls" style="margin-bottom: 1.5rem;">
@@ -85,8 +83,6 @@ renderCSSIncludes($access['show']);
         <div id="systemsContainer"></div>
     </div>
 
-    <button class="refreshButton" onclick="page.refresh()" title="Refresh Data"><i class="fas fa-sync-alt"></i></button>
+    <?php ViewHelpers::renderRefreshButton(); ?>
     <?php endif; ?>
 </div>
-
-<?php if ($access['show']) renderWatcherJS(); ?>

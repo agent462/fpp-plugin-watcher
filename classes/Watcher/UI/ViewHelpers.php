@@ -9,24 +9,11 @@ namespace Watcher\UI {
  * Shared utilities for UI pages to reduce duplication.
  *
  * HTML Escaping Convention:
- * - PHP: Use h() or htmlspecialchars() for all dynamic content in HTML output
- * - JavaScript: Use watcher.utils.escapeHtml() or page module methods for all dynamic content in innerHTML
+ * - PHP: Use htmlspecialchars() for all dynamic content in HTML output
+ * - JavaScript: Use watcher.utils.escapeHtml() for all dynamic content in innerHTML
  */
 class ViewHelpers
 {
-    /**
-     * HTML escape helper - shorthand for htmlspecialchars with consistent flags
-     * Mirrors watcher.utils.escapeHtml() for naming consistency
-     *
-     * @param string|null $text Text to escape
-     * @return string Escaped text safe for HTML output
-     */
-    public static function h(?string $text): string
-    {
-        if ($text === null) return '';
-        return htmlspecialchars($text, ENT_QUOTES | ENT_HTML5, 'UTF-8');
-    }
-
     /**
      * Render standard CSS includes for dashboard pages
      *
@@ -40,28 +27,6 @@ class ViewHelpers
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/chartjs-adapter-date-fns@3.0.0/dist/chartjs-adapter-date-fns.bundle.min.js"></script>
 <?php endif;
-    }
-
-    /**
-     * Render the watcher.js bundle for pages using the new module architecture
-     *
-     * The watcher.js bundle contains all page modules and auto-initializes based on
-     * the data-watcher-page attribute on the body or wrapper element.
-     *
-     * Usage in PHP:
-     *   <div data-watcher-page="connectivityUI">
-     *   <script>window.watcherConfig = { ... };</script>
-     *   <?php ViewHelpers::renderWatcherJS(); ?>
-     *
-     * Note: FPP auto-loads ALL .js files in plugin directories, so we only
-     * include watcher.min.js to avoid duplicate loading.
-     */
-    public static function renderWatcherJS(): void
-    {
-        // Commented out: FPP auto-loads js/watcher.min.js from plugin directory
-        // ?>
-<!-- <script src="/plugin.php?plugin=fpp-plugin-watcher&file=js/watcher.min.js&nopage=1"></script> -->
-<?php
     }
 
     /**
@@ -177,59 +142,37 @@ class ViewHelpers
 </div>
 <?php
     }
+
+    /**
+     * Render a loading spinner overlay
+     *
+     * @param string $message Loading message to display
+     * @param string $id Element ID (default: loadingIndicator)
+     */
+    public static function renderLoadingSpinner(string $message = 'Loading data...', string $id = 'loadingIndicator'): void
+    {
+        ?>
+<div id="<?php echo htmlspecialchars($id); ?>" class="loadingSpinner">
+    <i class="fas fa-spinner"></i>
+    <p><?php echo htmlspecialchars($message); ?></p>
+</div>
+<?php
+    }
+
+    /**
+     * Render a floating refresh button
+     *
+     * @param string $onclick JavaScript onclick handler
+     * @param string $title Button title/tooltip
+     */
+    public static function renderRefreshButton(string $onclick = 'page.refresh()', string $title = 'Refresh Data'): void
+    {
+        ?>
+<button class="refreshButton" onclick="<?php echo htmlspecialchars($onclick); ?>" title="<?php echo htmlspecialchars($title); ?>">
+    <i class="fas fa-sync-alt"></i>
+</button>
+<?php
+    }
 }
 
 } // end namespace Watcher\UI
-
-// Global namespace for backward compatibility function aliases
-namespace {
-
-if (!function_exists('h')) {
-    function h(?string $text): string {
-        return \Watcher\UI\ViewHelpers::h($text);
-    }
-}
-
-if (!function_exists('renderCSSIncludes')) {
-    function renderCSSIncludes(bool $includeChartJs = false): void {
-        \Watcher\UI\ViewHelpers::renderCSSIncludes($includeChartJs);
-    }
-}
-
-if (!function_exists('renderWatcherJS')) {
-    function renderWatcherJS(): void {
-        \Watcher\UI\ViewHelpers::renderWatcherJS();
-    }
-}
-
-if (!function_exists('renderEmptyMessage')) {
-    function renderEmptyMessage(string $icon, string $title, string $message): void {
-        \Watcher\UI\ViewHelpers::renderEmptyMessage($icon, $title, $message);
-    }
-}
-
-if (!function_exists('checkDashboardAccess')) {
-    function checkDashboardAccess(array $config, array $localSystem, string $enabledKey): array {
-        return \Watcher\UI\ViewHelpers::checkDashboardAccess($config, $localSystem, $enabledKey);
-    }
-}
-
-if (!function_exists('renderAccessError')) {
-    function renderAccessError(array $access): bool {
-        return \Watcher\UI\ViewHelpers::renderAccessError($access);
-    }
-}
-
-if (!function_exists('renderTimeRangeSelector')) {
-    function renderTimeRangeSelector(
-        string $id,
-        string $onchange,
-        string $label = 'Time Range:',
-        ?array $options = null,
-        string $selected = '12'
-    ): void {
-        \Watcher\UI\ViewHelpers::renderTimeRangeSelector($id, $onchange, $label, $options, $selected);
-    }
-}
-
-} // end global namespace

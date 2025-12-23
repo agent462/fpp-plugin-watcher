@@ -12,120 +12,6 @@ use Watcher\UI\ViewHelpers;
 
 class ViewHelpersTest extends TestCase
 {
-    /**
-     * Ensure ViewHelpers class is loaded to register global function aliases
-     */
-    public static function setUpBeforeClass(): void
-    {
-        // Trigger autoload to register global function aliases
-        class_exists(ViewHelpers::class);
-    }
-
-    // ========================================
-    // h() HTML Escape Helper Tests
-    // ========================================
-
-    public function testHEscapesHtmlSpecialCharacters(): void
-    {
-        $input = '<script>alert("xss")</script>';
-        $expected = '&lt;script&gt;alert(&quot;xss&quot;)&lt;/script&gt;';
-
-        $result = ViewHelpers::h($input);
-
-        $this->assertEquals($expected, $result);
-    }
-
-    public function testHEscapesAmpersand(): void
-    {
-        $input = 'foo & bar';
-        $expected = 'foo &amp; bar';
-
-        $result = ViewHelpers::h($input);
-
-        $this->assertEquals($expected, $result);
-    }
-
-    public function testHEscapesSingleQuotes(): void
-    {
-        $input = "it's a test";
-        $expected = "it&apos;s a test"; // HTML5 uses &apos; instead of &#039;
-
-        $result = ViewHelpers::h($input);
-
-        $this->assertEquals($expected, $result);
-    }
-
-    public function testHEscapesDoubleQuotes(): void
-    {
-        $input = 'say "hello"';
-        $expected = 'say &quot;hello&quot;';
-
-        $result = ViewHelpers::h($input);
-
-        $this->assertEquals($expected, $result);
-    }
-
-    public function testHReturnsEmptyStringForNull(): void
-    {
-        $result = ViewHelpers::h(null);
-
-        $this->assertEquals('', $result);
-    }
-
-    public function testHReturnsEmptyStringForEmptyInput(): void
-    {
-        $result = ViewHelpers::h('');
-
-        $this->assertEquals('', $result);
-    }
-
-    public function testHPreservesPlainText(): void
-    {
-        $input = 'Hello World 123';
-
-        $result = ViewHelpers::h($input);
-
-        $this->assertEquals($input, $result);
-    }
-
-    public function testHHandlesMultipleSpecialCharacters(): void
-    {
-        $input = '<div class="test" data-value=\'foo&bar\'>';
-        $expected = '&lt;div class=&quot;test&quot; data-value=&apos;foo&amp;bar&apos;&gt;'; // HTML5 uses &apos;
-
-        $result = ViewHelpers::h($input);
-
-        $this->assertEquals($expected, $result);
-    }
-
-    public function testHHandlesUnicodeCharacters(): void
-    {
-        $input = 'Hello <World> with Unicode: ' . "\xC3\xA9\xC3\xA8\xC3\xA0"; // e with acute, grave, a with grave
-
-        $result = ViewHelpers::h($input);
-
-        $this->assertStringContainsString('&lt;World&gt;', $result);
-        $this->assertStringContainsString("\xC3\xA9", $result); // Unicode preserved
-    }
-
-    // ========================================
-    // Global h() Function Tests
-    // ========================================
-
-    public function testGlobalHFunctionExists(): void
-    {
-        $this->assertTrue(function_exists('h'));
-    }
-
-    public function testGlobalHFunctionDelegatesToViewHelpers(): void
-    {
-        $input = '<test>';
-
-        $result = h($input);
-
-        $this->assertEquals('&lt;test&gt;', $result);
-    }
-
     // ========================================
     // checkDashboardAccess() Tests
     // ========================================
@@ -349,22 +235,6 @@ class ViewHelpersTest extends TestCase
     }
 
     // ========================================
-    // renderWatcherJS() Tests
-    // ========================================
-
-    public function testRenderWatcherJSOutputsComment(): void
-    {
-        // FPP auto-loads JS files, so renderWatcherJS outputs a comment placeholder
-        ob_start();
-        ViewHelpers::renderWatcherJS();
-        $output = ob_get_clean();
-
-        // Output contains commented-out script tag (FPP auto-loads js/watcher.min.js)
-        $this->assertStringContainsString('<!--', $output);
-        $this->assertStringContainsString('watcher.min.js', $output);
-    }
-
-    // ========================================
     // renderTimeRangeSelector() Tests
     // ========================================
 
@@ -471,37 +341,108 @@ class ViewHelpersTest extends TestCase
     }
 
     // ========================================
-    // Global Function Aliases Tests
+    // renderLoadingSpinner() Tests
     // ========================================
 
-    public function testGlobalRenderCSSIncludesFunctionExists(): void
+    public function testRenderLoadingSpinnerOutputsDefaultMessage(): void
     {
-        $this->assertTrue(function_exists('renderCSSIncludes'));
+        ob_start();
+        ViewHelpers::renderLoadingSpinner();
+        $output = ob_get_clean();
+
+        $this->assertStringContainsString('class="loadingSpinner"', $output);
+        $this->assertStringContainsString('id="loadingIndicator"', $output);
+        $this->assertStringContainsString('fa-spinner', $output);
+        $this->assertStringContainsString('Loading data...', $output);
     }
 
-    public function testGlobalRenderWatcherJSFunctionExists(): void
+    public function testRenderLoadingSpinnerWithCustomMessage(): void
     {
-        $this->assertTrue(function_exists('renderWatcherJS'));
+        ob_start();
+        ViewHelpers::renderLoadingSpinner('Loading metrics...');
+        $output = ob_get_clean();
+
+        $this->assertStringContainsString('Loading metrics...', $output);
     }
 
-    public function testGlobalRenderEmptyMessageFunctionExists(): void
+    public function testRenderLoadingSpinnerWithCustomId(): void
     {
-        $this->assertTrue(function_exists('renderEmptyMessage'));
+        ob_start();
+        ViewHelpers::renderLoadingSpinner('Loading...', 'customSpinner');
+        $output = ob_get_clean();
+
+        $this->assertStringContainsString('id="customSpinner"', $output);
     }
 
-    public function testGlobalCheckDashboardAccessFunctionExists(): void
+    public function testRenderLoadingSpinnerEscapesMessage(): void
     {
-        $this->assertTrue(function_exists('checkDashboardAccess'));
+        ob_start();
+        ViewHelpers::renderLoadingSpinner('<script>alert("xss")</script>');
+        $output = ob_get_clean();
+
+        $this->assertStringContainsString('&lt;script&gt;', $output);
+        $this->assertStringNotContainsString('<script>alert', $output);
     }
 
-    public function testGlobalRenderAccessErrorFunctionExists(): void
+    public function testRenderLoadingSpinnerEscapesId(): void
     {
-        $this->assertTrue(function_exists('renderAccessError'));
+        ob_start();
+        ViewHelpers::renderLoadingSpinner('Loading', '"><script>');
+        $output = ob_get_clean();
+
+        $this->assertStringContainsString('id="&quot;&gt;&lt;script&gt;"', $output);
     }
 
-    public function testGlobalRenderTimeRangeSelectorFunctionExists(): void
+    // ========================================
+    // renderRefreshButton() Tests
+    // ========================================
+
+    public function testRenderRefreshButtonOutputsDefaultButton(): void
     {
-        $this->assertTrue(function_exists('renderTimeRangeSelector'));
+        ob_start();
+        ViewHelpers::renderRefreshButton();
+        $output = ob_get_clean();
+
+        $this->assertStringContainsString('class="refreshButton"', $output);
+        $this->assertStringContainsString('onclick="page.refresh()"', $output);
+        $this->assertStringContainsString('title="Refresh Data"', $output);
+        $this->assertStringContainsString('fa-sync-alt', $output);
+    }
+
+    public function testRenderRefreshButtonWithCustomOnclick(): void
+    {
+        ob_start();
+        ViewHelpers::renderRefreshButton('customRefresh()');
+        $output = ob_get_clean();
+
+        $this->assertStringContainsString('onclick="customRefresh()"', $output);
+    }
+
+    public function testRenderRefreshButtonWithCustomTitle(): void
+    {
+        ob_start();
+        ViewHelpers::renderRefreshButton('page.refresh()', 'Reload Dashboard');
+        $output = ob_get_clean();
+
+        $this->assertStringContainsString('title="Reload Dashboard"', $output);
+    }
+
+    public function testRenderRefreshButtonEscapesOnclick(): void
+    {
+        ob_start();
+        ViewHelpers::renderRefreshButton('alert("xss")');
+        $output = ob_get_clean();
+
+        $this->assertStringContainsString('onclick="alert(&quot;xss&quot;)"', $output);
+    }
+
+    public function testRenderRefreshButtonEscapesTitle(): void
+    {
+        ob_start();
+        ViewHelpers::renderRefreshButton('fn()', '<script>XSS</script>');
+        $output = ob_get_clean();
+
+        $this->assertStringContainsString('title="&lt;script&gt;XSS&lt;/script&gt;"', $output);
     }
 
     // ========================================
@@ -526,27 +467,6 @@ class ViewHelpersTest extends TestCase
                 $this->assertFalse($result['show'], "Mode '$mode' should not show");
             }
         }
-    }
-
-    public function testHWithOnlyWhitespace(): void
-    {
-        $result = ViewHelpers::h('   ');
-
-        $this->assertEquals('   ', $result);
-    }
-
-    public function testHWithNewlines(): void
-    {
-        $result = ViewHelpers::h("line1\nline2\rline3");
-
-        $this->assertEquals("line1\nline2\rline3", $result);
-    }
-
-    public function testHWithTabs(): void
-    {
-        $result = ViewHelpers::h("col1\tcol2");
-
-        $this->assertEquals("col1\tcol2", $result);
     }
 
     public function testRenderTimeRangeSelectorWithNumericStringKeys(): void

@@ -2,7 +2,9 @@
 require_once __DIR__ . '/../classes/autoload.php';
 require_once __DIR__ . '/../classes/Watcher/UI/ViewHelpers.php';
 
-renderCSSIncludes(true);
+use Watcher\UI\ViewHelpers;
+
+ViewHelpers::renderCSSIncludes(true);
 ?>
 
 <div class="metricsContainer" data-watcher-page="connectivityUI">
@@ -31,10 +33,7 @@ renderCSSIncludes(true);
         </div>
     </div>
 
-    <div id="loadingIndicator" class="loadingSpinner">
-        <i class="fas fa-spinner"></i>
-        <p>Loading connectivity metrics data...</p>
-    </div>
+    <?php ViewHelpers::renderLoadingSpinner('Loading connectivity metrics data...'); ?>
 
     <div id="metricsContent" style="display: none;">
         <!-- Raw Ping Chart -->
@@ -45,18 +44,20 @@ renderCSSIncludes(true);
                     <span class="tierBadge">raw samples</span>
                 </span>
             </div>
-            <div class="chartControls" style="margin-bottom: 1rem;">
-                <div class="controlGroup">
-                    <label for="rawTimeRange">Time Range:</label>
-                    <select id="rawTimeRange" onchange="page.updateRawPingLatencyChart()">
-                        <option value="2">Last 2 Hours</option>
-                        <option value="4">Last 4 Hours</option>
-                        <option value="8">Last 8 Hours</option>
-                        <option value="12" selected>Last 12 Hours</option>
-                        <option value="24">Last 24 Hours</option>
-                    </select>
-                </div>
-            </div>
+            <?php
+            ViewHelpers::renderTimeRangeSelector(
+                'rawTimeRange',
+                'page.updateRawPingLatencyChart()',
+                'Time Range:',
+                [
+                    '2' => 'Last 2 Hours',
+                    '4' => 'Last 4 Hours',
+                    '8' => 'Last 8 Hours',
+                    '12' => 'Last 12 Hours',
+                    '24' => 'Last 24 Hours'
+                ]
+            );
+            ?>
             <canvas id="rawPingLatencyChart" class="chartCanvas"></canvas>
         </div>
 
@@ -94,24 +95,7 @@ renderCSSIncludes(true);
             </div>
         </div>
 
-        <!-- Time Range Selector -->
-        <div class="chartControls" style="margin-bottom: 1.5rem;">
-            <div class="controlGroup">
-                <label for="timeRange">Rollup Time Range:</label>
-                <select id="timeRange" onchange="page.updateAllCharts()">
-                    <option value="1">Last 1 Hour</option>
-                    <option value="6">Last 6 Hours</option>
-                    <option value="12" selected>Last 12 Hours</option>
-                    <option value="24">Last 24 Hours</option>
-                    <option value="48">Last 2 Days</option>
-                    <option value="72">Last 3 Days</option>
-                    <option value="168">Last 7 Days</option>
-                    <option value="336">Last 2 Weeks</option>
-                    <option value="720">Last 30 Days</option>
-                    <option value="2160">Last 90 Days</option>
-                </select>
-            </div>
-        </div>
+        <?php ViewHelpers::renderTimeRangeSelector('timeRange', 'page.updateAllCharts()', 'Rollup Time Range:'); ?>
 
         <!-- Rollup Charts -->
         <div id="rollupChartsSection" style="display: none;">
@@ -147,9 +131,5 @@ renderCSSIncludes(true);
         </div>
     </div>
 
-    <button class="refreshButton" onclick="page.refresh()" title="Refresh Data">
-        <i class="fas fa-sync-alt"></i>
-    </button>
+    <?php ViewHelpers::renderRefreshButton(); ?>
 </div>
-
-<?php renderWatcherJS(); ?>
