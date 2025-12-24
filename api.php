@@ -166,24 +166,17 @@ function getEndpointsfpppluginwatcher() {
         ['method' => 'GET', 'endpoint' => 'metrics/interface/bandwidth', 'callback' => 'fpppluginWatcherInterfaceBandwidth'],
         ['method' => 'GET', 'endpoint' => 'metrics/interface/list', 'callback' => 'fpppluginWatcherInterfaceList'],
         ['method' => 'GET', 'endpoint' => 'metrics/ping/rollup', 'callback' => 'fpppluginWatcherPingRollup'],
-        ['method' => 'GET', 'endpoint' => 'metrics/ping/rollup/tiers', 'callback' => 'fpppluginWatcherPingRollupTiers'],
-        ['method' => 'GET', 'endpoint' => 'metrics/ping/rollup/:tier', 'callback' => 'fpppluginWatcherPingRollupTier'],
         ['method' => 'GET', 'endpoint' => 'metrics/thermal', 'callback' => 'fpppluginWatcherThermal'],
-        ['method' => 'GET', 'endpoint' => 'metrics/thermal/zones', 'callback' => 'fpppluginWatcherThermalZones'],
         ['method' => 'GET', 'endpoint' => 'metrics/wireless', 'callback' => 'fpppluginWatcherWireless'],
-        ['method' => 'GET', 'endpoint' => 'metrics/wireless/interfaces', 'callback' => 'fpppluginWatcherWirelessInterfaces'],
         ['method' => 'GET', 'endpoint' => 'metrics/all', 'callback' => 'fpppluginWatcherMetricsAll'],
 
         // Multi-sync ping metrics
         ['method' => 'GET', 'endpoint' => 'metrics/multisync/ping/raw', 'callback' => 'fpppluginWatcherMultiSyncPingRaw'],
         ['method' => 'GET', 'endpoint' => 'metrics/multisync/ping/rollup', 'callback' => 'fpppluginWatcherMultiSyncPingRollup'],
-        ['method' => 'GET', 'endpoint' => 'metrics/multisync/ping/rollup/tiers', 'callback' => 'fpppluginWatcherMultiSyncPingRollupTiers'],
 
         // Network quality metrics
         ['method' => 'GET', 'endpoint' => 'metrics/network-quality/current', 'callback' => 'fpppluginWatcherNetworkQualityCurrent'],
         ['method' => 'GET', 'endpoint' => 'metrics/network-quality/history', 'callback' => 'fpppluginWatcherNetworkQualityHistory'],
-        ['method' => 'GET', 'endpoint' => 'metrics/network-quality/host', 'callback' => 'fpppluginWatcherNetworkQualityHost'],
-        ['method' => 'POST', 'endpoint' => 'metrics/network-quality/collect', 'callback' => 'fpppluginWatcherNetworkQualityCollect'],
 
         // eFuse current monitoring
         ['method' => 'GET', 'endpoint' => 'efuse/supported', 'callback' => 'fpppluginWatcherEfuseSupported'],
@@ -221,34 +214,26 @@ function getEndpointsfpppluginwatcher() {
         ['method' => 'POST', 'endpoint' => 'remote/restart', 'callback' => 'fpppluginWatcherRemoteRestart'],
         ['method' => 'POST', 'endpoint' => 'remote/reboot', 'callback' => 'fpppluginWatcherRemoteReboot'],
         ['method' => 'POST', 'endpoint' => 'remote/upgrade', 'callback' => 'fpppluginWatcherRemoteUpgrade'],
-        ['method' => 'GET', 'endpoint' => 'remote/plugins', 'callback' => 'fpppluginWatcherRemotePlugins'],
-        ['method' => 'GET', 'endpoint' => 'remote/plugins/updates', 'callback' => 'fpppluginWatcherRemotePluginUpdates'],
-        ['method' => 'GET', 'endpoint' => 'remote/playback/sync', 'callback' => 'fpppluginWatcherRemotePlaybackSync'],
         ['method' => 'POST', 'endpoint' => 'remote/fpp/upgrade', 'callback' => 'fpppluginWatcherRemoteFPPUpgrade'],
         ['method' => 'POST', 'endpoint' => 'remote/watcher/upgrade', 'callback' => 'fpppluginWatcherRemoteWatcherUpgrade'],
         ['method' => 'GET', 'endpoint' => 'remote/connectivity/state', 'callback' => 'fpppluginWatcherRemoteConnectivityState'],
         ['method' => 'POST', 'endpoint' => 'remote/connectivity/state/clear', 'callback' => 'fpppluginWatcherRemoteConnectivityStateClear'],
         ['method' => 'GET', 'endpoint' => 'remote/version', 'callback' => 'fpppluginWatcherRemoteVersion'],
         ['method' => 'GET', 'endpoint' => 'remote/sysStatus', 'callback' => 'fpppluginWatcherRemoteSysStatus'],
-        ['method' => 'GET', 'endpoint' => 'remote/sysInfo', 'callback' => 'fpppluginWatcherRemoteSysInfo'],
         ['method' => 'GET', 'endpoint' => 'remote/metrics/all', 'callback' => 'fpppluginWatcherRemoteMetricsAll'],
         ['method' => 'GET', 'endpoint' => 'remote/fppd/status', 'callback' => 'fpppluginWatcherRemoteFppdStatus'],
-        ['method' => 'GET', 'endpoint' => 'remote/efuse/supported', 'callback' => 'fpppluginWatcherRemoteEfuseSupported'],
         ['method' => 'GET', 'endpoint' => 'remote/efuse/heatmap', 'callback' => 'fpppluginWatcherRemoteEfuseHeatmap'],
 
         // Plugin updates
-        ['method' => 'GET', 'endpoint' => 'update/check', 'callback' => 'fpppluginWatcherUpdateCheck'],
         ['method' => 'GET', 'endpoint' => 'fpp/release', 'callback' => 'fpppluginWatcherFPPRelease'],
         ['method' => 'GET', 'endpoint' => 'plugins/updates', 'callback' => 'fpppluginWatcherLocalPluginUpdates'],
 
         // Connectivity state (local)
         ['method' => 'GET', 'endpoint' => 'connectivity/state', 'callback' => 'fpppluginWatcherConnectivityState'],
         ['method' => 'POST', 'endpoint' => 'connectivity/state/clear', 'callback' => 'fpppluginWatcherConnectivityStateClear'],
-        ['method' => 'POST', 'endpoint' => 'connectivity/reload', 'callback' => 'fpppluginWatcherConnectivityReload'],
 
         // MultiSync comparison
         ['method' => 'GET', 'endpoint' => 'multisync/comparison', 'callback' => 'fpppluginWatcherMultiSyncComparison'],
-        ['method' => 'GET', 'endpoint' => 'multisync/comparison/host', 'callback' => 'fpppluginWatcherMultiSyncComparisonHost'],
         ['method' => 'GET', 'endpoint' => 'multisync/clock-drift', 'callback' => 'fpppluginWatcherMultiSyncClockDrift'],
         ['method' => 'GET', 'endpoint' => 'multisync/full-status', 'callback' => 'fpppluginWatcherMultiSyncFullStatus'],
 
@@ -259,10 +244,6 @@ function getEndpointsfpppluginwatcher() {
         // MQTT events
         ['method' => 'GET', 'endpoint' => 'mqtt/events', 'callback' => 'fpppluginWatcherMqttEvents'],
         ['method' => 'GET', 'endpoint' => 'mqtt/stats', 'callback' => 'fpppluginWatcherMqttStats'],
-        ['method' => 'GET', 'endpoint' => 'mqtt/hosts', 'callback' => 'fpppluginWatcherMqttHosts'],
-
-        // Utilities
-        ['method' => 'GET', 'endpoint' => 'ping/check', 'callback' => 'fpppluginWatcherPingCheck'],
 
         // Data management
         ['method' => 'GET', 'endpoint' => 'data/stats', 'callback' => 'fpppluginWatcherDataStats'],
@@ -330,21 +311,6 @@ function fpppluginWatcherPingRollup() {
     return apiSuccess(PingCollector::getInstance()->getMetrics(getHoursParam()));
 }
 
-// GET /api/plugin/fpp-plugin-watcher/metrics/ping/rollup/tiers
-function fpppluginWatcherPingRollupTiers() {
-    return apiSuccess(['tiers' => PingCollector::getInstance()->getRollupTiersInfo()]);
-}
-
-// GET /api/plugin/fpp-plugin-watcher/metrics/ping/rollup/:tier
-function fpppluginWatcherPingRollupTier() {
-    global $urlParts;
-    $tier = isset($urlParts[5]) ? $urlParts[5] : '1min';
-    $hoursBack = getHoursParam();
-    $endTime = time();
-    $startTime = $endTime - ($hoursBack * 3600);
-    return apiSuccess(PingCollector::getInstance()->readRollupData($tier, $startTime, $endTime));
-}
-
 // GET /api/plugin/fpp-plugin-watcher/metrics/multisync/ping/raw
 function fpppluginWatcherMultiSyncPingRaw() {
     $hostname = isset($_GET['hostname']) ? $_GET['hostname'] : null;
@@ -357,37 +323,14 @@ function fpppluginWatcherMultiSyncPingRollup() {
     return apiSuccess(MultiSyncPingCollector::getInstance()->getMetrics(getHoursParam(), $hostname));
 }
 
-// GET /api/plugin/fpp-plugin-watcher/metrics/multisync/ping/rollup/tiers
-function fpppluginWatcherMultiSyncPingRollupTiers() {
-    return apiSuccess(['tiers' => MultiSyncPingCollector::getInstance()->getRollupTiersInfo()]);
-}
-
 // GET /api/plugin/fpp-plugin-watcher/metrics/thermal
 function fpppluginWatcherThermal() {
     return apiSuccess(SystemMetrics::getInstance()->getThermalMetrics(getHoursParam()));
 }
 
-// GET /api/plugin/fpp-plugin-watcher/metrics/thermal/zones
-function fpppluginWatcherThermalZones() {
-    $zones = SystemMetrics::getInstance()->getThermalZones();
-    return apiSuccess([
-        'count' => count($zones),
-        'zones' => $zones
-    ]);
-}
-
 // GET /api/plugin/fpp-plugin-watcher/metrics/wireless
 function fpppluginWatcherWireless() {
     return apiSuccess(SystemMetrics::getInstance()->getWirelessMetrics(getHoursParam()));
-}
-
-// GET /api/plugin/fpp-plugin-watcher/metrics/wireless/interfaces
-function fpppluginWatcherWirelessInterfaces() {
-    $interfaces = SystemMetrics::getInstance()->getWirelessInterfaces();
-    return apiSuccess([
-        'count' => count($interfaces),
-        'interfaces' => $interfaces
-    ]);
 }
 
 // GET /api/plugin/fpp-plugin-watcher/metrics/all
@@ -690,86 +633,6 @@ function fpppluginWatcherRemoteUpgrade() {
     return apiSuccess(RemoteControl::getInstance()->upgradePlugin(trim($input['host']), $plugin));
 }
 
-// GET /api/plugin/fpp-plugin-watcher/remote/plugins?host=x
-function fpppluginWatcherRemotePlugins() {
-    $host = getRequiredQueryParam('host');
-    if (!$host) return apiError('Missing host parameter');
-    return apiSuccess(RemoteControl::getInstance()->getPlugins($host));
-}
-
-// GET /api/plugin/fpp-plugin-watcher/remote/plugins/updates?host=x
-function fpppluginWatcherRemotePluginUpdates() {
-    $host = getRequiredQueryParam('host');
-    if (!$host) return apiError('Missing host parameter');
-    $latestWatcherVersion = UpdateChecker::getInstance()->getLatestWatcherVersion();
-    return apiSuccess(RemoteControl::getInstance()->checkPluginUpdates($host, $latestWatcherVersion));
-}
-
-// GET /api/plugin/fpp-plugin-watcher/remote/playback/sync
-function fpppluginWatcherRemotePlaybackSync() {
-    $remoteSystems = getMultiSyncRemoteSystems();
-    if (empty($remoteSystems)) {
-        return apiSuccess(['local' => null, 'remotes' => []]);
-    }
-
-    $localStatus = ApiClient::getInstance()->get('http://127.0.0.1/api/fppd/status', WATCHER_TIMEOUT_STATUS);
-    $local = null;
-    if ($localStatus !== false) {
-        $local = [
-            'hostname' => $localStatus['host_name'] ?? 'Local',
-            'status' => $localStatus['status_name'] ?? 'unknown',
-            'sequence' => $localStatus['current_sequence'] ?? '',
-            'secondsPlayed' => floatval($localStatus['seconds_played'] ?? 0),
-            'timeElapsed' => $localStatus['time_elapsed'] ?? '00:00',
-            'mode' => $localStatus['mode_name'] ?? 'unknown'
-        ];
-    }
-
-    $handler = new CurlMultiHandler(WATCHER_TIMEOUT_STATUS);
-    $hostnames = [];
-    foreach ($remoteSystems as $system) {
-        $handler->addRequest($system['address'], "http://{$system['address']}/api/fppd/status");
-        $hostnames[$system['address']] = $system['hostname'];
-    }
-
-    $results = $handler->execute();
-
-    $remotes = [];
-    foreach ($results as $address => $result) {
-        $hostname = $hostnames[$address];
-
-        if ($result['success'] && $result['data']) {
-            $data = $result['data'];
-            $remotes[] = [
-                'address' => $address,
-                'hostname' => $hostname,
-                'status' => $data['status_name'] ?? 'unknown',
-                'sequence' => $data['current_sequence'] ?? '',
-                'secondsPlayed' => floatval($data['seconds_played'] ?? 0),
-                'timeElapsed' => $data['time_elapsed'] ?? '00:00',
-                'mode' => $data['mode_name'] ?? 'unknown'
-            ];
-        } else {
-            $remotes[] = [
-                'address' => $address,
-                'hostname' => $hostname,
-                'status' => 'offline',
-                'sequence' => '',
-                'secondsPlayed' => 0,
-                'timeElapsed' => '--:--',
-                'mode' => 'unknown'
-            ];
-        }
-    }
-
-    return apiSuccess(['local' => $local, 'remotes' => $remotes]);
-}
-
-// GET /api/plugin/fpp-plugin-watcher/update/check
-function fpppluginWatcherUpdateCheck() {
-    return apiSuccess(UpdateChecker::getInstance()->checkWatcherUpdate());
-}
-
 // GET /api/plugin/fpp-plugin-watcher/fpp/release
 function fpppluginWatcherFPPRelease() {
     $currentBranch = isset($_GET['branch']) ? trim($_GET['branch']) : null;
@@ -858,31 +721,6 @@ function fpppluginWatcherConnectivityStateClear() {
     return apiSuccess(['message' => 'Reset state cleared and connectivity daemon restarted']);
 }
 
-// POST /api/plugin/fpp-plugin-watcher/connectivity/reload
-// Triggers the connectivity daemon to reload its configuration immediately
-function fpppluginWatcherConnectivityReload() {
-    $configPath = WATCHERCONFIGFILELOCATION;
-
-    if (!file_exists($configPath)) {
-        return apiError('Configuration file not found');
-    }
-
-    // Touch the config file to update its mtime, triggering daemon reload
-    $touched = touch($configPath);
-
-    if (!$touched) {
-        return apiError('Failed to trigger configuration reload');
-    }
-
-    Logger::getInstance()->info("Configuration reload triggered via API");
-
-    return apiSuccess([
-        'message' => 'Configuration reload triggered. Daemon will reload within 60 seconds.',
-        'configFile' => $configPath,
-        'newMtime' => filemtime($configPath)
-    ]);
-}
-
 // GET /api/plugin/fpp-plugin-watcher/remote/connectivity/state?host=x
 function fpppluginWatcherRemoteConnectivityState() {
     return proxyRemoteGet('api/plugin/fpp-plugin-watcher/connectivity/state');
@@ -909,11 +747,6 @@ function fpppluginWatcherRemoteSysStatus() {
     return proxyRemoteGet('api/system/status', WATCHER_TIMEOUT_STANDARD, true);
 }
 
-// GET /api/plugin/fpp-plugin-watcher/remote/sysInfo?host=x
-function fpppluginWatcherRemoteSysInfo() {
-    return proxyRemoteGet('api/system/info', WATCHER_TIMEOUT_STANDARD, true);
-}
-
 // GET /api/plugin/fpp-plugin-watcher/remote/metrics/all?host=x&hours=Y
 function fpppluginWatcherRemoteMetricsAll() {
     $hours = getHoursParam();
@@ -923,16 +756,6 @@ function fpppluginWatcherRemoteMetricsAll() {
 // GET /api/plugin/fpp-plugin-watcher/remote/fppd/status?host=x
 function fpppluginWatcherRemoteFppdStatus() {
     return proxyRemoteGet('api/fppd/status', WATCHER_TIMEOUT_STANDARD, true);
-}
-
-// GET /api/plugin/fpp-plugin-watcher/remote/efuse/supported?host=x
-function fpppluginWatcherRemoteEfuseSupported() {
-    return proxyRemoteGet(
-        'api/plugin/fpp-plugin-watcher/efuse/supported',
-        WATCHER_TIMEOUT_STANDARD,
-        false,
-        ['supported' => false, 'error' => 'Failed to fetch eFuse support from remote host']
-    );
 }
 
 // GET /api/plugin/fpp-plugin-watcher/remote/efuse/heatmap?host=x&hours=Y
@@ -958,51 +781,9 @@ function fpppluginWatcherMqttStats() {
     return apiSuccess(MqttEventLogger::getInstance()->getEventStats(getHoursParam()));
 }
 
-// GET /api/plugin/fpp-plugin-watcher/mqtt/hosts
-function fpppluginWatcherMqttHosts() {
-    $hosts = MqttEventLogger::getInstance()->getHostsList();
-    return apiSuccess([
-        'count' => count($hosts),
-        'hosts' => $hosts
-    ]);
-}
-
-// GET /api/plugin/fpp-plugin-watcher/ping/check?ips[]=x.x.x.x&ips[]=y.y.y.y
-function fpppluginWatcherPingCheck() {
-    $ips = isset($_GET['ips']) ? $_GET['ips'] : [];
-    if (!is_array($ips) || empty($ips)) return apiError('Missing ips[] parameter');
-    if (count($ips) > 50) return apiError('Maximum 50 IPs allowed per request');
-
-    $results = [];
-    foreach ($ips as $ip) {
-        $ip = trim($ip);
-        if (!filter_var($ip, FILTER_VALIDATE_IP)) {
-            $results[$ip] = ['reachable' => false, 'error' => 'Invalid IP'];
-            continue;
-        }
-
-        $pingResult = pingHost($ip, null, 1);
-
-        $results[$ip] = [
-            'reachable' => $pingResult['success'],
-            'latency' => $pingResult['latency']
-        ];
-    }
-
-    return apiSuccess(['results' => $results]);
-}
-
 // GET /api/plugin/fpp-plugin-watcher/multisync/comparison
 function fpppluginWatcherMultiSyncComparison() {
     return apiSuccess(Comparator::getInstance()->getComparison(getMultiSyncRemoteSystems()));
-}
-
-// GET /api/plugin/fpp-plugin-watcher/multisync/comparison/host?address=x.x.x.x
-function fpppluginWatcherMultiSyncComparisonHost() {
-    $address = getRequiredQueryParam('address');
-    if (!$address) return apiError('Missing address parameter');
-    if (!filter_var($address, FILTER_VALIDATE_IP)) return apiError('Invalid IP address');
-    return apiSuccess(Comparator::getInstance()->getComparisonForHost($address));
 }
 
 // GET /api/plugin/fpp-plugin-watcher/time
@@ -1032,36 +813,6 @@ function fpppluginWatcherNetworkQualityCurrent() {
 function fpppluginWatcherNetworkQualityHistory() {
     $hostname = isset($_GET['hostname']) ? trim($_GET['hostname']) : null;
     return apiSuccess(NetworkQualityCollector::getInstance()->getHistory(getHoursParam(6), $hostname ?: null));
-}
-
-// GET /api/plugin/fpp-plugin-watcher/metrics/network-quality/host?address=X
-function fpppluginWatcherNetworkQualityHost() {
-    $address = getRequiredQueryParam('address');
-    if (!$address) return apiError('Missing address parameter');
-
-    $allStatus = NetworkQualityCollector::getInstance()->getStatus();
-    if (isset($allStatus['success']) && !$allStatus['success']) {
-        return apiSuccess($allStatus);
-    }
-
-    $hostData = null;
-    foreach (($allStatus['hosts'] ?? []) as $host) {
-        if (($host['address'] ?? '') === $address) {
-            $hostData = $host;
-            break;
-        }
-    }
-
-    return apiSuccess([
-        'host' => $hostData,
-        'message' => $hostData === null ? 'No data found for this host' : null,
-        'timestamp' => time()
-    ]);
-}
-
-// POST /api/plugin/fpp-plugin-watcher/metrics/network-quality/collect
-function fpppluginWatcherNetworkQualityCollect() {
-    return apiSuccess(NetworkQualityCollector::getInstance()->collectMetrics());
 }
 
 // GET /api/plugin/fpp-plugin-watcher/data/stats
