@@ -16,6 +16,7 @@ require_once __DIR__ . '/lib/core/watcherCommon.php';
 require_once __DIR__ . '/lib/core/config.php';
 
 use Watcher\Core\Logger;
+use Watcher\Core\DaemonLock;
 use Watcher\Metrics\EfuseCollector;
 use Watcher\Controllers\EfuseHardware;
 
@@ -238,7 +239,7 @@ if (function_exists('pcntl_signal')) {
 }
 
 // Acquire daemon lock (handles stale lock detection automatically)
-$lockFp = acquireDaemonLock('efuse-collector', EFUSE_LOG_FILE);
+$lockFp = DaemonLock::acquire('efuse-collector', EFUSE_LOG_FILE);
 if (!$lockFp) {
     exit(1);
 }
@@ -246,14 +247,14 @@ if (!$lockFp) {
 // Verify enabled before starting
 if (!isEfuseEnabled()) {
     efuseLog("eFuse monitoring is not enabled in config. Exiting.");
-    releaseDaemonLock($lockFp, 'efuse-collector');
+    DaemonLock::release($lockFp, 'efuse-collector');
     exit(0);
 }
 
 // Verify hardware before starting
 if (!hasEfuseHardware()) {
     efuseLog("No compatible eFuse hardware detected. Exiting.");
-    releaseDaemonLock($lockFp, 'efuse-collector');
+    DaemonLock::release($lockFp, 'efuse-collector');
     exit(0);
 }
 
@@ -264,6 +265,6 @@ try {
     efuseLog("FATAL ERROR: " . $e->getMessage());
     exit(1);
 } finally {
-    releaseDaemonLock($lockFp, 'efuse-collector');
+    DaemonLock::release($lockFp, 'efuse-collector');
 }
 ?>

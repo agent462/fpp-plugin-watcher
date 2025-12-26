@@ -4,10 +4,11 @@ require_once __DIR__ . '/../classes/Watcher/UI/ViewHelpers.php';
 include_once __DIR__ . '/../lib/core/config.php';
 
 use Watcher\UI\ViewHelpers;
+use Watcher\Controllers\NetworkAdapter;
 
 $config = readPluginConfig();
 $configuredAdapter = $config['networkAdapter'] ?? 'default';
-$defaultAdapter = $configuredAdapter === 'default' ? detectActiveNetworkInterface() : $configuredAdapter;
+$defaultAdapter = $configuredAdapter === 'default' ? NetworkAdapter::getInstance()->detectActiveInterface() : $configuredAdapter;
 
 ViewHelpers::renderCSSIncludes(true);
 ?>

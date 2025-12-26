@@ -4,6 +4,7 @@ declare(strict_types=1);
 namespace Watcher\Metrics;
 
 use Watcher\Core\Logger;
+use Watcher\Controllers\NetworkAdapter;
 
 /**
  * Multi-Sync Ping Metrics Collection and Rollup
@@ -63,8 +64,8 @@ class MultiSyncPingCollector extends BaseMetricsCollector
      */
     public function pingRemoteHost(string $address, string $networkAdapter): array
     {
-        // Use the global pingHost function
-        return pingHost($address, $networkAdapter, 2);
+        // Use NetworkAdapter::ping static method
+        return NetworkAdapter::ping($address, $networkAdapter, 2);
     }
 
     /**

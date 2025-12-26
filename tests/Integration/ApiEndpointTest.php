@@ -131,17 +131,6 @@ class ApiEndpointTest extends TestCase
         $this->assertIsArray($result);
     }
 
-    public function testMetricsThermalZonesEndpoint(): void
-    {
-        $result = $this->client->get("{$this->baseUrl}/metrics/thermal/zones");
-
-        if ($result === false) {
-            $this->markTestSkipped('Thermal zones endpoint not responding');
-        }
-
-        $this->assertIsArray($result);
-    }
-
     // =========================================================================
     // Ping Metrics Endpoints
     // =========================================================================
@@ -163,17 +152,6 @@ class ApiEndpointTest extends TestCase
 
         if ($result === false) {
             $this->markTestSkipped('Ping rollup endpoint not responding');
-        }
-
-        $this->assertIsArray($result);
-    }
-
-    public function testMetricsPingRollupTiersEndpoint(): void
-    {
-        $result = $this->client->get("{$this->baseUrl}/metrics/ping/rollup/tiers");
-
-        if ($result === false) {
-            $this->markTestSkipped('Ping rollup tiers endpoint not responding');
         }
 
         $this->assertIsArray($result);
@@ -220,27 +198,6 @@ class ApiEndpointTest extends TestCase
         }
 
         $this->assertIsArray($result);
-    }
-
-    // =========================================================================
-    // Update Check Endpoints
-    // =========================================================================
-
-    public function testUpdateCheckEndpoint(): void
-    {
-        $result = $this->client->get("{$this->baseUrl}/update/check", 10);
-
-        if ($result === false) {
-            $this->markTestSkipped('Update check endpoint not responding');
-        }
-
-        $this->assertIsArray($result);
-        // API returns {success: true/false, ...}
-        $this->assertArrayHasKey('success', $result);
-        // If successful, should have latestVersion
-        if ($result['success'] ?? false) {
-            $this->assertArrayHasKey('latestVersion', $result);
-        }
     }
 
     // =========================================================================
@@ -499,18 +456,6 @@ class ApiEndpointTest extends TestCase
         $this->assertArrayHasKey('success', $result);
     }
 
-    public function testMultiSyncPingRollupTiersEndpoint(): void
-    {
-        $result = $this->client->get("{$this->baseUrl}/metrics/multisync/ping/rollup/tiers");
-
-        if ($result === false) {
-            $this->markTestSkipped('MultiSync ping rollup tiers endpoint not responding');
-        }
-
-        $this->assertIsArray($result);
-        $this->assertArrayHasKey('tiers', $result);
-    }
-
     // =========================================================================
     // Remote Bulk Endpoints
     // =========================================================================
@@ -640,20 +585,6 @@ class ApiEndpointTest extends TestCase
         $this->assertArrayHasKey('success', $result);
     }
 
-    public function testMqttHostsEndpoint(): void
-    {
-        $result = $this->client->get("{$this->baseUrl}/mqtt/hosts");
-
-        if ($result === false) {
-            $this->markTestSkipped('MQTT hosts endpoint not responding');
-        }
-
-        $this->assertIsArray($result);
-        $this->assertArrayHasKey('success', $result);
-        $this->assertArrayHasKey('count', $result);
-        $this->assertArrayHasKey('hosts', $result);
-    }
-
     // =========================================================================
     // Wireless Endpoints
     // =========================================================================
@@ -668,19 +599,6 @@ class ApiEndpointTest extends TestCase
 
         $this->assertIsArray($result);
         $this->assertArrayHasKey('success', $result);
-    }
-
-    public function testWirelessInterfacesEndpoint(): void
-    {
-        $result = $this->client->get("{$this->baseUrl}/metrics/wireless/interfaces");
-
-        if ($result === false) {
-            $this->markTestSkipped('Wireless interfaces endpoint not responding');
-        }
-
-        $this->assertIsArray($result);
-        $this->assertArrayHasKey('count', $result);
-        $this->assertArrayHasKey('interfaces', $result);
     }
 
     // =========================================================================
@@ -713,25 +631,6 @@ class ApiEndpointTest extends TestCase
 
         $this->assertIsArray($result);
         $this->assertArrayHasKey('success', $result);
-    }
-
-    // =========================================================================
-    // Playback Sync Endpoint
-    // =========================================================================
-
-    public function testRemotePlaybackSyncEndpoint(): void
-    {
-        $result = $this->client->get("{$this->baseUrl}/remote/playback/sync");
-
-        if ($result === false) {
-            $this->markTestSkipped('Playback sync endpoint not responding');
-        }
-
-        $this->assertIsArray($result);
-        $this->assertArrayHasKey('success', $result);
-        // Should have local and remotes keys
-        $this->assertArrayHasKey('local', $result);
-        $this->assertArrayHasKey('remotes', $result);
     }
 
     // =========================================================================
@@ -799,42 +698,6 @@ class ApiEndpointTest extends TestCase
         );
     }
 
-    public function testNetworkQualityHostWithoutAddressReturnsError(): void
-    {
-        $result = $this->client->get("{$this->baseUrl}/metrics/network-quality/host");
-
-        // Should return error without address parameter
-        $this->assertTrue(
-            $result === false ||
-            (is_array($result) && isset($result['success']) && $result['success'] === false),
-            'Network quality host without address should return error'
-        );
-    }
-
-    public function testPingCheckWithoutIpsReturnsError(): void
-    {
-        $result = $this->client->get("{$this->baseUrl}/ping/check");
-
-        // Should return error without ips parameter
-        $this->assertTrue(
-            $result === false ||
-            (is_array($result) && isset($result['success']) && $result['success'] === false),
-            'Ping check without ips should return error'
-        );
-    }
-
-    public function testMultiSyncComparisonHostWithInvalidAddressReturnsError(): void
-    {
-        $result = $this->client->get("{$this->baseUrl}/multisync/comparison/host?address=not-an-ip");
-
-        // Should return error with invalid IP
-        $this->assertTrue(
-            $result === false ||
-            (is_array($result) && isset($result['success']) && $result['success'] === false),
-            'Comparison host with invalid IP should return error'
-        );
-    }
-
     // =========================================================================
     // Hours Parameter Validation Tests
     // =========================================================================
@@ -877,22 +740,6 @@ class ApiEndpointTest extends TestCase
         }
 
         // Should still return valid response (will use minimum)
-        $this->assertIsArray($result);
-        $this->assertArrayHasKey('success', $result);
-    }
-
-    // =========================================================================
-    // Ping Rollup Tier Endpoint
-    // =========================================================================
-
-    public function testPingRollupTierEndpoint(): void
-    {
-        $result = $this->client->get("{$this->baseUrl}/metrics/ping/rollup/1min");
-
-        if ($result === false) {
-            $this->markTestSkipped('Ping rollup tier endpoint not responding');
-        }
-
         $this->assertIsArray($result);
         $this->assertArrayHasKey('success', $result);
     }

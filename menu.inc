@@ -17,6 +17,7 @@ include_once __DIR__ . '/lib/core/config.php';
 // Load class autoloader
 require_once __DIR__ . '/classes/autoload.php';
 use Watcher\Controllers\EfuseHardware;
+use Watcher\MultiSync\SyncStatus;
 
 $watcherConfig = readPluginConfig();
 $showLocalMetricsMenu = !empty($watcherConfig['collectdEnabled']);
@@ -121,7 +122,7 @@ if ($showMultiSyncPingMenu) {
 // Add Multi-Sync Metrics menu entry:
 // - Player mode: when MultiSync metrics OR ping is enabled
 // - Remote mode: when multi-sync is active in FPP (receives sync packets)
-if ($showMultiSyncMenu || $showMultiSyncPingMenu || isRemoteModeWithMultiSync()) {
+if ($showMultiSyncMenu || $showMultiSyncPingMenu || SyncStatus::getInstance()->isRemoteMode()) {
 	$helpIndex = count($menuEntries) - 1;
 	array_splice($menuEntries, $helpIndex, 0, [
 		Array(
@@ -135,7 +136,7 @@ if ($showMultiSyncMenu || $showMultiSyncPingMenu || isRemoteModeWithMultiSync())
 
 
 // Add Remote Control UI menu entry only if enabled (player mode only)
-if ($showControlUIMenu && isPlayerMode()) {
+if ($showControlUIMenu && SyncStatus::getInstance()->isPlayerMode()) {
 	// Find the Help entry index (it may have shifted due to previous entries)
 	$helpIndex = count($menuEntries) - 1;
 	array_splice($menuEntries, $helpIndex, 0, [
@@ -149,7 +150,7 @@ if ($showControlUIMenu && isPlayerMode()) {
 }
 
 // Add MQTT Events menu entry only if enabled (player mode only)
-if ($showEventsMenu && isPlayerMode()) {
+if ($showEventsMenu && SyncStatus::getInstance()->isPlayerMode()) {
 	$helpIndex = count($menuEntries) - 1;
 	array_splice($menuEntries, $helpIndex, 0, [
 		Array(

@@ -11,6 +11,7 @@ use Watcher\Controllers\NetworkAdapter;
 use Watcher\Metrics\PingCollector;
 use Watcher\Metrics\MultiSyncPingCollector;
 use Watcher\Metrics\NetworkQualityCollector;
+use Watcher\MultiSync\SyncStatus;
 
 $config = readPluginConfig(); // Load and prepare configuration
 
@@ -47,7 +48,7 @@ function checkAndReloadConfig() {
 
     // Update network adapter if changed
     if ($newConfig['networkAdapter'] === 'default') {
-        $newAdapter = detectActiveNetworkInterface();
+        $newAdapter = NetworkAdapter::getInstance()->detectActiveInterface();
         $newDisplay = "default (detected: $newAdapter)";
     } else {
         $newAdapter = $newConfig['networkAdapter'];
@@ -87,7 +88,7 @@ function checkAndReloadConfig() {
 
 // Resolve 'default' network adapter to actual interface and save it
 if ($config['networkAdapter'] === 'default') {
-    $actualNetworkAdapter = detectActiveNetworkInterface();
+    $actualNetworkAdapter = NetworkAdapter::getInstance()->detectActiveInterface();
     // Save the detected interface to config so it's persistent
     Settings::getInstance()->writeSettingToFile('networkAdapter', $actualNetworkAdapter, WATCHERPLUGINNAME);
     Logger::getInstance()->info("Auto-detected network adapter '$actualNetworkAdapter' from 'default' setting and saved to config");
@@ -134,7 +135,7 @@ function checkConnectivity($testHosts, $networkAdapter) {
     $metricsBuffer = []; // Collect metrics for batch write
 
     foreach ($testHosts as $host) {
-        $pingResult = pingHost($host, $networkAdapter, 1);
+        $pingResult = NetworkAdapter::ping($host, $networkAdapter, 1);
 
         if ($pingResult['success']) {
             $lastPingStats['host'] = $host;
@@ -173,7 +174,7 @@ $failureCount = 0;
 $lastPingStats = [];
 
 // Check for existing reset state from previous runs
-$resetState = readResetState();
+$resetState = NetworkAdapter::getInstance()->getResetState();
 $hasResetAdapter = ($resetState !== null && !empty($resetState['hasResetAdapter']));
 if ($hasResetAdapter) {
     $resetTime = date('Y-m-d H:i:s', $resetState['resetTimestamp'] ?? 0);
@@ -235,10 +236,10 @@ while (true) {
         }
 
         // Multi-sync host pinging (only if enabled and in player mode)
-        if ($config['multiSyncPingEnabled'] && isPlayerMode()) {
+        if ($config['multiSyncPingEnabled'] && SyncStatus::getInstance()->isPlayerMode()) {
             // Refresh remote systems list periodically
             if ($cachedRemoteSystems === null || ($currentTime - $lastRemoteSystemsFetch) >= $remoteSystemsCacheInterval) {
-                $cachedRemoteSystems = getMultiSyncRemoteSystems();
+                $cachedRemoteSystems = SyncStatus::getInstance()->getRemoteSystems();
                 $lastRemoteSystemsFetch = $currentTime;
                 if (!empty($cachedRemoteSystems)) {
                     Logger::getInstance()->info("Multi-sync: Found " . count($cachedRemoteSystems) . " remote systems to monitor");
@@ -292,7 +293,7 @@ while (true) {
             Logger::getInstance()->info("Maximum failures reached. Resetting network adapter...");
             NetworkAdapter::getInstance()->resetAdapter($actualNetworkAdapter);
             $hasResetAdapter = true;
-            writeResetState($actualNetworkAdapter, 'Max failures reached');
+            NetworkAdapter::getInstance()->setResetState($actualNetworkAdapter, 'Max failures reached');
             $failureCount = 0;
             sleep(10);
         } elseif ($failureCount >= $config['maxFailures'] && $hasResetAdapter) {

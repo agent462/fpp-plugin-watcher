@@ -5,6 +5,7 @@ namespace Watcher\Metrics;
 
 use Watcher\Core\Logger;
 use Watcher\Http\ApiClient;
+use Watcher\MultiSync\SyncStatus;
 
 /**
  * Network Quality Metrics Collection and Rollup
@@ -113,7 +114,7 @@ class NetworkQualityCollector extends BaseMetricsCollector
         $metrics = [];
 
         // Get comparison data (includes response times)
-        $comparison = \Watcher\MultiSync\Comparator::getInstance()->getComparison(getMultiSyncRemoteSystems());
+        $comparison = \Watcher\MultiSync\Comparator::getInstance()->getComparison(SyncStatus::getInstance()->getRemoteSystems());
 
         if (!$comparison['success']) {
             return ['success' => false, 'error' => 'Failed to get comparison data'];

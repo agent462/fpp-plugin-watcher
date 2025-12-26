@@ -3,6 +3,7 @@ include_once __DIR__ . '/watcherCommon.php';
 
 use Watcher\Core\Settings;
 use Watcher\Core\Logger;
+use Watcher\Core\FileManager;
 use Watcher\Http\ApiClient;
 
 /**
@@ -178,7 +179,7 @@ function readPluginConfig($forceReload = false) {
         setDefaultWatcherSettings();
     }
 
-    ensureFppOwnership($configFile);
+    FileManager::getInstance()->ensureFppOwnership($configFile);
 
     // Logger::getInstance()->debug("Loading Watcher config file: " . WATCHERCONFIGFILELOCATION);
     $fd = fopen($configFile, 'r');

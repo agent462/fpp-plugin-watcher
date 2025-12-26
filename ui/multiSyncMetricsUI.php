@@ -13,12 +13,13 @@ include_once __DIR__ . '/../lib/core/config.php';
 include_once __DIR__ . '/../lib/core/watcherCommon.php';
 
 use Watcher\Http\ApiClient;
+use Watcher\MultiSync\SyncStatus;
 
 $config = readPluginConfig();
 $localSystem = ApiClient::getInstance()->get('http://127.0.0.1/api/fppd/status', 5) ?: [];
 
 // Get filtered remote systems (single source of truth for comparison)
-$remoteSystems = getMultiSyncRemoteSystems();
+$remoteSystems = SyncStatus::getInstance()->getRemoteSystems();
 
 // Check if multi-sync is enabled (player-only setting)
 $multiSyncEnabled = ($localSystem['multisync'] ?? false) === true;

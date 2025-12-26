@@ -6,11 +6,12 @@ include_once __DIR__ . '/../lib/core/watcherCommon.php';
 
 use Watcher\Http\ApiClient;
 use Watcher\UI\ViewHelpers;
+use Watcher\MultiSync\SyncStatus;
 
 $config = readPluginConfig();
 $localSystem = ApiClient::getInstance()->get('http://127.0.0.1/api/fppd/status', 5) ?: [];
 $access = ViewHelpers::checkDashboardAccess($config, $localSystem, 'multiSyncMetricsEnabled');
-$remoteSystems = $access['show'] ? getMultiSyncRemoteSystems() : [];
+$remoteSystems = $access['show'] ? SyncStatus::getInstance()->getRemoteSystems() : [];
 
 ViewHelpers::renderCSSIncludes($access['show']);
 ?>

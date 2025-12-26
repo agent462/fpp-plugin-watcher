@@ -3,8 +3,10 @@ declare(strict_types=1);
 
 namespace Watcher\Controllers;
 
+use Watcher\Core\FileManager;
 use Watcher\Http\ApiClient;
 use Watcher\Http\CurlMultiHandler;
+use Watcher\MultiSync\SyncStatus;
 
 /**
  * Remote FPP Control
@@ -591,7 +593,7 @@ class RemoteControl
         $discrepancies = [];
 
         // Get remote systems (player/remote only - for Check 1)
-        $remoteSystems = getMultiSyncRemoteSystems();
+        $remoteSystems = SyncStatus::getInstance()->getRemoteSystems();
         $remotesByIP = [];
         foreach ($remoteSystems as $remote) {
             if (!empty($remote['address'])) {
@@ -705,7 +707,7 @@ class RemoteControl
                         }
 
                         // Ping the host to verify it's actually offline before flagging
-                        $pingResult = pingHost($ip, null, 1);
+                        $pingResult = NetworkAdapter::ping($ip, null, 1);
                         if ($pingResult['success']) {
                             // Host responds to ping - it's online, just not in multisync
                             // This could be a non-FPP device (Falcon controller, etc.) - skip
@@ -810,7 +812,7 @@ class RemoteControl
 
         // Cache the result
         file_put_contents($cacheFile, json_encode($result));
-        ensureFppOwnership($cacheFile);
+        FileManager::getInstance()->ensureFppOwnership($cacheFile);
 
         return $result;
     }

@@ -36,6 +36,15 @@ if (!defined('WATCHERPINGDIR')) {
 if (!defined('WATCHERMULTISYNCPINGDIR')) {
     define('WATCHERMULTISYNCPINGDIR', WATCHER_TEST_TMP_DIR . '/data/multisync-ping');
 }
+if (!defined('WATCHERNETWORKQUALITYDIR')) {
+    define('WATCHERNETWORKQUALITYDIR', WATCHER_TEST_TMP_DIR . '/data/network-quality');
+}
+if (!defined('WATCHERMQTTDIR')) {
+    define('WATCHERMQTTDIR', WATCHER_TEST_TMP_DIR . '/data/mqtt');
+}
+if (!defined('WATCHERCONNECTIVITYDIR')) {
+    define('WATCHERCONNECTIVITYDIR', WATCHER_TEST_TMP_DIR . '/data/connectivity');
+}
 if (!defined('WATCHEREFUSEDIR')) {
     define('WATCHEREFUSEDIR', WATCHER_TEST_TMP_DIR . '/data/efuse');
 }
@@ -92,6 +101,9 @@ $testDirs = [
     WATCHER_TEST_TMP_DIR . '/data/ping/rollups',
     WATCHER_TEST_TMP_DIR . '/data/multisync-ping',
     WATCHER_TEST_TMP_DIR . '/data/multisync-ping/rollups',
+    WATCHER_TEST_TMP_DIR . '/data/network-quality',
+    WATCHER_TEST_TMP_DIR . '/data/mqtt',
+    WATCHER_TEST_TMP_DIR . '/data/connectivity',
     WATCHER_TEST_TMP_DIR . '/data/efuse',
     WATCHER_TEST_TMP_DIR . '/data/efuse/rollups',
     WATCHER_TEST_TMP_DIR . '/data/collectd',

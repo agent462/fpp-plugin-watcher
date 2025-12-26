@@ -197,7 +197,7 @@ class EfuseCollector extends BaseMetricsCollector
             };
         }
 
-        return readJsonLinesFile($this->metricsFile, $sinceTimestamp, $filterFn);
+        return FileManager::getInstance()->readJsonLinesFile($this->metricsFile, $sinceTimestamp, $filterFn);
     }
 
     /**

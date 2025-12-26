@@ -9,6 +9,8 @@ use Watcher\Core\Settings;
 use Watcher\Core\Logger;
 use Watcher\Http\ApiClient;
 use Watcher\Controllers\EfuseHardware;
+use Watcher\Controllers\NetworkAdapter;
+use Watcher\MultiSync\SyncStatus;
 use Watcher\UI\ViewHelpers;
 
 // Render CSS includes (consistent with other UI pages)
@@ -44,7 +46,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['save_settings'])) {
 
     // If 'default' is selected, auto-detect and save the actual interface
     if ($networkAdapter === 'default') {
-        $networkAdapter = detectActiveNetworkInterface();
+        $networkAdapter = NetworkAdapter::getInstance()->detectActiveInterface();
         Logger::getInstance()->info("Auto-detected network adapter '$networkAdapter' from 'default' setting");
     }
 
@@ -143,7 +145,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['save_settings'])) {
 $config = readPluginConfig();
 
 // Always detect what auto-detect would choose (for display in the dropdown)
-$actualAdapter = detectActiveNetworkInterface();
+$actualAdapter = NetworkAdapter::getInstance()->detectActiveInterface();
 
 // Get network interfaces from system
 $interfaces = [];
@@ -156,18 +158,18 @@ if ($config['networkAdapter'] !== 'default' && !in_array($config['networkAdapter
     $interfaces[] = $config['networkAdapter'];
 }
 
-$gatewaySuggestion = detectGatewayForInterface($actualAdapter);
+$gatewaySuggestion = NetworkAdapter::getInstance()->detectGateway($actualAdapter);
 $gatewayAlreadyConfigured = $gatewaySuggestion && in_array($gatewaySuggestion, $config['testHosts'], true);
 $gatewayInputValue = ($gatewaySuggestion && !$gatewayAlreadyConfigured) ? $gatewaySuggestion : '';
 
 // Detect if this FPP instance is in player mode (for multisync metrics feature)
-$isPlayerMode = isPlayerMode();
+$isPlayerMode = SyncStatus::getInstance()->isPlayerMode();
 
 // Detect eFuse hardware
 $efuseHardware = EfuseHardware::getInstance()->detectHardware();
 
 // Check for connectivity reset state
-$resetState = readResetState();
+$resetState = NetworkAdapter::getInstance()->getResetState();
 
 // Get plugin version from pluginInfo.json
 $pluginVersion = '';

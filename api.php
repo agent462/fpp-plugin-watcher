@@ -25,6 +25,8 @@ require_once __DIR__ . '/classes/autoload.php';
 
 use Watcher\Core\Settings;
 use Watcher\Core\Logger;
+use Watcher\Core\FileManager;
+use Watcher\Core\DataStorage;
 use Watcher\Http\ApiClient;
 use Watcher\Http\CurlMultiHandler;
 use Watcher\Metrics\PingCollector;
@@ -36,6 +38,7 @@ use Watcher\Controllers\FalconController;
 use Watcher\Controllers\EfuseHardware;
 use Watcher\Controllers\EfuseOutputConfig;
 use Watcher\Controllers\RemoteControl;
+use Watcher\Controllers\NetworkAdapter;
 use Watcher\MultiSync\SyncStatus;
 use Watcher\MultiSync\Comparator;
 use Watcher\MultiSync\ClockDrift;
@@ -576,18 +579,18 @@ function fpppluginWatcherFalconFusesReset() {
 
 // GET /api/plugin/fpp-plugin-watcher/remotes
 function fpppluginWatcherRemotes() {
-    return apiSuccess(['remotes' => getMultiSyncRemoteSystems()]);
+    return apiSuccess(['remotes' => SyncStatus::getInstance()->getRemoteSystems()]);
 }
 
 // GET /api/plugin/fpp-plugin-watcher/remote/bulk/status
 function fpppluginWatcherRemoteBulkStatus() {
-    return apiSuccess(RemoteControl::getInstance()->getBulkStatus(getMultiSyncRemoteSystems()));
+    return apiSuccess(RemoteControl::getInstance()->getBulkStatus(SyncStatus::getInstance()->getRemoteSystems()));
 }
 
 // GET /api/plugin/fpp-plugin-watcher/remote/bulk/updates
 function fpppluginWatcherRemoteBulkUpdates() {
     $latestWatcherVersion = UpdateChecker::getInstance()->getLatestWatcherVersion();
-    return apiSuccess(RemoteControl::getInstance()->getBulkUpdates(getMultiSyncRemoteSystems(), $latestWatcherVersion));
+    return apiSuccess(RemoteControl::getInstance()->getBulkUpdates(SyncStatus::getInstance()->getRemoteSystems(), $latestWatcherVersion));
 }
 
 // GET /api/plugin/fpp-plugin-watcher/remote/status?host=x
@@ -689,7 +692,7 @@ function fpppluginWatcherRemoteWatcherUpgrade() {
 
 // GET /api/plugin/fpp-plugin-watcher/connectivity/state
 function fpppluginWatcherConnectivityState() {
-    $state = readResetState();
+    $state = NetworkAdapter::getInstance()->getResetState();
 
     if ($state === null) {
         return apiSuccess([
@@ -709,14 +712,14 @@ function fpppluginWatcherConnectivityState() {
 
 // POST /api/plugin/fpp-plugin-watcher/connectivity/state/clear
 function fpppluginWatcherConnectivityStateClear() {
-    $cleared = clearResetState();
+    $cleared = NetworkAdapter::getInstance()->clearResetState();
 
     if (!$cleared) {
         return apiError('Failed to clear reset state');
     }
 
     Logger::getInstance()->info("Reset state cleared via API, restarting connectivity daemon");
-    restartConnectivityDaemon();
+    NetworkAdapter::getInstance()->restartConnectivityDaemon();
 
     return apiSuccess(['message' => 'Reset state cleared and connectivity daemon restarted']);
 }
@@ -783,7 +786,7 @@ function fpppluginWatcherMqttStats() {
 
 // GET /api/plugin/fpp-plugin-watcher/multisync/comparison
 function fpppluginWatcherMultiSyncComparison() {
-    return apiSuccess(Comparator::getInstance()->getComparison(getMultiSyncRemoteSystems()));
+    return apiSuccess(Comparator::getInstance()->getComparison(SyncStatus::getInstance()->getRemoteSystems()));
 }
 
 // GET /api/plugin/fpp-plugin-watcher/time
@@ -796,7 +799,7 @@ function fpppluginWatcherTime() {
 
 // GET /api/plugin/fpp-plugin-watcher/multisync/clock-drift
 function fpppluginWatcherMultiSyncClockDrift() {
-    return apiSuccess(ClockDrift::getInstance()->measureClockDrift(getMultiSyncRemoteSystems()));
+    return apiSuccess(ClockDrift::getInstance()->measureClockDrift(SyncStatus::getInstance()->getRemoteSystems()));
 }
 
 // GET /api/plugin/fpp-plugin-watcher/multisync/full-status
@@ -817,7 +820,7 @@ function fpppluginWatcherNetworkQualityHistory() {
 
 // GET /api/plugin/fpp-plugin-watcher/data/stats
 function fpppluginWatcherDataStats() {
-    return apiSuccess(['categories' => getDataDirectoryStats()]);
+    return apiSuccess(['categories' => DataStorage::getInstance()->getStats()]);
 }
 
 // GET /api/plugin/fpp-plugin-watcher/data/:category/:filename/tail
@@ -830,7 +833,7 @@ function fpppluginWatcherDataTail() {
         return apiError('Category and filename required');
     }
 
-    return apiSuccess(tailDataFile($category, $filename, $lines));
+    return apiSuccess(DataStorage::getInstance()->tailFile($category, $filename, $lines));
 }
 
 // DELETE /api/plugin/fpp-plugin-watcher/data/:category
@@ -841,7 +844,7 @@ function fpppluginWatcherDataClear() {
         return apiError('Category parameter is required');
     }
 
-    return apiSuccess(clearDataCategory($category));
+    return apiSuccess(DataStorage::getInstance()->clearCategory($category));
 }
 
 // DELETE /api/plugin/fpp-plugin-watcher/data/:category/:filename
@@ -853,7 +856,7 @@ function fpppluginWatcherDataClearFile() {
         return apiError('Category and filename parameters are required');
     }
 
-    return apiSuccess(clearDataFile($category, $filename));
+    return apiSuccess(DataStorage::getInstance()->clearFile($category, $filename));
 }
 
 // GET /api/plugin/fpp-plugin-watcher/config/collectd
@@ -914,7 +917,7 @@ function fpppluginWatcherConfigSave() {
         return apiError('Failed to write configuration file', 500);
     }
 
-    ensureFppOwnership($configPath);
+    FileManager::getInstance()->ensureFppOwnership($configPath);
     Logger::getInstance()->info("Watcher configuration updated via API");
 
     return apiSuccess([

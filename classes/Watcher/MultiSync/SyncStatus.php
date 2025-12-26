@@ -3,6 +3,7 @@ declare(strict_types=1);
 
 namespace Watcher\MultiSync;
 
+use Watcher\Core\Logger;
 use Watcher\Http\ApiClient;
 
 /**
@@ -10,6 +11,10 @@ use Watcher\Http\ApiClient;
  *
  * Provides PHP wrapper functions to interact with the WatcherMultiSync C++ plugin
  * API endpoints for UI dashboard display.
+ *
+ * Also provides:
+ * - Remote systems list with filtering and deduplication
+ * - FPP mode detection (player, remote)
  */
 class SyncStatus
 {
@@ -27,6 +32,125 @@ class SyncStatus
     {
         return self::$instance ??= new self();
     }
+
+    // -------------------------------------------------------------------------
+    // FPP Mode Detection
+    // -------------------------------------------------------------------------
+
+    /**
+     * Check if this FPP instance is running in player mode
+     *
+     * @return bool True if in player mode
+     */
+    public function isPlayerMode(): bool
+    {
+        $result = $this->apiClient->get('http://127.0.0.1/api/fppd/status', 5);
+
+        if ($result === false || !isset($result['mode_name'])) {
+            Logger::getInstance()->info("isPlayerMode: Failed to determine mode from FPP status");
+            return false;
+        }
+
+        return $result['mode_name'] === 'player';
+    }
+
+    /**
+     * Check if this FPP instance is running in remote mode
+     *
+     * @return bool True if in remote mode
+     */
+    public function isRemoteMode(): bool
+    {
+        $result = $this->apiClient->get('http://127.0.0.1/api/fppd/status', 5);
+
+        if ($result === false || !isset($result['mode_name'])) {
+            return false;
+        }
+
+        return $result['mode_name'] === 'remote';
+    }
+
+    /**
+     * Get the current FPP mode name
+     *
+     * @return string|null Mode name (e.g., 'player', 'remote', 'bridge') or null if unknown
+     */
+    public function getModeName(): ?string
+    {
+        $result = $this->apiClient->get('http://127.0.0.1/api/fppd/status', 5);
+
+        if ($result === false || !isset($result['mode_name'])) {
+            return null;
+        }
+
+        return $result['mode_name'];
+    }
+
+    // -------------------------------------------------------------------------
+    // Remote Systems
+    // -------------------------------------------------------------------------
+
+    /**
+     * Fetch remote systems from multi-sync configuration
+     *
+     * Returns an array of remote systems with hostname, address, model, version.
+     * - Filters out local systems
+     * - Filters to player/remote modes only (excludes bridge)
+     * - Deduplicates by hostname (prefers entries with UUID)
+     * - Validates hostname is not empty
+     * - Sorts by IP address
+     *
+     * @return array Array of remote system info
+     */
+    public function getRemoteSystems(): array
+    {
+        $multiSyncData = $this->apiClient->get('http://127.0.0.1/api/fppd/multiSyncSystems', 5);
+
+        if (!$multiSyncData || !isset($multiSyncData['systems']) || !is_array($multiSyncData['systems'])) {
+            return [];
+        }
+
+        $systemsByHostname = [];
+
+        foreach ($multiSyncData['systems'] as $system) {
+            // Skip local systems
+            if (!empty($system['local'])) {
+                continue;
+            }
+
+            // Only include player and remote mode systems (skip bridge, etc.)
+            $mode = $system['fppModeString'] ?? '';
+            if ($mode !== 'player' && $mode !== 'remote') {
+                continue;
+            }
+
+            $hostname = $system['hostname'] ?? '';
+            if (empty($hostname)) {
+                continue;
+            }
+
+            // Dedupe by hostname, preferring entries with UUID
+            if (!isset($systemsByHostname[$hostname])) {
+                $systemsByHostname[$hostname] = $system;
+            } elseif (!empty($system['uuid']) && empty($systemsByHostname[$hostname]['uuid'])) {
+                // Replace with this one if it has UUID and current doesn't
+                $systemsByHostname[$hostname] = $system;
+            }
+        }
+
+        $remoteSystems = array_values($systemsByHostname);
+
+        // Sort by IP address numerically
+        usort($remoteSystems, function ($a, $b) {
+            return ip2long($a['address'] ?? '0.0.0.0') - ip2long($b['address'] ?? '0.0.0.0');
+        });
+
+        return $remoteSystems;
+    }
+
+    // -------------------------------------------------------------------------
+    // C++ Plugin API Methods
+    // -------------------------------------------------------------------------
 
     public function getStatus(): array
     {

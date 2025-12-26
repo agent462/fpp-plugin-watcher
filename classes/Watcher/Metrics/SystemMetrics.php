@@ -73,8 +73,8 @@ class SystemMetrics
 
         $cutoffTime = time() - ($hoursBack * 60 * 60);
 
-        // Use shared readJsonLinesFile function
-        $entries = readJsonLinesFile($this->pingMetricsFile, $cutoffTime);
+        // Use FileManager for file reading
+        $entries = FileManager::getInstance()->readJsonLinesFile($this->pingMetricsFile, $cutoffTime);
 
         // Transform to expected format
         $metrics = array_map(function ($entry) {
@@ -439,7 +439,7 @@ class SystemMetrics
         }
 
         // Sort by timestamp
-        sortByTimestamp($formattedData);
+        usort($formattedData, fn($a, $b) => ($a['timestamp'] ?? 0) - ($b['timestamp'] ?? 0));
 
         return [
             'success' => true,
