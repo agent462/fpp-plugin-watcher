@@ -313,7 +313,7 @@ class NetworkAdapter
     {
         return defined('WATCHERRESETSTATEFILE')
             ? WATCHERRESETSTATEFILE
-            : '/home/fpp/media/plugin-data/fpp-plugin-watcher/connectivity/reset-state.json';
+            : '/home/fpp/media/plugindata/fpp-plugin-watcher/connectivity/reset-state.json';
     }
 
     // -------------------------------------------------------------------------

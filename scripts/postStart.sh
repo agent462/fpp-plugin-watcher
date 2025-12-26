@@ -5,7 +5,7 @@
 
 PLUGIN_DIR="/home/fpp/media/plugins/fpp-plugin-watcher"
 CONFIG_FILE="/home/fpp/media/config/plugin.fpp-plugin-watcher"
-DATA_DIR="/home/fpp/media/plugin-data/fpp-plugin-watcher"
+DATA_DIR="/home/fpp/media/plugindata/fpp-plugin-watcher"
 
 # Create data directories for metrics storage
 echo "Watcher: Ensuring data directories exist..."

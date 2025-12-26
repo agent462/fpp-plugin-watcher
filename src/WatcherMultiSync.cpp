@@ -55,7 +55,7 @@ public:
     WatcherMultiSyncPlugin()
         : FPPPlugin("fpp-plugin-watcher"),
           m_enabled(false),
-          m_dataDir("/home/fpp/media/plugin-data/fpp-plugin-watcher/multisync/")
+          m_dataDir("/home/fpp/media/plugindata/fpp-plugin-watcher/multisync/")
     {
         LogInfo(VB_PLUGIN, "WatcherMultiSync: Initializing multi-sync monitoring plugin\n");
 

@@ -26,8 +26,8 @@ define("WATCHERLOGFILE", WATCHERLOGDIR."/".WATCHERPLUGINNAME.".log");
 define("WATCHERFPPUSER", 'fpp');
 define("WATCHERFPPGROUP", 'fpp');
 
-// Data directory for metrics storage (plugin-data location)
-define("WATCHERDATADIR", $_watcherSettings->getMediaDirectory()."/plugin-data/".WATCHERPLUGINNAME);
+// Data directory for metrics storage (plugindata location)
+define("WATCHERDATADIR", $_watcherSettings->getMediaDirectory()."/plugindata/".WATCHERPLUGINNAME);
 define("WATCHERPINGDIR", WATCHERDATADIR."/ping");
 define("WATCHERMULTISYNCPINGDIR", WATCHERDATADIR."/multisync-ping");
 define("WATCHERNETWORKQUALITYDIR", WATCHERDATADIR."/network-quality");
@@ -36,7 +36,7 @@ define("WATCHERCONNECTIVITYDIR", WATCHERDATADIR."/connectivity");
 define("WATCHEREFUSEDIR", WATCHERDATADIR."/efuse");
 define("WATCHERCOLLECTDRRDDIR", WATCHERDATADIR."/collectd/rrd");
 
-// Data file paths (now in plugin-data subdirectories)
+// Data file paths (now in plugindata subdirectories)
 define("WATCHERPINGMETRICSFILE", WATCHERPINGDIR."/raw.log");
 define("WATCHERMULTISYNCPINGMETRICSFILE", WATCHERMULTISYNCPINGDIR."/raw.log");
 define("WATCHERRESETSTATEFILE", WATCHERCONNECTIVITYDIR."/reset-state.json");

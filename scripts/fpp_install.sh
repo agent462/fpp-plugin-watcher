@@ -5,6 +5,15 @@ if [ "${EUID}" -ne 0 ]; then
     exit 1
 fi
 
+# Define plugin directory
+PLUGIN_DIR="/home/fpp/media/plugins/fpp-plugin-watcher"
+
+# Run plugin data migration first (plugin-data -> plugindata)
+if [ -f "${PLUGIN_DIR}/scripts/migratePluginData.sh" ]; then
+    echo "Checking for plugin data migration..."
+    bash "${PLUGIN_DIR}/scripts/migratePluginData.sh"
+fi
+
 # fpp-plugin-watcher install script
 packages=(collectd-core rrdtool)
 missing_packages=()
@@ -23,9 +32,6 @@ fi
 # If collectd is enabled, it will start when FPP is started.
 echo "Disabling default collectd service. If collectd is enabled, it will start when FPP is started..."
 sudo systemctl disable --now collectd.service
-
-# Define plugin directory
-PLUGIN_DIR="/home/fpp/media/plugins/fpp-plugin-watcher"
 
 # Compile C++ plugin if Makefile exists
 if [ -f "${PLUGIN_DIR}/Makefile" ]; then
@@ -68,9 +74,9 @@ else
     echo "WARNING: Custom collectd.conf not found at ${PLUGIN_DIR}/config/collectd.conf"
 fi
 
-# Migrate collectd RRD data from old location to new plugin-data location
+# Migrate collectd RRD data from old location to new plugindata location
 OLD_RRD_DIR="/var/lib/collectd/rrd"
-NEW_RRD_DIR="/home/fpp/media/plugin-data/fpp-plugin-watcher/collectd/rrd"
+NEW_RRD_DIR="/home/fpp/media/plugindata/fpp-plugin-watcher/collectd/rrd"
 
 if [ -d "${OLD_RRD_DIR}" ] && [ "$(ls -A ${OLD_RRD_DIR} 2>/dev/null)" ]; then
     # Old data exists
