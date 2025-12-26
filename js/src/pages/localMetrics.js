@@ -321,6 +321,48 @@ const METRIC_DEFS = [
         : { hidden: true };
     },
   },
+  {
+    key: 'apache',
+    canvasId: 'apacheChart',
+    cardId: 'apacheCard',
+    loadingId: 'apacheLoading',
+    url: (h) => `/api/plugin/fpp-plugin-watcher/metrics/apache?hours=${h}`,
+    prepare: (p) => {
+      if (!p?.success || !p.data?.length) return { hidden: true };
+      const hasRequests = p.data.some((d) => d.requests_per_sec !== null);
+      const hasConnections = p.data.some((d) => d.connections !== null);
+      if (!hasRequests && !hasConnections) return { hidden: true };
+      return {
+        datasets: [
+          createDataset('Requests/sec', mapChartData(p, 'requests_per_sec'), 'blue', { fill: false }),
+          createDataset('Connections', mapChartData(p, 'connections'), 'coral', {
+            fill: false,
+            yAxisID: 'y1',
+          }),
+          createDataset('Idle Workers', mapChartData(p, 'idle_workers'), 'teal', {
+            fill: false,
+            yAxisID: 'y1',
+          }),
+        ],
+        opts: {
+          yLabel: 'Requests/sec',
+          beginAtZero: true,
+          yTickFormatter: (v) => v.toFixed(1),
+          tooltipLabel: (c) => c.dataset.label + ': ' + c.parsed.y.toFixed(2),
+          extraScales: {
+            y1: {
+              type: 'linear',
+              display: true,
+              position: 'right',
+              title: { display: true, text: 'Connections / Workers' },
+              grid: { drawOnChartArea: false },
+              beginAtZero: true,
+            },
+          },
+        },
+      };
+    },
+  },
 ];
 
 // =============================================================================

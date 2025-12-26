@@ -171,6 +171,7 @@ function getEndpointsfpppluginwatcher() {
         ['method' => 'GET', 'endpoint' => 'metrics/ping/rollup', 'callback' => 'fpppluginWatcherPingRollup'],
         ['method' => 'GET', 'endpoint' => 'metrics/thermal', 'callback' => 'fpppluginWatcherThermal'],
         ['method' => 'GET', 'endpoint' => 'metrics/wireless', 'callback' => 'fpppluginWatcherWireless'],
+        ['method' => 'GET', 'endpoint' => 'metrics/apache', 'callback' => 'fpppluginWatcherApache'],
         ['method' => 'GET', 'endpoint' => 'metrics/all', 'callback' => 'fpppluginWatcherMetricsAll'],
 
         // Multi-sync ping metrics
@@ -336,6 +337,11 @@ function fpppluginWatcherWireless() {
     return apiSuccess(SystemMetrics::getInstance()->getWirelessMetrics(getHoursParam()));
 }
 
+// GET /api/plugin/fpp-plugin-watcher/metrics/apache
+function fpppluginWatcherApache() {
+    return apiSuccess(SystemMetrics::getInstance()->getApacheMetrics(getHoursParam()));
+}
+
 // GET /api/plugin/fpp-plugin-watcher/metrics/all
 function fpppluginWatcherMetricsAll() {
     $hours = getHoursParam();
@@ -348,6 +354,7 @@ function fpppluginWatcherMetricsAll() {
         'load' => $systemMetrics->getLoadAverageMetrics($hours),
         'thermal' => $systemMetrics->getThermalMetrics($hours),
         'wireless' => $systemMetrics->getWirelessMetrics($hours),
+        'apache' => $systemMetrics->getApacheMetrics($hours),
         'ping' => PingCollector::getInstance()->getMetrics($hours)
     ]);
 }

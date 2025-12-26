@@ -92,6 +92,13 @@ ViewHelpers::renderCSSIncludes(true);
             <div class="chartTitle"><span><i class="fas fa-wifi"></i> Wireless Signal Quality</span></div>
             <canvas id="wirelessChart" class="chartCanvas"></canvas>
         </div>
+
+        <!-- Apache Chart -->
+        <div class="chartCard" id="apacheCard" style="display: none;">
+            <div class="chartLoading" id="apacheLoading"><i class="fas fa-spinner fa-spin"></i><p>Loading Apache data...</p></div>
+            <div class="chartTitle"><span><i class="fas fa-server"></i> Apache Web Server</span></div>
+            <canvas id="apacheChart" class="chartCanvas"></canvas>
+        </div>
     </div>
 
     <?php ViewHelpers::renderRefreshButton(); ?>

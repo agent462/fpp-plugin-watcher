@@ -139,6 +139,7 @@ export function mapChartData(payload, field) {
  * @param {boolean} config.showLegend - Show legend (default: true)
  * @param {boolean} config.animation - Enable animation (default: false)
  * @param {number} config.decimationSamples - Decimation samples (default: 500)
+ * @param {Object} config.extraScales - Additional scales (e.g., y1 for dual axes)
  * @returns {Object} - Chart.js options configuration
  */
 export function buildChartOptions(hours, config = {}) {
@@ -150,7 +151,8 @@ export function buildChartOptions(hours, config = {}) {
     tooltipLabel,
     showLegend = true,
     animation = false,
-    decimationSamples = 500
+    decimationSamples = 500,
+    extraScales = {}
   } = config;
 
   const unit = getTimeUnit(hours);
@@ -215,7 +217,8 @@ export function buildChartOptions(hours, config = {}) {
         ticks: {
           callback: yTickFormatter
         }
-      }
+      },
+      ...extraScales
     }
   };
 }

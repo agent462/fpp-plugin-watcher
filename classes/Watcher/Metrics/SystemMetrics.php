@@ -696,6 +696,56 @@ class SystemMetrics
     }
 
     /**
+     * Fetch Apache web server metrics
+     */
+    public function getApacheMetrics(int $hoursBack = 24): array
+    {
+        $basePath = $this->collectdDir . "/" . self::COLLECTD_HOSTNAME . "/apache-FPP";
+
+        $rrdSources = [
+            ['name' => 'requests', 'file' => "{$basePath}/apache_requests.rrd", 'ds' => 'value'],
+            ['name' => 'bytes', 'file' => "{$basePath}/apache_bytes.rrd", 'ds' => 'value'],
+            ['name' => 'connections', 'file' => "{$basePath}/apache_connections.rrd", 'ds' => 'value'],
+            ['name' => 'idle_workers', 'file' => "{$basePath}/apache_idle_workers.rrd", 'ds' => 'value'],
+        ];
+
+        $result = $this->getBatchedCollectdMetrics($rrdSources, 'AVERAGE', $hoursBack);
+
+        if (!$result['success']) {
+            return $result;
+        }
+
+        $formattedData = [];
+        foreach ($result['data'] as $entry) {
+            $formattedData[] = [
+                'timestamp' => $entry['timestamp'],
+                'requests_per_sec' => isset($entry['requests']) && $entry['requests'] !== null
+                    ? round($entry['requests'], 2)
+                    : null,
+                'bytes_per_sec' => isset($entry['bytes']) && $entry['bytes'] !== null
+                    ? round($entry['bytes'], 2)
+                    : null,
+                'kbytes_per_sec' => isset($entry['bytes']) && $entry['bytes'] !== null
+                    ? round($entry['bytes'] / 1024, 2)
+                    : null,
+                'connections' => isset($entry['connections']) && $entry['connections'] !== null
+                    ? round($entry['connections'], 0)
+                    : null,
+                'idle_workers' => isset($entry['idle_workers']) && $entry['idle_workers'] !== null
+                    ? round($entry['idle_workers'], 0)
+                    : null,
+            ];
+        }
+
+        return [
+            'success' => true,
+            'count' => count($formattedData),
+            'data' => $formattedData,
+            'period' => $hoursBack . 'h'
+        ];
+    }
+
+    /**
      * Fetch wireless metrics for all wireless interfaces
      */
     public function getWirelessMetrics(int $hoursBack = 24): array
