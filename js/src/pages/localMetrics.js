@@ -363,6 +363,39 @@ const METRIC_DEFS = [
       };
     },
   },
+  {
+    key: 'apacheWorkers',
+    canvasId: 'apacheWorkersChart',
+    cardId: 'apacheWorkersCard',
+    loadingId: 'apacheWorkersLoading',
+    url: (h) => `/api/plugin/fpp-plugin-watcher/metrics/apache?hours=${h}`,
+    prepare: (p) => {
+      if (!p?.success || !p.data?.length) return { hidden: true };
+      const hasSb = p.data.some((d) => d.sb_sending !== null || d.sb_waiting !== null);
+      if (!hasSb) return { hidden: true };
+      // Stacked chart: order matters (bottom to top)
+      const workerStates = [
+        { key: 'sb_sending', label: 'Sending', color: 'coral' },
+        { key: 'sb_reading', label: 'Reading', color: 'orange' },
+        { key: 'sb_keepalive', label: 'Keepalive', color: 'yellow' },
+        { key: 'sb_waiting', label: 'Waiting', color: 'teal' },
+        { key: 'sb_open', label: 'Open Slots', color: 'blue' },
+      ];
+      return {
+        datasets: workerStates.map((s) =>
+          createDataset(s.label, mapChartData(p, s.key), s.color, { fill: true })
+        ),
+        opts: {
+          yLabel: 'Workers',
+          beginAtZero: true,
+          yTickFormatter: (v) => v.toFixed(0),
+          tooltipLabel: (c) => c.dataset.label + ': ' + c.parsed.y.toFixed(0),
+        },
+        chartType: 'line',
+        stacked: true,
+      };
+    },
+  },
 ];
 
 // =============================================================================
@@ -375,6 +408,7 @@ async function updateMetric(def, hours) {
 
   try {
     const prepared = def.prepare(await fetchJson(def.url(hours)));
+
     if (!prepared || prepared.hidden) {
       if (def.cardId) {
         const card = document.getElementById(def.cardId);
@@ -385,13 +419,19 @@ async function updateMetric(def, hours) {
         const card = document.getElementById(def.cardId);
         if (card) card.style.display = 'block';
       }
+      const chartOpts = buildChartOptions(hours, prepared.opts);
+      // Handle stacked charts
+      if (prepared.stacked) {
+        chartOpts.scales.y.stacked = true;
+        chartOpts.scales.x.stacked = true;
+      }
       updateOrCreateChart(
         state.charts,
         def.key,
         def.canvasId,
-        'line',
+        prepared.chartType || 'line',
         prepared.datasets,
-        buildChartOptions(hours, prepared.opts)
+        chartOpts
       );
     }
   } catch (e) {

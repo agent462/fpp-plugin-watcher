@@ -99,6 +99,16 @@ ViewHelpers::renderCSSIncludes(true);
             <div class="chartTitle"><span><i class="fas fa-server"></i> Apache Web Server</span></div>
             <canvas id="apacheChart" class="chartCanvas"></canvas>
         </div>
+
+        <!-- Apache Workers Chart -->
+        <div class="chartCard" id="apacheWorkersCard" style="display: none;">
+            <div class="chartLoading" id="apacheWorkersLoading"><i class="fas fa-spinner fa-spin"></i><p>Loading worker data...</p></div>
+            <div class="chartTitle">
+                <span><i class="fas fa-users-cog"></i> Apache Worker States</span>
+                <span class="infoTooltip" title="Shows what Apache workers are doing: Sending/Reading (active work), Keepalive (persistent connections waiting), Waiting (idle, ready for requests), Open (available capacity)."><i class="fas fa-info-circle"></i></span>
+            </div>
+            <canvas id="apacheWorkersChart" class="chartCanvas"></canvas>
+        </div>
     </div>
 
     <?php ViewHelpers::renderRefreshButton(); ?>

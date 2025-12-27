@@ -696,18 +696,30 @@ class SystemMetrics
     }
 
     /**
-     * Fetch Apache web server metrics
+     * Fetch Apache web server metrics including worker scoreboard
      */
     public function getApacheMetrics(int $hoursBack = 24): array
     {
         $basePath = $this->collectdDir . "/" . self::COLLECTD_HOSTNAME . "/apache-FPP";
 
+        // Core metrics
         $rrdSources = [
             ['name' => 'requests', 'file' => "{$basePath}/apache_requests.rrd", 'ds' => 'value'],
             ['name' => 'bytes', 'file' => "{$basePath}/apache_bytes.rrd", 'ds' => 'value'],
             ['name' => 'connections', 'file' => "{$basePath}/apache_connections.rrd", 'ds' => 'value'],
             ['name' => 'idle_workers', 'file' => "{$basePath}/apache_idle_workers.rrd", 'ds' => 'value'],
         ];
+
+        // Scoreboard worker states
+        $scoreboardStates = ['sending', 'reading', 'keepalive', 'waiting', 'starting',
+                            'closing', 'logging', 'dnslookup', 'finishing', 'idle_cleanup', 'open'];
+        foreach ($scoreboardStates as $state) {
+            $rrdSources[] = [
+                'name' => "sb_{$state}",
+                'file' => "{$basePath}/apache_scoreboard-{$state}.rrd",
+                'ds' => 'value'
+            ];
+        }
 
         $result = $this->getBatchedCollectdMetrics($rrdSources, 'AVERAGE', $hoursBack);
 
@@ -717,7 +729,7 @@ class SystemMetrics
 
         $formattedData = [];
         foreach ($result['data'] as $entry) {
-            $formattedData[] = [
+            $dataPoint = [
                 'timestamp' => $entry['timestamp'],
                 'requests_per_sec' => isset($entry['requests']) && $entry['requests'] !== null
                     ? round($entry['requests'], 2)
@@ -735,13 +747,24 @@ class SystemMetrics
                     ? round($entry['idle_workers'], 0)
                     : null,
             ];
+
+            // Add scoreboard states
+            foreach ($scoreboardStates as $state) {
+                $key = "sb_{$state}";
+                $dataPoint[$key] = isset($entry[$key]) && $entry[$key] !== null
+                    ? round($entry[$key], 0)
+                    : null;
+            }
+
+            $formattedData[] = $dataPoint;
         }
 
         return [
             'success' => true,
             'count' => count($formattedData),
             'data' => $formattedData,
-            'period' => $hoursBack . 'h'
+            'period' => $hoursBack . 'h',
+            'scoreboard_states' => $scoreboardStates
         ];
     }
 
