@@ -1,6 +1,5 @@
 <?php
 require_once __DIR__ . '/../classes/autoload.php';
-require_once __DIR__ . '/../classes/Watcher/UI/ViewHelpers.php';
 
 use Watcher\UI\ViewHelpers;
 
