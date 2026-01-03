@@ -352,7 +352,7 @@
     right: 0;
     bottom: 0;
     background: rgba(0,0,0,0.5);
-    display: flex;
+    display: none;  /* Hidden by default - show via JS with style.display = 'flex' */
     align-items: center;
     justify-content: center;
     z-index: 9999;

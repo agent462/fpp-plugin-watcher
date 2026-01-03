@@ -13,8 +13,8 @@ use Watcher\Controllers\NetworkAdapter;
 use Watcher\MultiSync\SyncStatus;
 use Watcher\UI\ViewHelpers;
 
-// Render CSS includes (consistent with other UI pages)
-ViewHelpers::renderCSSIncludes(false);
+// NOTE: CSS is automatically loaded by FPP's plugin.php from the css/ directory
+// No need to call ViewHelpers::renderCSSIncludes() here
 
 $statusMessage = '';
 $statusType = '';
@@ -124,9 +124,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['save_settings'])) {
             'voltageRetentionDays' => $voltageRetentionDays
         ];
 
-        $settings = Settings::getInstance();
+        $watcherSettings = Settings::getInstance();
         foreach ($settingsToSave as $settingName => $settingValue) {
-            $settings->writeSettingToFile($settingName, (string)$settingValue, WATCHERPLUGINNAME);
+            $watcherSettings->writeSettingToFile($settingName, (string)$settingValue, WATCHERPLUGINNAME);
         }
 
         // Configure FPP MQTT settings based on enable/disable state
@@ -138,8 +138,15 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['save_settings'])) {
         // Only set FPP restart flag if settings that require restart have changed
         // (collectd or MQTT changes still need restart; connectivity settings are hot-reloaded)
         if (settingsRequireRestart($oldConfig, $settingsToSave)) {
-            $settings->writeSettingToFile('restartFlag', '1', WATCHERPLUGINNAME);
-            $statusMessage = 'Settings saved! FPP restart required for collectd/MQTT/efuse process changes.';
+            // Use FPP's API to set the global restartFlag (not plugin config)
+            // This triggers the restart banner in FPP's UI
+            ApiClient::getInstance()->put(
+                'http://127.0.0.1/api/settings/restartFlag',
+                '1',
+                5,
+                ['Content-Type: text/plain']
+            );
+            $statusMessage = 'Settings saved! FPP restart required for daemon changes.';
         } else {
             $statusMessage = 'Settings saved! Changes take effect within 60 seconds.';
         }

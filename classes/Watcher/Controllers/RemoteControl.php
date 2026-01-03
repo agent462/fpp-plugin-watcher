@@ -888,7 +888,7 @@ class RemoteControl
             }
         }
 
-        // Second phase: fetch plugin details to check for updates
+        // fetch plugin details to check for updates
         if (!empty($pluginLists)) {
             $handler2 = new CurlMultiHandler(self::TIMEOUT_STANDARD);
             $requestMeta2 = [];
