@@ -89,6 +89,98 @@ export function toggleEfuseOptions() {
 }
 
 // =============================================================================
+// Voltage Storage Calculator
+// =============================================================================
+
+/**
+ * Calculate estimated voltage storage requirements
+ * Storage varies by retention period due to multi-tier rollups
+ */
+export function calculateVoltageStorage(interval, days) {
+  // Raw storage (6 hours retention before rotation)
+  const rawSamplesPerHour = 3600 / interval;
+  const rawSamples = rawSamplesPerHour * 6;  // 6 hours of raw data
+  const rawEntrySize = 60;  // ~60 bytes per raw entry
+  const rawStorage = rawSamples * rawEntrySize;
+
+  const daysInSeconds = days * 86400;
+  const rollupEntrySize = 100;  // ~100 bytes per rollup entry
+
+  // Tier storage based on retention (mirrors VoltageCollector::getTiers)
+  // 1min tier: 6 hours max
+  const tier1minBuckets = Math.min(360, Math.floor(daysInSeconds / 60));
+
+  // 5min tier: added if retention > 1 day, 48 hours max
+  const tier5minBuckets = days > 1 ? Math.min(576, Math.floor(daysInSeconds / 300)) : 0;
+
+  // 30min tier: added if retention > 3 days, 7 days max
+  const tier30minBuckets = days > 3 ? Math.min(336, Math.floor(daysInSeconds / 1800)) : 0;
+
+  // 2hour tier: added if retention > 7 days, full retention
+  const tier2hourBuckets = days > 7 ? Math.floor(daysInSeconds / 7200) : 0;
+
+  const rollupStorage = (tier1minBuckets + tier5minBuckets + tier30minBuckets + tier2hourBuckets) * rollupEntrySize;
+
+  // State file is minimal (~150 bytes)
+  const stateStorage = 150;
+
+  return rawStorage + rollupStorage + stateStorage;
+}
+
+/**
+ * Update voltage storage estimate display
+ */
+export function updateVoltageStorageEstimate() {
+  const intervalSelect = document.getElementById('voltageCollectionInterval');
+  const daysSelect = document.getElementById('voltageRetentionDays');
+  const container = document.getElementById('voltageStorageEstimate');
+
+  if (!intervalSelect || !daysSelect || !container) return;
+
+  const interval = parseInt(intervalSelect.value);
+  const days = parseInt(daysSelect.value);
+  const bytes = calculateVoltageStorage(interval, days);
+
+  const samplesPerMinute = Math.floor(60 / interval);
+  const readingsPerDay = Math.floor(60 / interval) * 60 * 24;
+
+  // Determine which tiers will be used
+  let tierInfo = '1min';
+  if (days > 1) tierInfo += ', 5min';
+  if (days > 3) tierInfo += ', 30min';
+  if (days > 7) tierInfo += ', 2hour';
+
+  let html = '<div class="storageEstimateTitle"><i class="fas fa-hdd"></i> Storage Estimate</div>';
+  html += '<div class="storageEstimateGrid">';
+  html += `<div class="storageEstimateItem">
+    <span class="storageEstimatePorts">${days} day${days > 1 ? 's' : ''} data</span>
+    <span class="storageEstimateSize">${formatBytes(bytes)}</span>
+  </div>`;
+  html += `<div class="storageEstimateItem">
+    <span class="storageEstimatePorts">${samplesPerMinute} samples/min</span>
+    <span class="storageEstimateSize">${readingsPerDay.toLocaleString()} readings/day</span>
+  </div>`;
+  html += '</div>';
+  html += `<div class="storageEstimateNote" style="font-size: 0.8rem; color: #6c757d; margin-top: 0.5rem;">Rollup tiers: ${tierInfo}</div>`;
+
+  container.innerHTML = html;
+}
+
+/**
+ * Toggle voltage options visibility
+ */
+export function toggleVoltageOptions() {
+  const checkbox = document.getElementById('voltageMonitorEnabled');
+  const container = document.getElementById('voltageOptionsContainer');
+  if (checkbox && container) {
+    container.style.display = checkbox.checked ? '' : 'none';
+    if (checkbox.checked) {
+      updateVoltageStorageEstimate();
+    }
+  }
+}
+
+// =============================================================================
 // Panel Toggle
 // =============================================================================
 
@@ -622,6 +714,9 @@ function initConfig() {
   // Initialize eFuse storage estimate
   updateEfuseStorageEstimate();
 
+  // Initialize voltage storage estimate
+  updateVoltageStorageEstimate();
+
   // Set up form validation
   const form = document.getElementById('watcherSettingsForm');
   if (form) {
@@ -669,6 +764,11 @@ export const config = {
   calculateEfuseStorage,
   updateEfuseStorageEstimate,
   toggleEfuseOptions,
+
+  // Voltage storage calculator
+  calculateVoltageStorage,
+  updateVoltageStorageEstimate,
+  toggleVoltageOptions,
 
   // Panel toggle
   watcherTogglePanel,

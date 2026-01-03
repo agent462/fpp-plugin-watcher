@@ -44,6 +44,7 @@ let state = {
 // =============================================================================
 
 const getSelectedHours = () => document.getElementById('timeRange')?.value || '12';
+const getVoltageHours = () => document.getElementById('voltageTimeRange')?.value || '12';
 const getDefaultAdapter = () => state.config?.defaultAdapter || 'default';
 const getSelectedInterface = () =>
   document.getElementById('interfaceSelect')?.value || getDefaultAdapter();
@@ -288,6 +289,166 @@ const METRIC_DEFS = [
     },
   },
   {
+    key: 'voltage',
+    canvasId: 'voltageChart',
+    cardId: 'voltageCard',
+    loadingId: 'voltageLoading',
+    statsBarId: 'voltageStatsBar',
+    getHours: getVoltageHours, // Use voltage-specific time selector
+    url: () => `/api/plugin/fpp-plugin-watcher/voltage/history?hours=${getVoltageHours()}`,
+    prepare: (p) => {
+      // Check if data exists - if not, hide the card
+      if (!p?.success || !p.data?.length) {
+        hideElement('voltageCard');
+        hideElement('voltageStatsBar');
+        return { hidden: true };
+      }
+
+      // Show card and stats bar (stats bar needs flex for horizontal layout)
+      showElement('voltageCard');
+      const voltageStatsBar = document.getElementById('voltageStatsBar');
+      if (voltageStatsBar) voltageStatsBar.style.display = 'flex';
+
+      // Get available rails and labels from response
+      const rails = p.rails || [];
+      const labels = p.labels || {};
+
+      // Color mapping for different voltage rails
+      const railColors = {
+        // Pi 5 PMIC rails (13 rails)
+        EXT5V_V: 'green',
+        VDD_CORE_V: 'coral',
+        HDMI_V: 'orange',
+        '3V7_WL_SW_V': 'pink',
+        '3V3_SYS_V': 'blue',
+        '3V3_DAC_V': 'indigo',
+        '3V3_ADC_V': 'cyan',
+        '1V8_SYS_V': 'purple',
+        '1V1_SYS_V': 'magenta',
+        DDR_VDD2_V: 'teal',
+        DDR_VDDQ_V: 'lime',
+        '0V8_SW_V': 'yellow',
+        '0V8_AON_V': 'brown',
+        // Legacy rails (Pi 4 and earlier)
+        core: 'coral',
+        sdram_c: 'blue',
+        sdram_i: 'purple',
+        sdram_p: 'teal',
+      };
+
+      // Stats bar element mapping
+      const statsMapping = {
+        EXT5V_V: 'voltage5V',
+        VDD_CORE_V: 'voltageCore',
+        '3V3_SYS_V': 'voltage3V3',
+        '1V8_SYS_V': 'voltage1V8',
+        // Legacy mapping
+        core: 'voltageCore',
+        sdram_c: 'voltage3V3',
+        sdram_i: 'voltage1V8',
+      };
+
+      // Helper to update stat element
+      const updateStat = (id, val) => {
+        const el = document.getElementById(id);
+        if (el) el.textContent = val;
+      };
+
+      // Collect latest values for stats bar
+      const lastEntry = p.data.at(-1);
+      if (lastEntry) {
+        const voltages = lastEntry.voltages || {};
+        for (const [rail, elementId] of Object.entries(statsMapping)) {
+          if (voltages[rail] !== undefined) {
+            const value = typeof voltages[rail] === 'object' ? voltages[rail].avg : voltages[rail];
+            updateStat(elementId, value.toFixed(3) + ' V');
+          }
+        }
+      }
+
+      // Check for 5V input voltage drop (critical for power supply monitoring)
+      // Only monitor EXT5V_V rail (Pi 5) - core voltage fluctuations are normal CPU behavior
+      const statusBar = document.getElementById('voltageStatusBar');
+      if (statusBar) {
+        const ext5vValues = p.data
+          .map((d) => {
+            // Only use EXT5V_V rail - do NOT fall back to core (different voltage level)
+            const v = d.voltages?.EXT5V_V;
+            if (v === undefined) return null;
+            return typeof v === 'object' ? v.avg : v;
+          })
+          .filter((v) => v != null);
+
+        // Only show warning if we have EXT5V_V data (Pi 5 with PMIC)
+        if (ext5vValues.length >= 10) {
+          const avg = ext5vValues.reduce((a, b) => a + b) / ext5vValues.length;
+          const min = Math.min(...ext5vValues);
+          const dropPercent = ((avg - min) / avg) * 100;
+
+          if (dropPercent > 3) {
+            // 3% drop threshold for 5V rail
+            statusBar.style.display = 'block';
+            statusBar.innerHTML = `<div style="display: flex; align-items: center; gap: 0.5rem;">
+              <i class="fas fa-exclamation-triangle" style="color: #dc3545;"></i>
+              <span><strong>Power Supply Issue:</strong> ${dropPercent.toFixed(1)}% voltage drop on 5V input (${min.toFixed(2)}V min vs ${avg.toFixed(2)}V avg). Check your power supply.</span>
+            </div>`;
+          } else {
+            statusBar.style.display = 'none';
+          }
+        } else {
+          // No EXT5V_V data available (legacy Pi or insufficient data) - hide warning
+          statusBar.style.display = 'none';
+        }
+      }
+
+      // Create a dataset for each voltage rail
+      const datasets = [];
+      let globalMin = Infinity;
+      let globalMax = -Infinity;
+
+      for (const rail of rails) {
+        const chartData = p.data
+          .map((d) => {
+            const v = d.voltages?.[rail];
+            if (v === undefined) return null;
+            const value = typeof v === 'object' ? v.avg : v;
+            return { x: d.timestamp * 1000, y: value };
+          })
+          .filter((d) => d !== null);
+
+        if (chartData.length === 0) continue;
+
+        // Track global min/max for Y-axis
+        const values = chartData.map((d) => d.y);
+        globalMin = Math.min(globalMin, ...values);
+        globalMax = Math.max(globalMax, ...values);
+
+        const color = railColors[rail] || 'yellow';
+        const label = labels[rail] || rail;
+        datasets.push(createDataset(label, chartData, color, { fill: false }));
+      }
+
+      if (datasets.length === 0) return { hidden: true };
+
+      // Dynamic Y-axis with padding
+      const range = globalMax - globalMin;
+      const padding = Math.max(range * 0.1, 0.1); // At least 0.1V padding
+      const yMin = Math.floor((globalMin - padding) * 10) / 10; // Round to 0.1V
+      const yMax = Math.ceil((globalMax + padding) * 10) / 10;
+
+      return {
+        datasets,
+        opts: {
+          yLabel: 'Voltage (V)',
+          yMin: Math.max(0, yMin),
+          yMax: yMax,
+          yTickFormatter: (v) => v.toFixed(1) + ' V',
+          tooltipLabel: (c) => c.dataset.label + ': ' + c.parsed.y.toFixed(3) + ' V',
+        },
+      };
+    },
+  },
+  {
     key: 'wireless',
     canvasId: 'wirelessChart',
     cardId: 'wirelessCard',
@@ -406,6 +567,9 @@ async function updateMetric(def, hours) {
   const isInitialLoad = !state.charts[def.key];
   if (isInitialLoad) setLoading(def.loadingId, true);
 
+  // Use metric-specific hours if defined, otherwise use passed hours
+  const metricHours = def.getHours ? parseFloat(def.getHours()) : hours;
+
   try {
     const prepared = def.prepare(await fetchJson(def.url(hours)));
 
@@ -419,7 +583,7 @@ async function updateMetric(def, hours) {
         const card = document.getElementById(def.cardId);
         if (card) card.style.display = 'block';
       }
-      const chartOpts = buildChartOptions(hours, prepared.opts);
+      const chartOpts = buildChartOptions(metricHours, prepared.opts);
       // Handle stacked charts
       if (prepared.stacked) {
         chartOpts.scales.y.stacked = true;

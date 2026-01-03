@@ -1,7 +1,6 @@
 /**
  * Core utility functions
  *
- * Shared utilities extracted from commonUI.js:
  * - HTML escaping
  * - DOM helpers (showElement, hideElement, setLoading)
  * - Formatters (formatBytes, formatLatency, formatPercent, formatDuration)

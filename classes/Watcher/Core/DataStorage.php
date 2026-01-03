@@ -99,6 +99,11 @@ class DataStorage
                 'dir' => defined('WATCHEREFUSEDIR') ? WATCHEREFUSEDIR : '',
                 'description' => 'eFuse current monitoring history and rollups',
                 'playerOnly' => false
+            ],
+            'voltage' => [
+                'name' => 'Voltage Metrics',
+                'dir' => defined('WATCHERVOLTAGEDIR') ? WATCHERVOLTAGEDIR : '',
+                'description' => 'Raspberry Pi voltage monitoring history'
             ]
         ];
     }

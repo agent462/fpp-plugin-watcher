@@ -49,6 +49,10 @@ define("WATCHEREFUSEROLLUPFILE", WATCHEREFUSEDIR."/1min.log");
 define("WATCHEREFUSEROLLUPSTATEFILE", WATCHEREFUSEDIR."/rollup-state.json");
 define("WATCHEREFUSECONFIGFILE", WATCHEREFUSEDIR."/config.json");
 
+// Voltage data directories
+define("WATCHERVOLTAGEDIR", WATCHERDATADIR."/voltage");
+define("WATCHERVOLTAGERAWFILE", WATCHERVOLTAGEDIR."/raw.log");
+
 // Default plugin settings
 define("WATCHERDEFAULTSETTINGS",
     array(
@@ -71,7 +75,10 @@ define("WATCHERDEFAULTSETTINGS",
         'issueCheckOutputHostsNotInSync' => true,
         'efuseMonitorEnabled' => true,
         'efuseCollectionInterval' => 5,   // seconds (1-60)
-        'efuseRetentionDays' => 14)        // days (1-90)
+        'efuseRetentionDays' => 14,        // days (1-90)
+        'voltageMonitorEnabled' => false,  // Raspberry Pi voltage monitoring
+        'voltageCollectionInterval' => 3,  // seconds (1-10)
+        'voltageRetentionDays' => 1)       // days (1-30)
         );
 
 // Settings that require FPP restart when changed
@@ -96,7 +103,10 @@ define("WATCHERSETTINGSRESTARTREQUIRED",
         'issueCheckOutputHostsNotInSync' => false, // UI feature only
         'efuseMonitorEnabled' => true,        // Daemon started/stopped in postStart.sh
         'efuseCollectionInterval' => false,   // Hot-reloadable
-        'efuseRetentionDays' => false         // Hot-reloadable
+        'efuseRetentionDays' => false,        // Hot-reloadable
+        'voltageMonitorEnabled' => true,      // Daemon started/stopped in postStart.sh
+        'voltageCollectionInterval' => false, // Hot-reloadable
+        'voltageRetentionDays' => false       // Hot-reloadable
     ));
 
 // eFuse collector constants
@@ -112,12 +122,17 @@ define('EFUSE_ERROR_LOG_INTERVAL', 60);     // Only log errors every N seconds t
 // Log file for eFuse collector
 define('EFUSE_LOG_FILE', WATCHERLOGDIR . '/fpp-plugin-watcher-efuse.log');
 
+// Voltage collector constants
+define('VOLTAGE_COLLECTION_INTERVAL', 3);     // 3-second collection interval
+define('VOLTAGE_ROLLUP_INTERVAL', 60);        // Process rollups every 60 seconds
+define('VOLTAGE_CONFIG_CHECK_INTERVAL', 60);  // Check config every 60 seconds
+define('VOLTAGE_MAX_BACKOFF_SECONDS', 60);    // Max backoff when errors occur
+define('VOLTAGE_ERROR_LOG_INTERVAL', 60);     // Only log errors every N seconds
+define('VOLTAGE_LOG_FILE', WATCHERLOGDIR . '/fpp-plugin-watcher-voltage.log');
+
 // Ensure data directories exist
 DataStorage::getInstance()->ensureDirectories();
 
-// -------------------------------------------------------------------------
-// Functions removed in Phase 3 migration (2024-12-23):
-// -------------------------------------------------------------------------
 // Network detection (migrated to Controllers\NetworkAdapter):
 // - fetchWatcherNetworkInterfaces() - Use NetworkAdapter::getInstance()->getAllInterfaces()
 // - detectActiveNetworkInterface() - Use NetworkAdapter::getInstance()->detectActiveInterface()
@@ -137,12 +152,10 @@ DataStorage::getInstance()->ensureDirectories();
 // - getMultiSyncRemoteSystems() - Use SyncStatus::getInstance()->getRemoteSystems()
 //
 // -------------------------------------------------------------------------
-// Functions removed in Phase 1 migration:
 // - sortByTimestamp() - Inline in FileManager::readJsonLinesFile()
 // - readJsonLinesFile() - Use FileManager::getInstance()->readJsonLinesFile()
 // - fetchJsonUrl() - Use ApiClient::getInstance()->get()
 //
-// Functions removed in Phase 2 migration:
 // - ensureDataDirectories() - Use DataStorage::getInstance()->ensureDirectories()
 // - getDataCategories() - Use DataStorage::getInstance()->getCategories()
 // - getDataDirectoryStats() - Use DataStorage::getInstance()->getStats()

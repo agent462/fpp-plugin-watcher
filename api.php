@@ -33,10 +33,12 @@ use Watcher\Metrics\PingCollector;
 use Watcher\Metrics\MultiSyncPingCollector;
 use Watcher\Metrics\NetworkQualityCollector;
 use Watcher\Metrics\EfuseCollector;
+use Watcher\Metrics\VoltageCollector;
 use Watcher\Metrics\SystemMetrics;
 use Watcher\Controllers\FalconController;
 use Watcher\Controllers\EfuseHardware;
 use Watcher\Controllers\EfuseOutputConfig;
+use Watcher\Controllers\VoltageHardware;
 use Watcher\Controllers\RemoteControl;
 use Watcher\Controllers\NetworkAdapter;
 use Watcher\MultiSync\SyncStatus;
@@ -194,6 +196,11 @@ function getEndpointsfpppluginwatcher() {
         ['method' => 'POST', 'endpoint' => 'efuse/port/reset', 'callback' => 'fpppluginWatcherEfusePortReset'],
         ['method' => 'POST', 'endpoint' => 'efuse/ports/master', 'callback' => 'fpppluginWatcherEfusePortsMaster'],
         ['method' => 'POST', 'endpoint' => 'efuse/ports/reset-all', 'callback' => 'fpppluginWatcherEfusePortsResetAll'],
+
+        // Voltage monitoring (Raspberry Pi)
+        ['method' => 'GET', 'endpoint' => 'voltage/supported', 'callback' => 'fpppluginWatcherVoltageSupported'],
+        ['method' => 'GET', 'endpoint' => 'voltage/current', 'callback' => 'fpppluginWatcherVoltageCurrent'],
+        ['method' => 'GET', 'endpoint' => 'voltage/history', 'callback' => 'fpppluginWatcherVoltageHistory'],
 
         // Falcon controller
         ['method' => 'GET', 'endpoint' => 'falcon/status', 'callback' => 'fpppluginWatcherFalconStatus'],
@@ -1077,4 +1084,40 @@ function fpppluginWatcherEfusePortsResetAll() {
 
     $result = EfuseHardware::getInstance()->resetAllTrippedFuses();
     return apiSuccess($result);
+}
+
+// --- Voltage Monitoring Endpoints ---
+
+// GET /api/plugin/fpp-plugin-watcher/voltage/supported
+function fpppluginWatcherVoltageSupported() {
+    $hw = VoltageHardware::getInstance();
+    $hardware = $hw->detectHardware();
+    return apiSuccess([
+        'supported' => $hardware['supported'],
+        'type' => $hardware['type'] ?? null,
+        'method' => $hardware['method'] ?? null,
+        'hasPmic' => $hardware['hasPmic'] ?? false,
+        'rails' => $hardware['availableRails'] ?? [],
+        'labels' => $hardware['supported'] ? $hw->getRailLabels() : []
+    ]);
+}
+
+// GET /api/plugin/fpp-plugin-watcher/voltage/current
+function fpppluginWatcherVoltageCurrent() {
+    $hardware = VoltageHardware::getInstance()->detectHardware();
+    if (!$hardware['supported']) {
+        return apiError('Voltage monitoring not supported on this platform', 404);
+    }
+    return apiSuccess(VoltageCollector::getInstance()->getCurrentStatus());
+}
+
+// GET /api/plugin/fpp-plugin-watcher/voltage/history?hours=24
+function fpppluginWatcherVoltageHistory() {
+    $hardware = VoltageHardware::getInstance()->detectHardware();
+    if (!$hardware['supported']) {
+        return apiError('Voltage monitoring not supported on this platform', 404);
+    }
+    // Support fractional hours (e.g., 0.5 for 30 minutes)
+    $hours = isset($_GET['hours']) ? max(0.25, min(24, floatval($_GET['hours']))) : 24;
+    return apiSuccess(VoltageCollector::getInstance()->getMetricsWithFractionalHours($hours));
 }

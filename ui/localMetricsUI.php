@@ -11,7 +11,10 @@ $defaultAdapter = $configuredAdapter === 'default' ? NetworkAdapter::getInstance
 
 ViewHelpers::renderCSSIncludes(true);
 ?>
-<script>window.watcherConfig = { defaultAdapter: <?php echo json_encode($defaultAdapter, JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT); ?> };</script>
+<script>window.watcherConfig = {
+    defaultAdapter: <?php echo json_encode($defaultAdapter, JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT); ?>,
+    voltageRetentionDays: <?php echo intval($config['voltageRetentionDays'] ?? 1); ?>
+};</script>
 
 <div class="metricsContainer" data-watcher-page="localMetricsUI">
     <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1.5rem;">
@@ -83,6 +86,52 @@ ViewHelpers::renderCSSIncludes(true);
             <div class="chartTitle"><span><i class="fas fa-thermometer-half"></i> Temperature (Thermal Zones)</span></div>
             <div id="temperatureStatusBar" class="systemStatusBar" style="display: none; background: #f8f9fa; padding: 1rem; border-radius: 6px; margin-bottom: 1.5rem; border: 1px solid #e9ecef;"></div>
             <canvas id="thermalChart" class="chartCanvas"></canvas>
+        </div>
+
+        <!-- Voltage Stats Bar (Raspberry Pi only) -->
+        <div class="statsBar" id="voltageStatsBar" style="display: none;">
+            <div class="statItem"><div class="statLabel" id="voltage5VLabel">5V Input</div><div class="statValue" id="voltage5V">-- V</div></div>
+            <div class="statItem"><div class="statLabel" id="voltageCoreLabel">Core</div><div class="statValue" id="voltageCore">-- V</div></div>
+            <div class="statItem"><div class="statLabel" id="voltage3V3Label">3.3V</div><div class="statValue" id="voltage3V3">-- V</div></div>
+            <div class="statItem"><div class="statLabel" id="voltage1V8Label">1.8V</div><div class="statValue" id="voltage1V8">-- V</div></div>
+        </div>
+
+        <!-- Voltage Chart (Raspberry Pi only) -->
+        <div class="chartCard" id="voltageCard" style="display: none;">
+            <div class="chartLoading" id="voltageLoading"><i class="fas fa-spinner fa-spin"></i><p>Loading voltage data...</p></div>
+            <div class="chartTitle">
+                <span><i class="fas fa-bolt"></i> Voltage Rails</span>
+                <span class="infoTooltip" title="Raspberry Pi voltage rails. Monitors power supply (5V), core, and system voltages. Significant drops may indicate power supply issues."><i class="fas fa-info-circle"></i></span>
+            </div>
+            <div class="chartControls">
+                <div class="controlGroup">
+                    <label for="voltageTimeRange">Time Range:</label>
+                    <select id="voltageTimeRange" onchange="page.refreshMetric('voltage');">
+                        <option value="0.5">30 minutes</option>
+                        <option value="1">1 hour</option>
+                        <option value="2">2 hours</option>
+                        <option value="4">4 hours</option>
+                        <option value="8">8 hours</option>
+                        <option value="12" selected>12 hours</option>
+                        <option value="24">24 hours</option>
+                        <?php if (($config['voltageRetentionDays'] ?? 1) >= 3): ?>
+                        <option value="48">2 days</option>
+                        <option value="72">3 days</option>
+                        <?php endif; ?>
+                        <?php if (($config['voltageRetentionDays'] ?? 1) >= 7): ?>
+                        <option value="168">7 days</option>
+                        <?php endif; ?>
+                        <?php if (($config['voltageRetentionDays'] ?? 1) >= 14): ?>
+                        <option value="336">14 days</option>
+                        <?php endif; ?>
+                        <?php if (($config['voltageRetentionDays'] ?? 1) >= 30): ?>
+                        <option value="720">30 days</option>
+                        <?php endif; ?>
+                    </select>
+                </div>
+            </div>
+            <div id="voltageStatusBar" class="systemStatusBar" style="display: none; background: #f8f9fa; padding: 1rem; border-radius: 6px; margin-bottom: 1.5rem; border: 1px solid #e9ecef;"></div>
+            <canvas id="voltageChart" class="chartCanvas"></canvas>
         </div>
 
         <!-- Wireless Chart -->

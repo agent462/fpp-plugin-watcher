@@ -83,6 +83,7 @@ function prepareConfig($config) {
     normalizeBoolean($config, 'issueCheckOutputs', true);
     normalizeBoolean($config, 'issueCheckSequences', true);
     normalizeBoolean($config, 'efuseMonitorEnabled', false);
+    normalizeBoolean($config, 'voltageMonitorEnabled', false);
 
     // Parse retention days as integer
     if (isset($config['mqttRetentionDays'])) {
@@ -103,6 +104,20 @@ function prepareConfig($config) {
         $config['efuseRetentionDays'] = max(1, min(90, intval($config['efuseRetentionDays'])));
     } else {
         $config['efuseRetentionDays'] = WATCHERDEFAULTSETTINGS['efuseRetentionDays'];
+    }
+
+    // Parse voltage collection interval (1-10 seconds)
+    if (isset($config['voltageCollectionInterval'])) {
+        $config['voltageCollectionInterval'] = max(1, min(10, intval($config['voltageCollectionInterval'])));
+    } else {
+        $config['voltageCollectionInterval'] = WATCHERDEFAULTSETTINGS['voltageCollectionInterval'];
+    }
+
+    // Parse voltage retention days (1-30 days)
+    if (isset($config['voltageRetentionDays'])) {
+        $config['voltageRetentionDays'] = max(1, min(30, intval($config['voltageRetentionDays'])));
+    } else {
+        $config['voltageRetentionDays'] = WATCHERDEFAULTSETTINGS['voltageRetentionDays'];
     }
 
     // Process testHosts into an array

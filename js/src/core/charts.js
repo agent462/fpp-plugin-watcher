@@ -1,7 +1,6 @@
 /**
  * Chart.js wrappers and helpers
  *
- * Shared chart utilities extracted from commonUI.js:
  * - CHART_COLORS - Color palette for consistent styling
  * - getChartColor - Get color by index
  * - createDataset - Create Chart.js dataset
@@ -60,15 +59,28 @@ export function getChartColor(index) {
 // =============================================================================
 
 /**
- * Get appropriate time unit based on time range
+ * Get appropriate time unit and step size based on time range
+ * @param {number} hours - Number of hours in range
+ * @returns {{unit: string, stepSize: number}} - Time unit and step size
+ */
+export function getTimeConfig(hours) {
+  if (hours <= 0.5) return { unit: 'minute', stepSize: 5 };      // 30 min: every 5 min
+  if (hours <= 1) return { unit: 'minute', stepSize: 10 };      // 1 hour: every 10 min
+  if (hours <= 2) return { unit: 'minute', stepSize: 15 };      // 2 hours: every 15 min
+  if (hours <= 4) return { unit: 'minute', stepSize: 30 };      // 4 hours: every 30 min
+  if (hours <= 12) return { unit: 'hour', stepSize: 1 };        // 12 hours: every hour
+  if (hours <= 24) return { unit: 'hour', stepSize: 2 };        // 24 hours: every 2 hours
+  if (hours <= 168) return { unit: 'day', stepSize: 1 };        // 1 week: every day
+  return { unit: 'week', stepSize: 1 };
+}
+
+/**
+ * Get appropriate time unit based on time range (legacy compatibility)
  * @param {number} hours - Number of hours in range
  * @returns {string} - Time unit (minute, hour, day, week)
  */
 export function getTimeUnit(hours) {
-  if (hours <= 1) return 'minute';
-  if (hours <= 24) return 'hour';
-  if (hours <= 168) return 'day';
-  return 'week';
+  return getTimeConfig(hours).unit;
 }
 
 /**
@@ -146,6 +158,7 @@ export function buildChartOptions(hours, config = {}) {
   const {
     yLabel = 'Value',
     beginAtZero = false,
+    yMin,
     yMax,
     yTickFormatter = v => v,
     tooltipLabel,
@@ -155,8 +168,13 @@ export function buildChartOptions(hours, config = {}) {
     extraScales = {}
   } = config;
 
-  const unit = getTimeUnit(hours);
+  const timeConfig = getTimeConfig(hours);
   const formats = getTimeFormats();
+
+  // Calculate explicit time bounds to help Chart.js generate proper tick labels
+  const now = Date.now();
+  const xMin = now - (hours * 3600 * 1000);
+  const xMax = now;
 
   return {
     responsive: true,
@@ -187,10 +205,19 @@ export function buildChartOptions(hours, config = {}) {
     scales: {
       x: {
         type: 'time',
+        min: xMin,
+        max: xMax,
         time: {
-          unit,
+          unit: timeConfig.unit,
+          stepSize: timeConfig.stepSize,
           displayFormats: formats,
           tooltipFormat: 'MMM d, yyyy HH:mm:ss'
+        },
+        ticks: {
+          maxTicksLimit: 8,
+          maxRotation: 45,
+          minRotation: 0,
+          autoSkip: true
         },
         title: {
           display: true,
@@ -204,6 +231,7 @@ export function buildChartOptions(hours, config = {}) {
       },
       y: {
         beginAtZero,
+        ...(yMin !== undefined && { min: yMin }),
         ...(yMax !== undefined && { max: yMax }),
         title: {
           display: true,
@@ -264,6 +292,25 @@ export function updateOrCreateChart(chartsMap, key, canvasId, type, datasets, op
         });
         // Remove extra datasets if there are fewer now
         chart.data.datasets.length = datasets.length;
+
+        // Update scale options (critical for time range changes)
+        if (options.scales) {
+          if (options.scales.x) {
+            // Update x-axis bounds and time configuration
+            chart.options.scales.x.min = options.scales.x.min;
+            chart.options.scales.x.max = options.scales.x.max;
+            if (options.scales.x.time) {
+              chart.options.scales.x.time.unit = options.scales.x.time.unit;
+              chart.options.scales.x.time.stepSize = options.scales.x.time.stepSize;
+            }
+          }
+          if (options.scales.y) {
+            // Update y-axis bounds if specified
+            if (options.scales.y.min !== undefined) chart.options.scales.y.min = options.scales.y.min;
+            if (options.scales.y.max !== undefined) chart.options.scales.y.max = options.scales.y.max;
+          }
+        }
+
         chart.update('none');
         return chart;
       }

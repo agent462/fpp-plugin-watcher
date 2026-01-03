@@ -9,7 +9,7 @@ DATA_DIR="/home/fpp/media/plugindata/fpp-plugin-watcher"
 
 # Create data directories for metrics storage
 echo "Watcher: Ensuring data directories exist..."
-mkdir -p "$DATA_DIR/ping" "$DATA_DIR/multisync-ping" "$DATA_DIR/network-quality" "$DATA_DIR/mqtt" "$DATA_DIR/connectivity" "$DATA_DIR/efuse"
+mkdir -p "$DATA_DIR/ping" "$DATA_DIR/multisync-ping" "$DATA_DIR/network-quality" "$DATA_DIR/mqtt" "$DATA_DIR/connectivity" "$DATA_DIR/efuse" "$DATA_DIR/voltage"
 chown -R fpp:fpp "$DATA_DIR"
 
 if [ -f "$CONFIG_FILE" ]; then
@@ -100,4 +100,13 @@ if [ "$EFUSE_ENABLED" = "true" ] || [ "$EFUSE_ENABLED" = "1" ] || [ "$EFUSE_ENAB
     /usr/bin/php /home/fpp/media/plugins/fpp-plugin-watcher/efuseCollector.php &
 else
     echo "Watcher: eFuse Monitor is disabled"
+fi
+
+# Start Voltage Collector if enabled (collector checks hardware on startup and exits if unsupported)
+VOLTAGE_ENABLED=$(grep -E "^voltageMonitorEnabled" "$CONFIG_FILE" | cut -d'=' -f2 | tr -d ' \t\r\n"')
+if [ "$VOLTAGE_ENABLED" = "true" ] || [ "$VOLTAGE_ENABLED" = "1" ] || [ "$VOLTAGE_ENABLED" = "yes" ]; then
+    echo "Watcher: Voltage Monitor is enabled, starting collector..."
+    /usr/bin/php /home/fpp/media/plugins/fpp-plugin-watcher/voltageCollector.php &
+else
+    echo "Watcher: Voltage Monitor is disabled"
 fi

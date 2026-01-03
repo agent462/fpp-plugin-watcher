@@ -8,6 +8,7 @@ use Watcher\Core\Settings;
 use Watcher\Core\Logger;
 use Watcher\Http\ApiClient;
 use Watcher\Controllers\EfuseHardware;
+use Watcher\Controllers\VoltageHardware;
 use Watcher\Controllers\NetworkAdapter;
 use Watcher\MultiSync\SyncStatus;
 use Watcher\UI\ViewHelpers;
@@ -42,6 +43,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['save_settings'])) {
     $efuseMonitorEnabled = isset($_POST['efuseMonitorEnabled']) ? 'true' : 'false';
     $efuseCollectionInterval = intval($_POST['efuseCollectionInterval'] ?? 5);
     $efuseRetentionDays = intval($_POST['efuseRetentionDays'] ?? 7);
+    $voltageMonitorEnabled = isset($_POST['voltageMonitorEnabled']) ? 'true' : 'false';
+    $voltageCollectionInterval = intval($_POST['voltageCollectionInterval'] ?? 3);
+    $voltageRetentionDays = intval($_POST['voltageRetentionDays'] ?? 1);
 
     // If 'default' is selected, auto-detect and save the actual interface
     if ($networkAdapter === 'default') {
@@ -86,6 +90,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['save_settings'])) {
     if ($efuseRetentionDays < 1 || $efuseRetentionDays > 90) {
         $errors[] = "eFuse retention must be between 1 and 90 days";
     }
+    if ($voltageCollectionInterval < 1 || $voltageCollectionInterval > 10) {
+        $errors[] = "Voltage collection interval must be between 1 and 10 seconds";
+    }
+    if ($voltageRetentionDays < 1 || $voltageRetentionDays > 30) {
+        $errors[] = "Voltage retention must be between 1 and 30 days";
+    }
 
     if (empty($errors)) {
         // Save settings using WatcherWriteSettingToFile
@@ -108,7 +118,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['save_settings'])) {
             'issueCheckOutputHostsNotInSync' => $issueCheckOutputHostsNotInSync,
             'efuseMonitorEnabled' => $efuseMonitorEnabled,
             'efuseCollectionInterval' => $efuseCollectionInterval,
-            'efuseRetentionDays' => $efuseRetentionDays
+            'efuseRetentionDays' => $efuseRetentionDays,
+            'voltageMonitorEnabled' => $voltageMonitorEnabled,
+            'voltageCollectionInterval' => $voltageCollectionInterval,
+            'voltageRetentionDays' => $voltageRetentionDays
         ];
 
         $settings = Settings::getInstance();
@@ -166,6 +179,9 @@ $isPlayerMode = SyncStatus::getInstance()->isPlayerMode();
 
 // Detect eFuse hardware
 $efuseHardware = EfuseHardware::getInstance()->detectHardware();
+
+// Detect voltage monitoring hardware (Raspberry Pi only)
+$voltageHardware = VoltageHardware::getInstance()->detectHardware();
 
 // Check for connectivity reset state
 $resetState = NetworkAdapter::getInstance()->getResetState();
@@ -524,6 +540,58 @@ window.watcherConfig = {
                             </div>
                         </div>
                         <div class="efuseStorageEstimate" id="efuseStorageEstimate">
+                            <!-- Populated by JavaScript -->
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <?php endif; ?>
+
+            <?php if ($voltageHardware['supported']): ?>
+            <!-- Voltage Monitor Panel (Raspberry Pi only) -->
+            <div class="settingsPanel">
+                <div class="panelHeader" onclick="page.watcherTogglePanel(this)">
+                    <div class="panelTitle">
+                        <label class="toggleSwitch toggleSwitch--sm" onclick="event.stopPropagation()">
+                            <input type="checkbox" id="voltageMonitorEnabled" name="voltageMonitorEnabled" value="1"
+                                <?php echo (!empty($config['voltageMonitorEnabled'])) ? 'checked' : ''; ?>
+                                onchange="page.toggleVoltageOptions()">
+                            <span class="toggleSlider toggleSlider--green"></span>
+                        </label>
+                        <i class="fas fa-bolt"></i>
+                        Voltage Monitor
+                    </div>
+                    <i class="fas fa-chevron-down panelToggle"></i>
+                </div>
+                <div class="panelBody">
+                    <div class="panelDesc" style="margin-bottom: 1rem;">
+                        Monitor Raspberry Pi core voltage to detect power supply issues that may cause instability.
+                        View in "Watcher - Local Metrics" dashboard.
+                    </div>
+                    <div id="voltageOptionsContainer" style="<?php echo empty($config['voltageMonitorEnabled']) ? 'display:none;' : ''; ?>">
+                        <div class="formRow">
+                            <div class="formGroup">
+                                <label class="formLabel">Collection Interval</label>
+                                <select id="voltageCollectionInterval" name="voltageCollectionInterval" class="form-control" onchange="page.updateVoltageStorageEstimate()">
+                                    <option value="1" <?php echo ($config['voltageCollectionInterval'] ?? 3) == 1 ? 'selected' : ''; ?>>1 second</option>
+                                    <option value="2" <?php echo ($config['voltageCollectionInterval'] ?? 3) == 2 ? 'selected' : ''; ?>>2 seconds</option>
+                                    <option value="3" <?php echo ($config['voltageCollectionInterval'] ?? 3) == 3 ? 'selected' : ''; ?>>3 seconds</option>
+                                    <option value="5" <?php echo ($config['voltageCollectionInterval'] ?? 3) == 5 ? 'selected' : ''; ?>>5 seconds</option>
+                                    <option value="10" <?php echo ($config['voltageCollectionInterval'] ?? 3) == 10 ? 'selected' : ''; ?>>10 seconds</option>
+                                </select>
+                            </div>
+                            <div class="formGroup">
+                                <label class="formLabel">Data Retention</label>
+                                <select id="voltageRetentionDays" name="voltageRetentionDays" class="form-control" onchange="page.updateVoltageStorageEstimate()">
+                                    <option value="1" <?php echo ($config['voltageRetentionDays'] ?? 1) == 1 ? 'selected' : ''; ?>>1 day</option>
+                                    <option value="3" <?php echo ($config['voltageRetentionDays'] ?? 1) == 3 ? 'selected' : ''; ?>>3 days</option>
+                                    <option value="7" <?php echo ($config['voltageRetentionDays'] ?? 1) == 7 ? 'selected' : ''; ?>>7 days</option>
+                                    <option value="14" <?php echo ($config['voltageRetentionDays'] ?? 1) == 14 ? 'selected' : ''; ?>>14 days</option>
+                                    <option value="30" <?php echo ($config['voltageRetentionDays'] ?? 1) == 30 ? 'selected' : ''; ?>>30 days</option>
+                                </select>
+                            </div>
+                        </div>
+                        <div class="voltageStorageEstimate" id="voltageStorageEstimate">
                             <!-- Populated by JavaScript -->
                         </div>
                     </div>

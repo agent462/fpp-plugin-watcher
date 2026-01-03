@@ -1,7 +1,6 @@
 /**
  * API utilities
  *
- * Shared API utilities extracted from commonUI.js:
  * - fetchJson - Fetch JSON with timeout and error handling
  * - withButtonLoading - Wrap async function with button loading state
  * - createRefreshController - Create refresh state controller
