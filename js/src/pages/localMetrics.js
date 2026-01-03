@@ -48,6 +48,8 @@ const getVoltageHours = () => document.getElementById('voltageTimeRange')?.value
 const getDefaultAdapter = () => state.config?.defaultAdapter || 'default';
 const getSelectedInterface = () =>
   document.getElementById('interfaceSelect')?.value || getDefaultAdapter();
+const getSelectedWirelessInterface = () =>
+  document.getElementById('wirelessInterfaceSelect')?.value || 'wlan0';
 
 // =============================================================================
 // System Status Functions
@@ -453,19 +455,22 @@ const METRIC_DEFS = [
     canvasId: 'wirelessChart',
     cardId: 'wirelessCard',
     loadingId: 'wirelessLoading',
-    url: (h) => `/api/plugin/fpp-plugin-watcher/metrics/wireless?hours=${h}`,
+    url: (h) =>
+      `/api/plugin/fpp-plugin-watcher/metrics/wireless?interface=${getSelectedWirelessInterface()}&hours=${h}`,
     prepare: (p) => {
       if (!p?.success || !p.data?.length || !p.interfaces?.length) return { hidden: true };
+      const selectedInterface = getSelectedWirelessInterface();
+      const iface = p.interfaces.includes(selectedInterface) ? selectedInterface : p.interfaces[0];
       const colorMap = { signal_quality: 'teal', signal_power: 'coral', signal_noise: 'orange' };
       const datasets = [];
-      (p.available_metrics || {})[p.interfaces[0]]?.forEach((metric) => {
-        const key = `${p.interfaces[0]}_${metric}`;
+      (p.available_metrics || {})[iface]?.forEach((metric) => {
+        const key = `${iface}_${metric}`;
         const label = metric
           .replace('signal_', '')
           .replace('_', ' ')
           .replace(/^./, (c) => c.toUpperCase());
         datasets.push(
-          createDataset(`${p.interfaces[0]} - ${label}`, mapChartData(p, key), colorMap[metric] || 'teal', {
+          createDataset(`${iface} - ${label}`, mapChartData(p, key), colorMap[metric] || 'teal', {
             fill: false,
           })
         );
@@ -647,6 +652,26 @@ async function loadInterfaces() {
   }
 }
 
+async function loadWirelessInterfaces() {
+  try {
+    const { success, interfaces = [] } = await fetchJson(
+      '/api/plugin/fpp-plugin-watcher/metrics/wireless/interfaces'
+    );
+    if (!success || !interfaces.length) return;
+
+    const select = document.getElementById('wirelessInterfaceSelect');
+    if (!select) return;
+
+    const current = select.value;
+    select.innerHTML = interfaces
+      .map((i) => `<option value="${escapeHtml(i)}">${escapeHtml(i)}</option>`)
+      .join('');
+    select.value = interfaces.includes(current) ? current : interfaces[0];
+  } catch (e) {
+    console.error('Error loading wireless interfaces:', e);
+  }
+}
+
 // =============================================================================
 // Main Load Function
 // =============================================================================
@@ -660,6 +685,7 @@ async function loadAllMetrics() {
 
   try {
     loadInterfaces();
+    loadWirelessInterfaces();
     await loadSystemStatus();
     await updateAllCharts();
     updateLastUpdateTime();

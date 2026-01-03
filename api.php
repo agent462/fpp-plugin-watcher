@@ -173,6 +173,7 @@ function getEndpointsfpppluginwatcher() {
         ['method' => 'GET', 'endpoint' => 'metrics/ping/rollup', 'callback' => 'fpppluginWatcherPingRollup'],
         ['method' => 'GET', 'endpoint' => 'metrics/thermal', 'callback' => 'fpppluginWatcherThermal'],
         ['method' => 'GET', 'endpoint' => 'metrics/wireless', 'callback' => 'fpppluginWatcherWireless'],
+        ['method' => 'GET', 'endpoint' => 'metrics/wireless/interfaces', 'callback' => 'fpppluginWatcherWirelessInterfaces'],
         ['method' => 'GET', 'endpoint' => 'metrics/apache', 'callback' => 'fpppluginWatcherApache'],
         ['method' => 'GET', 'endpoint' => 'metrics/all', 'callback' => 'fpppluginWatcherMetricsAll'],
 
@@ -342,6 +343,15 @@ function fpppluginWatcherThermal() {
 // GET /api/plugin/fpp-plugin-watcher/metrics/wireless
 function fpppluginWatcherWireless() {
     return apiSuccess(SystemMetrics::getInstance()->getWirelessMetrics(getHoursParam()));
+}
+
+// GET /api/plugin/fpp-plugin-watcher/metrics/wireless/interfaces
+function fpppluginWatcherWirelessInterfaces() {
+    $interfaces = SystemMetrics::getInstance()->getWirelessInterfaces();
+    return apiSuccess([
+        'count' => count($interfaces),
+        'interfaces' => $interfaces
+    ]);
 }
 
 // GET /api/plugin/fpp-plugin-watcher/metrics/apache

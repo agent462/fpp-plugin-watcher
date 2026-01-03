@@ -19,6 +19,17 @@ use Watcher\UI\ViewHelpers;
 $statusMessage = '';
 $statusType = '';
 
+// Check for redirect status from PRG pattern
+if (isset($_GET['saved'])) {
+    $statusType = 'success';
+    $statusMessage = $_GET['saved'] === 'restart'
+        ? 'Settings saved! FPP restart required for daemon changes.'
+        : 'Settings saved! Changes take effect within 60 seconds.';
+} elseif (isset($_GET['error'])) {
+    $statusType = 'error';
+    $statusMessage = 'Error saving settings: ' . htmlspecialchars(urldecode($_GET['error']));
+}
+
 // Load current settings BEFORE form processing (for restart check comparison)
 $oldConfig = readPluginConfig();
 
@@ -136,9 +147,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['save_settings'])) {
         }
 
         // Only set FPP restart flag if settings that require restart have changed
-        // (collectd or MQTT changes still need restart; connectivity settings are hot-reloaded)
-        if (settingsRequireRestart($oldConfig, $settingsToSave)) {
-            // Use FPP's API to set the global restartFlag (not plugin config)
+        // (collectd, voltage or MQTT changes still need restart; connectivity settings are hot-reloaded)
+        $needsRestart = settingsRequireRestart($oldConfig, $settingsToSave);
+        if ($needsRestart) {
             // This triggers the restart banner in FPP's UI
             ApiClient::getInstance()->put(
                 'http://127.0.0.1/api/settings/restartFlag',
@@ -146,17 +157,25 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['save_settings'])) {
                 5,
                 ['Content-Type: text/plain']
             );
-            $statusMessage = 'Settings saved! FPP restart required for daemon changes.';
-        } else {
-            $statusMessage = 'Settings saved! Changes take effect within 60 seconds.';
         }
-        $statusType = 'success';
 
-        // Reload config (force reload to bypass static cache after save)
-        $config = readPluginConfig(true);
+        // PRG pattern: redirect to prevent form resubmission on refresh
+        // Use JavaScript since PHP headers are already sent by FPP framework
+        // Preserve FPP's plugin/page params while adding our status param
+        $params = $_GET;
+        unset($params['saved'], $params['error']);
+        $params['saved'] = $needsRestart ? 'restart' : '1';
+        $redirectUrl = strtok($_SERVER['REQUEST_URI'], '?') . '?' . http_build_query($params);
+        echo '<script>window.location.replace(' . json_encode($redirectUrl) . ');</script>';
+        exit;
     } else {
-        $statusMessage = 'Error saving settings: ' . implode(', ', $errors);
-        $statusType = 'error';
+        // PRG pattern: redirect with error message
+        $params = $_GET;
+        unset($params['saved'], $params['error']);
+        $params['error'] = implode(', ', $errors);
+        $redirectUrl = strtok($_SERVER['REQUEST_URI'], '?') . '?' . http_build_query($params);
+        echo '<script>window.location.replace(' . json_encode($redirectUrl) . ');</script>';
+        exit;
     }
 }
 

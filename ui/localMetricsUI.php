@@ -138,6 +138,12 @@ ViewHelpers::renderCSSIncludes(true);
         <div class="chartCard" id="wirelessCard" style="display: none;">
             <div class="chartLoading" id="wirelessLoading"><i class="fas fa-spinner fa-spin"></i><p>Loading wireless data...</p></div>
             <div class="chartTitle"><span><i class="fas fa-wifi"></i> Wireless Signal Quality</span></div>
+            <div class="chartControls">
+                <div class="controlGroup">
+                    <label for="wirelessInterfaceSelect">Interface:</label>
+                    <select id="wirelessInterfaceSelect" onchange="page.refreshMetric('wireless');"><option value="wlan0">wlan0</option></select>
+                </div>
+            </div>
             <canvas id="wirelessChart" class="chartCanvas"></canvas>
         </div>
 
