@@ -804,10 +804,12 @@ class VoltageCollectorTest extends TestCase
     {
         $result = $this->collector->getCurrentStatus();
 
-        if (!$result['supported']) {
-            $this->assertFalse($result['success']);
-            $this->assertArrayHasKey('error', $result);
+        if ($result['supported']) {
+            $this->markTestSkipped('Platform is supported; unsupported path not testable');
         }
+
+        $this->assertFalse($result['success']);
+        $this->assertArrayHasKey('error', $result);
     }
 
     // =========================================================================

@@ -62,9 +62,9 @@ class VoltageHardware
      */
     public function detectHardware(bool $forceRefresh = false): array
     {
-        // Try to read from file cache first (fast path)
-        if (!$forceRefresh && file_exists($this->cacheFile)) {
-            $cacheData = @json_decode(file_get_contents($this->cacheFile), true);
+        // Try to read from file cache first (fast path) - uses file locking via FileManager
+        if (!$forceRefresh) {
+            $cacheData = $this->fileManager->readJsonFile($this->cacheFile);
             if ($cacheData && isset($cacheData['timestamp']) && isset($cacheData['result'])) {
                 if ((time() - $cacheData['timestamp']) < self::HARDWARE_CACHE_TTL) {
                     return $cacheData['result'];
@@ -179,21 +179,18 @@ class VoltageHardware
     }
 
     /**
-     * Save hardware detection result to file cache
+     * Save hardware detection result to file cache (uses file locking via FileManager)
      */
     private function saveHardwareCache(array $result): void
     {
-        if (!is_dir($this->voltageDir)) {
-            @mkdir($this->voltageDir, 0755, true);
-        }
+        $this->fileManager->ensureDirectory($this->voltageDir);
 
         $cacheData = [
             'timestamp' => time(),
             'result' => $result
         ];
 
-        @file_put_contents($this->cacheFile, json_encode($cacheData));
-        $this->fileManager->ensureFppOwnership($this->cacheFile);
+        $this->fileManager->writeJsonFile($this->cacheFile, $cacheData, 0);
     }
 
     /**

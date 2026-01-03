@@ -338,17 +338,14 @@ const METRIC_DEFS = [
         sdram_p: 'teal',
       };
 
-      // Stats bar element mapping
-      const statsMapping = {
-        EXT5V_V: 'voltage5V',
-        VDD_CORE_V: 'voltageCore',
-        '3V3_SYS_V': 'voltage3V3',
-        '1V8_SYS_V': 'voltage1V8',
-        // Legacy mapping
-        core: 'voltageCore',
-        sdram_c: 'voltage3V3',
-        sdram_i: 'voltage1V8',
-      };
+      // Determine platform type and key rails to display in stats bar
+      // Pi 5 PMIC rails (13 rails) vs Legacy Pi (4 rails: core, sdram_c, sdram_i, sdram_p)
+      const isPi5 = rails.includes('EXT5V_V');
+
+      // Define 4 key rails to show in stats bar for each platform
+      const keyRails = isPi5
+        ? ['EXT5V_V', 'VDD_CORE_V', '3V3_SYS_V', '1V8_SYS_V']
+        : ['core', 'sdram_c', 'sdram_i', 'sdram_p'];
 
       // Helper to update stat element
       const updateStat = (id, val) => {
@@ -356,17 +353,25 @@ const METRIC_DEFS = [
         if (el) el.textContent = val;
       };
 
-      // Collect latest values for stats bar
+      // Update stats bar labels and values dynamically
       const lastEntry = p.data.at(-1);
-      if (lastEntry) {
-        const voltages = lastEntry.voltages || {};
-        for (const [rail, elementId] of Object.entries(statsMapping)) {
+      keyRails.forEach((rail, index) => {
+        // Update label using labels from API response
+        const labelEl = document.getElementById(`voltageStat${index}Label`);
+        if (labelEl) {
+          labelEl.textContent = labels[rail] || rail;
+        }
+
+        // Update value
+        if (lastEntry) {
+          const voltages = lastEntry.voltages || {};
           if (voltages[rail] !== undefined) {
-            const value = typeof voltages[rail] === 'object' ? voltages[rail].avg : voltages[rail];
-            updateStat(elementId, value.toFixed(3) + ' V');
+            const value =
+              typeof voltages[rail] === 'object' ? voltages[rail].avg : voltages[rail];
+            updateStat(`voltageStat${index}`, value.toFixed(3) + ' V');
           }
         }
-      }
+      });
 
       // Check for 5V input voltage drop (critical for power supply monitoring)
       // Only monitor EXT5V_V rail (Pi 5) - core voltage fluctuations are normal CPU behavior
@@ -576,7 +581,7 @@ async function updateMetric(def, hours) {
   const metricHours = def.getHours ? parseFloat(def.getHours()) : hours;
 
   try {
-    const prepared = def.prepare(await fetchJson(def.url(hours)));
+    const prepared = def.prepare(await fetchJson(def.url(metricHours)));
 
     if (!prepared || prepared.hidden) {
       if (def.cardId) {

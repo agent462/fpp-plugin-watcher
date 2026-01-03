@@ -235,7 +235,8 @@ if ($isPlayerMode) {
 ?>
 <script>
 window.watcherConfig = {
-    isPlayerMode: <?php echo $isPlayerMode ? 'true' : 'false'; ?>
+    isPlayerMode: <?php echo $isPlayerMode ? 'true' : 'false'; ?>,
+    voltageRailCount: <?php echo $voltageHardware['supported'] ? count($voltageHardware['availableRails']) : 4; ?>
 };
 </script>
 

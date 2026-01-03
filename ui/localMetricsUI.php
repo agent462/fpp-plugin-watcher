@@ -88,12 +88,12 @@ ViewHelpers::renderCSSIncludes(true);
             <canvas id="thermalChart" class="chartCanvas"></canvas>
         </div>
 
-        <!-- Voltage Stats Bar (Raspberry Pi only) -->
+        <!-- Voltage Stats Bar (Raspberry Pi only) - labels updated dynamically by JS -->
         <div class="statsBar" id="voltageStatsBar" style="display: none;">
-            <div class="statItem"><div class="statLabel" id="voltage5VLabel">5V Input</div><div class="statValue" id="voltage5V">-- V</div></div>
-            <div class="statItem"><div class="statLabel" id="voltageCoreLabel">Core</div><div class="statValue" id="voltageCore">-- V</div></div>
-            <div class="statItem"><div class="statLabel" id="voltage3V3Label">3.3V</div><div class="statValue" id="voltage3V3">-- V</div></div>
-            <div class="statItem"><div class="statLabel" id="voltage1V8Label">1.8V</div><div class="statValue" id="voltage1V8">-- V</div></div>
+            <div class="statItem"><div class="statLabel" id="voltageStat0Label">--</div><div class="statValue" id="voltageStat0">-- V</div></div>
+            <div class="statItem"><div class="statLabel" id="voltageStat1Label">--</div><div class="statValue" id="voltageStat1">-- V</div></div>
+            <div class="statItem"><div class="statLabel" id="voltageStat2Label">--</div><div class="statValue" id="voltageStat2">-- V</div></div>
+            <div class="statItem"><div class="statLabel" id="voltageStat3Label">--</div><div class="statValue" id="voltageStat3">-- V</div></div>
         </div>
 
         <!-- Voltage Chart (Raspberry Pi only) -->

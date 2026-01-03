@@ -118,7 +118,7 @@ function runCollector() {
                 checkAndReloadVoltageConfig();
             }
         } catch (Exception $e) {
-            // Config check failed - continue anyway, will retry next interval
+            // Config check failed; continue anyway, retry next interval
         }
 
         // Collect voltage data with error resilience
@@ -141,7 +141,7 @@ function runCollector() {
                     // Successfully written
                 }
             } else {
-                // Read failed - track errors but don't exit
+                // Read failed; track errors but don't exit
                 $consecutiveErrors++;
                 $wasInErrorState = true;
 
@@ -200,7 +200,6 @@ function runCollector() {
 }
 
 // Signal handling for graceful shutdown
-// Use async signals (PHP 7.1+) for immediate signal processing during sleep/blocking calls
 if (function_exists('pcntl_async_signals')) {
     pcntl_async_signals(true);
 }

@@ -349,11 +349,13 @@ class VoltageHardwareTest extends TestCase
     {
         $result = $this->hardware->getHardwareSummary();
 
-        if (!$result['supported']) {
-            $this->assertArrayHasKey('message', $result);
-            $this->assertArrayHasKey('typeLabel', $result);
-            $this->assertEquals('Not Supported', $result['typeLabel']);
+        if ($result['supported']) {
+            $this->markTestSkipped('Platform is supported; unsupported path not testable');
         }
+
+        $this->assertArrayHasKey('message', $result);
+        $this->assertArrayHasKey('typeLabel', $result);
+        $this->assertEquals('Not Supported', $result['typeLabel']);
     }
 
     public function testGetHardwareSummarySupportedStructure(): void
@@ -440,11 +442,13 @@ class VoltageHardwareTest extends TestCase
     {
         $result = $this->hardware->readAllVoltages();
 
-        if (!$result['success']) {
-            $this->assertEmpty($result['voltages']);
-            $this->assertEmpty($result['labels']);
-            $this->assertNotNull($result['error']);
+        if ($result['success']) {
+            $this->markTestSkipped('Platform is supported; unsupported path not testable');
         }
+
+        $this->assertEmpty($result['voltages']);
+        $this->assertEmpty($result['labels']);
+        $this->assertNotNull($result['error']);
     }
 
     public function testReadAllVoltagesReturnsValidDataWhenSupported(): void

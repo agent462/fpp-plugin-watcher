@@ -95,16 +95,25 @@ export function toggleEfuseOptions() {
 /**
  * Calculate estimated voltage storage requirements
  * Storage varies by retention period due to multi-tier rollups
+ *
+ * @param {number} interval - Collection interval in seconds
+ * @param {number} days - Retention period in days
+ * @param {number} railCount - Number of voltage rails (Pi5=13, Legacy Pi=4)
  */
-export function calculateVoltageStorage(interval, days) {
+export function calculateVoltageStorage(interval, days, railCount = 4) {
   // Raw storage (6 hours retention before rotation)
+  // Format: {"timestamp":1234567890,"voltages":{"rail":0.8768,...}}
+  // Base overhead ~40 bytes + ~18 bytes per rail
   const rawSamplesPerHour = 3600 / interval;
   const rawSamples = rawSamplesPerHour * 6;  // 6 hours of raw data
-  const rawEntrySize = 60;  // ~60 bytes per raw entry
+  const rawEntrySize = 40 + (railCount * 18);
   const rawStorage = rawSamples * rawEntrySize;
 
   const daysInSeconds = days * 86400;
-  const rollupEntrySize = 100;  // ~100 bytes per rollup entry
+
+  // Rollup entry format: {"timestamp":..,"interval":..,"voltages":{"rail":{"avg":..,"min":..,"max":..,"samples":..},...}}
+  // Base overhead ~60 bytes + ~55 bytes per rail (avg/min/max/samples)
+  const rollupEntrySize = 60 + (railCount * 55);
 
   // Tier storage based on retention (mirrors VoltageCollector::getTiers)
   // 1min tier: 6 hours max
@@ -139,7 +148,10 @@ export function updateVoltageStorageEstimate() {
 
   const interval = parseInt(intervalSelect.value);
   const days = parseInt(daysSelect.value);
-  const bytes = calculateVoltageStorage(interval, days);
+
+  // Get rail count from config (Pi5=13 rails, Legacy Pi=4 rails)
+  const railCount = state.config.voltageRailCount || 4;
+  const bytes = calculateVoltageStorage(interval, days, railCount);
 
   const samplesPerMinute = Math.floor(60 / interval);
   const readingsPerDay = Math.floor(60 / interval) * 60 * 24;
@@ -149,6 +161,9 @@ export function updateVoltageStorageEstimate() {
   if (days > 1) tierInfo += ', 5min';
   if (days > 3) tierInfo += ', 30min';
   if (days > 7) tierInfo += ', 2hour';
+
+  // Hardware type info
+  const hwType = railCount >= 13 ? 'Pi 5 (PMIC)' : 'Pi 4/earlier';
 
   let html = '<div class="storageEstimateTitle"><i class="fas fa-hdd"></i> Storage Estimate</div>';
   html += '<div class="storageEstimateGrid">';
@@ -161,7 +176,7 @@ export function updateVoltageStorageEstimate() {
     <span class="storageEstimateSize">${readingsPerDay.toLocaleString()} readings/day</span>
   </div>`;
   html += '</div>';
-  html += `<div class="storageEstimateNote" style="font-size: 0.8rem; color: #6c757d; margin-top: 0.5rem;">Rollup tiers: ${tierInfo}</div>`;
+  html += `<div class="storageEstimateNote" style="font-size: 0.8rem; color: #6c757d; margin-top: 0.5rem;">${hwType} (${railCount} rails) | Rollup tiers: ${tierInfo}</div>`;
 
   container.innerHTML = html;
 }

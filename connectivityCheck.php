@@ -6,6 +6,7 @@ include_once __DIR__ ."/lib/core/config.php";
 
 use Watcher\Core\Settings;
 use Watcher\Core\Logger;
+use Watcher\Core\DaemonLock;
 use Watcher\Metrics\MetricsStorage;
 use Watcher\Controllers\NetworkAdapter;
 use Watcher\Metrics\PingCollector;
@@ -42,7 +43,11 @@ function checkAndReloadConfig() {
 
     // Check if connectivity check was disabled
     if (!$newConfig['connectivityCheckEnabled']) {
+        global $lockFp;
         Logger::getInstance()->info("Connectivity check disabled via config reload. Exiting gracefully.");
+        if ($lockFp) {
+            DaemonLock::release($lockFp, 'connectivity-check');
+        }
         exit(0);
     }
 
@@ -198,6 +203,34 @@ $lastNetworkQualityRollupCheck = 0; // Track when network quality rollups were p
 $lastNetworkQualityRotationCheck = 0; // Track when network quality metrics rotation was checked
 $networkQualityCheckInterval = 60; // Collect network quality every 60 seconds
 
+// Signal handling for graceful shutdown
+if (function_exists('pcntl_async_signals')) {
+    pcntl_async_signals(true);
+}
+
+$lockFp = null; // Global for signal handler access
+
+function connectivitySignalHandler($signo) {
+    global $lockFp;
+    Logger::getInstance()->info("Received signal $signo, shutting down...");
+    if ($lockFp) {
+        DaemonLock::release($lockFp, 'connectivity-check');
+    }
+    exit(0);
+}
+
+if (function_exists('pcntl_signal')) {
+    pcntl_signal(SIGTERM, 'connectivitySignalHandler');
+    pcntl_signal(SIGINT, 'connectivitySignalHandler');
+    pcntl_signal(SIGHUP, 'connectivitySignalHandler');
+}
+
+// Acquire daemon lock (handles stale lock detection automatically)
+$lockFp = DaemonLock::acquire('connectivity-check', WATCHER_LOG_FILE);
+if (!$lockFp) {
+    exit(1);
+}
+
 Logger::getInstance()->info("=== Watcher Plugin Started ===");
 Logger::getInstance()->info("Check Interval: {$config['checkInterval']} seconds");
 Logger::getInstance()->info("Max Failures: {$config['maxFailures']}");
@@ -299,6 +332,7 @@ while (true) {
         } elseif ($failureCount >= $config['maxFailures'] && $hasResetAdapter) {
             Logger::getInstance()->info("Network adapter has already been reset once. Exiting...");
             Logger::getInstance()->info("Script stopped. Manual intervention required.");
+            DaemonLock::release($lockFp, 'connectivity-check');
             exit(1);
         }
     }
