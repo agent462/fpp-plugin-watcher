@@ -1,6 +1,6 @@
 # Watcher Plugin for FPP
 
-A monitoring and control plugin for Falcon Player (FPP) that provides network connectivity monitoring, system metrics dashboards, multi-sync host monitoring, Falcon controller management, eFuse current monitoring, and remote FPP control.
+A comprehensive monitoring and control plugin for Falcon Player (FPP) that provides network connectivity monitoring with automatic recovery, system metrics dashboards, multi-sync host monitoring, Falcon controller management, eFuse current monitoring with heatmap visualization, and remote FPP control.
 
 **Requires**: FPP 9.0+
 
@@ -9,6 +9,8 @@ A monitoring and control plugin for Falcon Player (FPP) that provides network co
 - BeagleBone Black (BBB)
 - PocketBeagle 2 (PB2)
 - PocketBeagle (PB)
+
+**eFuse Hardware Support**: Kulp Lights, f16v5, SRv5 (auto-detected)
 
 **Performance Note**: BBB and PB are single-core devices with limited memory. While this plugin is optimized for low CPU and memory usage, be mindful of overall system performance when running multiple intensive plugins or FPP features. The System Monitor Dashboard makes it easy to track resource usage in real-time.
 
@@ -116,6 +118,7 @@ Watcher runs several background daemons managed by FPP:
 - **connectivityCheck.php**: Network monitoring with automatic adapter reset
 - **efuseCollector.php**: eFuse current readings collection (when hardware detected)
 - **mqttSubscriber.php**: MQTT event capture (when enabled)
+- **libfpp-plugin-watcher.so**: C++ shared library for MultiSync status integration
 
 ### Data Storage
 
@@ -125,19 +128,50 @@ Metrics are stored in `/home/fpp/media/plugindata/fpp-plugin-watcher/`:
 - eFuse current readings and heatmap data
 - MQTT events log
 
-### API
+### Codebase Structure
 
-The plugin exposes a REST API at `/api/plugin/fpp-plugin-watcher/` for:
-- Local and remote system metrics
-- Ping statistics and rollups
-- Falcon controller operations
-- eFuse readings and configuration
-- Multi-sync status and comparison
-- Remote system control commands
+```
+classes/           # PSR-4 namespaced PHP classes
+  Watcher/
+    Core/          # Logger, FileManager, Settings
+    Http/          # ApiClient, CurlMultiHandler
+    Metrics/       # Collectors and rollup processors
+    Controllers/   # Falcon, eFuse, RemoteControl
+    MultiSync/     # SyncStatus, Comparator, ClockDrift
+    UI/            # ViewHelpers
+ui/                # Dashboard PHP pages
+js/src/            # ES6 JavaScript modules (bundled via esbuild)
+src/               # C++ source for MultiSync integration
+tests/             # PHPUnit and Jest test suites
+```
+
+### API Endpoints
+
+The plugin exposes a REST API at `/api/plugin/fpp-plugin-watcher/`:
+
+| Endpoint | Description |
+|----------|-------------|
+| `GET /version` | Plugin version info |
+| `GET /metrics/all` | Local system metrics |
+| `GET /remotes` | List of remote multi-sync systems |
+| `GET /ping/metrics?hours=N` | Connectivity ping metrics |
+| `GET /efuse/supported` | eFuse hardware detection |
+| `GET /efuse/current` | Current eFuse readings |
+| `GET /efuse/heatmap?hours=N` | eFuse heatmap data |
+| `GET /efuse/history?port=X&hours=N` | Per-port history |
+| `POST /efuse/port/toggle` | Toggle port on/off |
+| `POST /efuse/port/reset` | Reset tripped port |
+| `GET /falcon/status` | Falcon controller status |
+| `GET /multisync/status` | Multi-sync timing data |
+| `POST /remote/restart` | Restart remote FPPD |
+| `POST /remote/reboot` | Reboot remote system |
 
 ## Troubleshooting
 
-**Logs**: Check `/home/fpp/media/logs/fpp-plugin-watcher.log` for issues.
+**Log Files**:
+- `/home/fpp/media/logs/fpp-plugin-watcher.log` - Main plugin log
+- `/home/fpp/media/logs/fpp-plugin-watcher-ping-metrics.log` - Ping metrics log
+- `/home/fpp/media/logs/fpp-plugin-watcher-efuse.log` - eFuse collector log
 
 **Common Issues**:
 
@@ -147,6 +181,25 @@ The plugin exposes a REST API at `/api/plugin/fpp-plugin-watcher/` for:
 | Remote systems not showing | Ensure Watcher is installed on remotes with collectd enabled |
 | eFuse not available | eFuse monitoring requires supported hardware (detected automatically) |
 | MQTT events empty | Enable MQTT in FPP settings and configure broker connection |
+
+## Contributing
+
+```bash
+# Run PHP tests
+./phpunit                          # All tests with coverage
+./phpunit --testsuite Unit         # Unit tests only (fast)
+./phpunit --testsuite Integration  # Integration tests (requires FPP)
+
+# Run JavaScript tests
+npm test                           # All JS tests
+npm run test:coverage              # With coverage report
+
+# Build JavaScript bundle (required after JS changes)
+npm run build
+
+# Check PHP syntax
+find . -name "*.php" -exec php -l {} \;
+```
 
 ## Support
 
