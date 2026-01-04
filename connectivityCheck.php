@@ -226,7 +226,7 @@ if (function_exists('pcntl_signal')) {
 }
 
 // Acquire daemon lock (handles stale lock detection automatically)
-$lockFp = DaemonLock::acquire('connectivity-check', WATCHER_LOG_FILE);
+$lockFp = DaemonLock::acquire('connectivity-check', WATCHERLOGFILE);
 if (!$lockFp) {
     exit(1);
 }
