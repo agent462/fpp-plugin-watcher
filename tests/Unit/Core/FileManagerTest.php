@@ -66,11 +66,13 @@ class FileManagerTest extends TestCase
         $this->fileManager->writeJsonLinesFile($path, $entries);
 
         $content = file_get_contents($path);
-        // Check format: [YYYY-MM-DD HH:MM:SS] {json}
+        // Check format: pure JSON lines (no datetime prefix)
         $this->assertMatchesRegularExpression(
-            '/\[\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}\] \{.+\}/',
-            $content
+            '/^\{"timestamp":\d+,"value":"test"\}$/',
+            trim($content)
         );
+        // Ensure no datetime prefix
+        $this->assertStringNotContainsString('[', $content);
     }
 
     public function testWriteJsonLinesFileAppends(): void
@@ -527,5 +529,290 @@ class FileManagerTest extends TestCase
         $result = $this->fileManager->readJsonFile($path);
 
         $this->assertEquals('value', $result['level1']['level2']['level3']['level4']['deep']);
+    }
+
+    // =========================================================================
+    // Gzip JSON Lines Tests
+    // =========================================================================
+
+    public function testReadGzipJsonLinesReturnsEmptyForNonexistent(): void
+    {
+        $result = $this->fileManager->readGzipJsonLines('/nonexistent/path.log.gz');
+
+        $this->assertIsArray($result);
+        $this->assertEmpty($result);
+    }
+
+    public function testAppendGzipJsonLinesCreatesFile(): void
+    {
+        $path = $this->testTmpDir . '/test.log.gz';
+        $entries = [
+            ['timestamp' => 1700000000, 'value' => 'test1'],
+            ['timestamp' => 1700000060, 'value' => 'test2'],
+        ];
+
+        $result = $this->fileManager->appendGzipJsonLines($path, $entries);
+
+        $this->assertTrue($result);
+        $this->assertFileExists($path);
+    }
+
+    public function testAppendGzipJsonLinesWithEmptyArray(): void
+    {
+        $path = $this->testTmpDir . '/empty.log.gz';
+
+        $result = $this->fileManager->appendGzipJsonLines($path, []);
+
+        $this->assertTrue($result);
+        $this->assertFileDoesNotExist($path);
+    }
+
+    public function testGzipJsonLinesRoundTrip(): void
+    {
+        $path = $this->testTmpDir . '/roundtrip.log.gz';
+        $entries = [
+            ['timestamp' => 1700000000, 'value' => 'test1'],
+            ['timestamp' => 1700000060, 'value' => 'test2'],
+        ];
+
+        $this->fileManager->appendGzipJsonLines($path, $entries);
+        $result = $this->fileManager->readGzipJsonLines($path);
+
+        $this->assertCount(2, $result);
+        $this->assertEquals('test1', $result[0]['value']);
+        $this->assertEquals('test2', $result[1]['value']);
+    }
+
+    public function testReadGzipJsonLinesWithTimestampFilter(): void
+    {
+        $path = $this->testTmpDir . '/filtered.log.gz';
+        $entries = [
+            ['timestamp' => 1700000000, 'value' => 'old'],
+            ['timestamp' => 1700000060, 'value' => 'new'],
+            ['timestamp' => 1700000120, 'value' => 'newest'],
+        ];
+
+        $this->fileManager->appendGzipJsonLines($path, $entries);
+        $result = $this->fileManager->readGzipJsonLines($path, 1700000050);
+
+        $this->assertCount(2, $result);
+        $this->assertEquals('new', $result[0]['value']);
+        $this->assertEquals('newest', $result[1]['value']);
+    }
+
+    public function testReadGzipJsonLinesWithCustomFilter(): void
+    {
+        $path = $this->testTmpDir . '/custom_filter.log.gz';
+        $entries = [
+            ['timestamp' => 1700000000, 'type' => 'info', 'value' => 'test1'],
+            ['timestamp' => 1700000060, 'type' => 'error', 'value' => 'test2'],
+            ['timestamp' => 1700000120, 'type' => 'info', 'value' => 'test3'],
+        ];
+
+        $this->fileManager->appendGzipJsonLines($path, $entries);
+        $result = $this->fileManager->readGzipJsonLines($path, 0, fn($e) => $e['type'] === 'error');
+
+        $this->assertCount(1, $result);
+        $this->assertEquals('test2', $result[0]['value']);
+    }
+
+    public function testGzipJsonLinesAppendsToExisting(): void
+    {
+        $path = $this->testTmpDir . '/append.log.gz';
+
+        $entries1 = [['timestamp' => 1700000000, 'value' => 'first']];
+        $entries2 = [['timestamp' => 1700000060, 'value' => 'second']];
+
+        $this->fileManager->appendGzipJsonLines($path, $entries1);
+        $this->fileManager->appendGzipJsonLines($path, $entries2);
+
+        $result = $this->fileManager->readGzipJsonLines($path);
+
+        $this->assertCount(2, $result);
+        $this->assertEquals('first', $result[0]['value']);
+        $this->assertEquals('second', $result[1]['value']);
+    }
+
+    public function testGzipJsonLinesSortsResults(): void
+    {
+        $path = $this->testTmpDir . '/unsorted.log.gz';
+        // Write entries out of order
+        $entries = [
+            ['timestamp' => 1700000120, 'value' => 'c'],
+            ['timestamp' => 1700000000, 'value' => 'a'],
+            ['timestamp' => 1700000060, 'value' => 'b'],
+        ];
+
+        $this->fileManager->appendGzipJsonLines($path, $entries);
+        $result = $this->fileManager->readGzipJsonLines($path, 0, null, true);
+
+        $this->assertCount(3, $result);
+        $this->assertEquals('a', $result[0]['value']);
+        $this->assertEquals('b', $result[1]['value']);
+        $this->assertEquals('c', $result[2]['value']);
+    }
+
+    public function testGzipFileIsActuallyCompressed(): void
+    {
+        $path = $this->testTmpDir . '/compressed.log.gz';
+        $entries = [];
+        for ($i = 0; $i < 100; $i++) {
+            $entries[] = [
+                'timestamp' => 1700000000 + ($i * 60),
+                'value' => str_repeat('test data ', 10),
+            ];
+        }
+
+        $this->fileManager->appendGzipJsonLines($path, $entries);
+
+        // Verify file is smaller than uncompressed equivalent
+        $gzSize = filesize($path);
+
+        // Write same data uncompressed for comparison
+        $uncompressedPath = $this->testTmpDir . '/uncompressed.log';
+        $this->fileManager->writeJsonLinesFile($uncompressedPath, $entries);
+        $uncompressedSize = filesize($uncompressedPath);
+
+        // Gzip should be significantly smaller
+        $this->assertLessThan($uncompressedSize * 0.5, $gzSize);
+    }
+
+    public function testGzipJsonLinesWithSpecialCharacters(): void
+    {
+        $path = $this->testTmpDir . '/special.log.gz';
+        $entries = [
+            [
+                'timestamp' => 1700000000,
+                'message' => "Special chars: \"quotes\" 'apostrophe' <tag> & newline\nhere",
+                'unicode' => '日本語 emoji',
+            ],
+        ];
+
+        $this->fileManager->appendGzipJsonLines($path, $entries);
+        $result = $this->fileManager->readGzipJsonLines($path);
+
+        $this->assertEquals($entries[0]['message'], $result[0]['message']);
+        $this->assertEquals($entries[0]['unicode'], $result[0]['unicode']);
+    }
+
+    public function testGzipJsonLinesWithDifferentCompressionLevel(): void
+    {
+        $path1 = $this->testTmpDir . '/low_compression.log.gz';
+        $path9 = $this->testTmpDir . '/high_compression.log.gz';
+        $entries = [];
+        for ($i = 0; $i < 500; $i++) {
+            $entries[] = [
+                'timestamp' => 1700000000 + ($i * 60),
+                'value' => str_repeat('repetitive data ', 20),
+            ];
+        }
+
+        $this->fileManager->appendGzipJsonLines($path1, $entries, 1);
+        $this->fileManager->appendGzipJsonLines($path9, $entries, 9);
+
+        // Higher compression should produce smaller file
+        $this->assertLessThanOrEqual(filesize($path1), filesize($path9));
+
+        // Both should read back correctly
+        $result1 = $this->fileManager->readGzipJsonLines($path1);
+        $result9 = $this->fileManager->readGzipJsonLines($path9);
+
+        $this->assertCount(500, $result1);
+        $this->assertCount(500, $result9);
+    }
+
+    // =========================================================================
+    // Gzip File Tests
+    // =========================================================================
+
+    public function testGzipFileReturnsFalseForNonexistent(): void
+    {
+        $result = $this->fileManager->gzipFile('/nonexistent/path.log');
+
+        $this->assertFalse($result);
+    }
+
+    public function testGzipFileCreatesCompressedFile(): void
+    {
+        $sourcePath = $this->testTmpDir . '/source.log';
+        $content = str_repeat("Line of test content\n", 100);
+        file_put_contents($sourcePath, $content);
+
+        $result = $this->fileManager->gzipFile($sourcePath);
+
+        $this->assertTrue($result);
+        $this->assertFileExists($sourcePath . '.gz');
+    }
+
+    public function testGzipFileRemovesOriginalByDefault(): void
+    {
+        $sourcePath = $this->testTmpDir . '/remove.log';
+        file_put_contents($sourcePath, 'test content');
+
+        $this->fileManager->gzipFile($sourcePath);
+
+        $this->assertFileDoesNotExist($sourcePath);
+        $this->assertFileExists($sourcePath . '.gz');
+    }
+
+    public function testGzipFileKeepsOriginalWhenRequested(): void
+    {
+        $sourcePath = $this->testTmpDir . '/keep.log';
+        file_put_contents($sourcePath, 'test content');
+
+        $this->fileManager->gzipFile($sourcePath, false);
+
+        $this->assertFileExists($sourcePath);
+        $this->assertFileExists($sourcePath . '.gz');
+    }
+
+    public function testGzipFileContentIsReadable(): void
+    {
+        $sourcePath = $this->testTmpDir . '/readable.log';
+        $content = "Original content\nWith multiple lines\n";
+        file_put_contents($sourcePath, $content);
+
+        $this->fileManager->gzipFile($sourcePath);
+
+        // Read back and verify
+        $fp = gzopen($sourcePath . '.gz', 'r');
+        $readContent = '';
+        while (!gzeof($fp)) {
+            $readContent .= gzread($fp, 1024);
+        }
+        gzclose($fp);
+
+        $this->assertEquals($content, $readContent);
+    }
+
+    public function testGzipFileProducesCompression(): void
+    {
+        $sourcePath = $this->testTmpDir . '/compress.log';
+        $content = str_repeat("Highly repetitive content for compression ", 500);
+        file_put_contents($sourcePath, $content);
+        $originalSize = filesize($sourcePath);
+
+        $this->fileManager->gzipFile($sourcePath);
+
+        $compressedSize = filesize($sourcePath . '.gz');
+
+        // Compressed should be significantly smaller
+        $this->assertLessThan($originalSize * 0.2, $compressedSize);
+    }
+
+    public function testGzipFileWithDifferentCompressionLevels(): void
+    {
+        $content = str_repeat("Test content for compression level test ", 200);
+
+        $path1 = $this->testTmpDir . '/level1.log';
+        $path9 = $this->testTmpDir . '/level9.log';
+        file_put_contents($path1, $content);
+        file_put_contents($path9, $content);
+
+        $this->fileManager->gzipFile($path1, true, 1);
+        $this->fileManager->gzipFile($path9, true, 9);
+
+        // Higher compression should produce smaller (or equal) file
+        $this->assertLessThanOrEqual(filesize($path1 . '.gz'), filesize($path9 . '.gz'));
     }
 }

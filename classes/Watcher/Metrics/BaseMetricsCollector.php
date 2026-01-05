@@ -76,10 +76,11 @@ abstract class BaseMetricsCollector
 
     /**
      * Get rollup file path for a specific tier
+     * Uses gzip extension for compressed tiers (30min, 2hour)
      */
     public function getRollupFilePath(string $tier): string
     {
-        return $this->dataDir . "/{$tier}.log";
+        return $this->rollup->getRollupFilePath($this->dataDir, $tier);
     }
 
     /**
@@ -119,6 +120,11 @@ abstract class BaseMetricsCollector
      */
     public function processRollupTier(string $tier, array $tierConfig): void
     {
+        // Migrate existing uncompressed files to gzip for compressed tiers
+        if ($this->rollup->shouldCompressTier($tier)) {
+            $this->rollup->migrateToCompressed($this->dataDir, $tier);
+        }
+
         $self = $this;
         $this->rollup->processTier(
             $tier,

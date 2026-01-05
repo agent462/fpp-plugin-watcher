@@ -121,10 +121,13 @@ class MultiSyncPingCollectorTest extends TestCase
     public function testGetRollupFilePathForAllTiers(): void
     {
         $tiers = ['1min', '5min', '30min', '2hour'];
+        $compressedTiers = ['30min', '2hour'];
 
         foreach ($tiers as $tier) {
             $path = $this->collector->getRollupFilePath($tier);
-            $this->assertStringEndsWith("/{$tier}.log", $path);
+            // Compressed tiers use .log.gz extension
+            $expectedExt = in_array($tier, $compressedTiers, true) ? "/{$tier}.log.gz" : "/{$tier}.log";
+            $this->assertStringEndsWith($expectedExt, $path);
         }
     }
 

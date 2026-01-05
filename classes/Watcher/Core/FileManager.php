@@ -45,6 +45,34 @@ class FileManager
     }
 
     /**
+     * Parse a JSON line that may be in new format (pure JSON) or legacy format ([datetime] {json})
+     *
+     * @param string $line The line to parse
+     * @return array|null Parsed JSON array or null if parsing failed
+     */
+    public static function parseJsonLine(string $line): ?array
+    {
+        $line = trim($line);
+        if (empty($line)) {
+            return null;
+        }
+
+        // Fast path: line starts with JSON
+        if ($line[0] === '{') {
+            $entry = json_decode($line, true);
+            return is_array($entry) ? $entry : null;
+        }
+
+        // Legacy format with datetime prefix - extract JSON portion
+        if (preg_match('/\{.*\}/', $line, $matches)) {
+            $entry = json_decode($matches[0], true);
+            return is_array($entry) ? $entry : null;
+        }
+
+        return null;
+    }
+
+    /**
      * Read JSON lines file with optional timestamp filtering
      *
      * Optimized for large files: uses regex pre-filtering to skip old entries
@@ -96,18 +124,15 @@ class FileManager
                 }
             }
 
-            // Parse log format: [datetime] {json}
-            if (preg_match('/\[.*?\]\s+(.+)$/', $line, $matches)) {
-                $jsonData = trim($matches[1]);
-                $entry = json_decode($jsonData, true);
+            // Parse JSON - handle both new format (pure JSON) and legacy format ([datetime] {json})
+            $entry = self::parseJsonLine($line);
 
-                if ($entry && isset($entry[$timestampField])) {
-                    // Apply custom filter if provided
-                    if ($filterFn !== null && !$filterFn($entry)) {
-                        continue;
-                    }
-                    $entries[] = $entry;
+            if ($entry && isset($entry[$timestampField])) {
+                // Apply custom filter if provided
+                if ($filterFn !== null && !$filterFn($entry)) {
+                    continue;
                 }
+                $entries[] = $entry;
             }
         }
 
@@ -148,9 +173,8 @@ class FileManager
         $success = false;
         if (flock($fp, LOCK_EX)) {
             foreach ($entries as $entry) {
-                $timestamp = date('Y-m-d H:i:s', $entry['timestamp'] ?? time());
                 $jsonData = json_encode($entry);
-                fwrite($fp, "[{$timestamp}] {$jsonData}\n");
+                fwrite($fp, "{$jsonData}\n");
             }
             fflush($fp);
             flock($fp, LOCK_UN);
@@ -349,6 +373,151 @@ class FileManager
         }
 
         $this->ensureFppOwnership($directory);
+        return true;
+    }
+
+    /**
+     * Read gzip-compressed JSON lines file
+     *
+     * Used for compressed rollup tier files (30min, 2hour).
+     * Supports the same JSON-first parsing as regular JSON lines.
+     *
+     * @param string $path Path to the gzip file
+     * @param int $sinceTimestamp Only return entries newer than this (default: 0)
+     * @param callable|null $filterFn Optional filter function(entry) => bool
+     * @param bool $sort Whether to sort results by timestamp (default: true)
+     * @param string $timestampField Field name containing timestamp (default: 'timestamp')
+     * @return array Array of parsed entries
+     */
+    public function readGzipJsonLines(
+        string $path,
+        int $sinceTimestamp = 0,
+        ?callable $filterFn = null,
+        bool $sort = true,
+        string $timestampField = 'timestamp'
+    ): array {
+        if (!file_exists($path)) {
+            return [];
+        }
+
+        $fp = @gzopen($path, 'r');
+        if (!$fp) {
+            return [];
+        }
+
+        $entries = [];
+
+        while (($line = gzgets($fp)) !== false) {
+            $entry = self::parseJsonLine($line);
+
+            if ($entry && isset($entry[$timestampField])) {
+                // Filter by timestamp if specified
+                if ($sinceTimestamp > 0 && $entry[$timestampField] <= $sinceTimestamp) {
+                    continue;
+                }
+
+                // Apply custom filter if provided
+                if ($filterFn !== null && !$filterFn($entry)) {
+                    continue;
+                }
+
+                $entries[] = $entry;
+            }
+        }
+
+        gzclose($fp);
+
+        if ($sort && !empty($entries)) {
+            usort($entries, fn($a, $b) => ($a[$timestampField] ?? 0) <=> ($b[$timestampField] ?? 0));
+        }
+
+        return $entries;
+    }
+
+    /**
+     * Append entries to a gzip-compressed JSON lines file
+     *
+     * Used for compressed rollup tier files (30min, 2hour).
+     * Since gzip doesn't support true append, this reads existing entries,
+     * merges them with new entries, and rewrites the file.
+     *
+     * @param string $path Path to the gzip file
+     * @param array $entries Array of entries to append
+     * @param int $compressionLevel Gzip compression level 1-9 (default: 6)
+     * @return bool Success status
+     */
+    public function appendGzipJsonLines(string $path, array $entries, int $compressionLevel = 6): bool
+    {
+        if (empty($entries)) {
+            return true;
+        }
+
+        // Read existing entries if file exists
+        $existingEntries = file_exists($path) ? $this->readGzipJsonLines($path) : [];
+
+        // Merge with new entries
+        $allEntries = array_merge($existingEntries, $entries);
+
+        // Write all entries to gzip file
+        $fp = @gzopen($path, "w{$compressionLevel}");
+        if (!$fp) {
+            $this->logger->error("Failed to open gzip file for writing: {$path}");
+            return false;
+        }
+
+        foreach ($allEntries as $entry) {
+            gzwrite($fp, json_encode($entry) . "\n");
+        }
+
+        gzclose($fp);
+        $this->ensureFppOwnership($path);
+
+        return true;
+    }
+
+    /**
+     * Gzip compress a file in place
+     *
+     * Reads the source file, writes to a .gz file, and optionally removes the original.
+     * Used for compressing backup/archive files that are rarely accessed.
+     *
+     * @param string $sourcePath Path to the source file
+     * @param bool $removeOriginal Whether to remove the original file after compression (default: true)
+     * @param int $compressionLevel Gzip compression level 1-9 (default: 6)
+     * @return bool Success status
+     */
+    public function gzipFile(string $sourcePath, bool $removeOriginal = true, int $compressionLevel = 6): bool
+    {
+        if (!file_exists($sourcePath)) {
+            return false;
+        }
+
+        $gzPath = $sourcePath . '.gz';
+
+        // Read source file
+        $content = @file_get_contents($sourcePath);
+        if ($content === false) {
+            $this->logger->error("Failed to read file for gzip compression: {$sourcePath}");
+            return false;
+        }
+
+        // Write compressed file
+        $fp = @gzopen($gzPath, "w{$compressionLevel}");
+        if (!$fp) {
+            $this->logger->error("Failed to create gzip file: {$gzPath}");
+            return false;
+        }
+
+        gzwrite($fp, $content);
+        gzclose($fp);
+
+        $this->ensureFppOwnership($gzPath);
+
+        // Remove original if requested
+        if ($removeOriginal) {
+            @unlink($sourcePath);
+        }
+
         return true;
     }
 

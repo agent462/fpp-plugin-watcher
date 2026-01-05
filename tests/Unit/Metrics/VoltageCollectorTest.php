@@ -67,11 +67,10 @@ class TestableVoltageCollector extends VoltageCollector
         $fileManagerProp->setAccessible(true);
         $fileManagerProp->setValue($this, $fileManager ?? FileManager::getInstance());
 
-        if ($rollup !== null) {
-            $rollupProp = $baseClass->getProperty('rollup');
-            $rollupProp->setAccessible(true);
-            $rollupProp->setValue($this, $rollup);
-        }
+        // Always initialize rollup (required for getRollupFilePath)
+        $rollupProp = $baseClass->getProperty('rollup');
+        $rollupProp->setAccessible(true);
+        $rollupProp->setValue($this, $rollup ?? new RollupProcessor());
     }
 
     /**
@@ -167,14 +166,16 @@ class VoltageCollectorTest extends TestCase
     {
         $path = $this->collector->getRollupFilePath('30min');
 
-        $this->assertStringEndsWith('/30min.log', $path);
+        // 30min tier uses gzip compression
+        $this->assertStringEndsWith('/30min.log.gz', $path);
     }
 
     public function testGetRollupFilePathReturns2HourPath(): void
     {
         $path = $this->collector->getRollupFilePath('2hour');
 
-        $this->assertStringEndsWith('/2hour.log', $path);
+        // 2hour tier uses gzip compression
+        $this->assertStringEndsWith('/2hour.log.gz', $path);
     }
 
     public function testGetStateFilePathReturnsCorrectPath(): void
@@ -1034,12 +1035,18 @@ class VoltageCollectorTest extends TestCase
     public function testRollupFilePathsAreConsistent(): void
     {
         $tiers = ['1min', '5min', '30min', '2hour'];
+        $compressedTiers = ['30min', '2hour'];
 
         foreach ($tiers as $tier) {
             $path = $this->collector->getRollupFilePath($tier);
 
             $this->assertStringContainsString($this->dataDir, $path);
-            $this->assertStringEndsWith('.log', $path);
+            // Compressed tiers use .log.gz extension
+            if (in_array($tier, $compressedTiers, true)) {
+                $this->assertStringEndsWith('.log.gz', $path);
+            } else {
+                $this->assertStringEndsWith('.log', $path);
+            }
             $this->assertStringContainsString($tier, $path);
         }
     }

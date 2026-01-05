@@ -189,7 +189,6 @@ class VoltageCollector extends BaseMetricsCollector
             'voltages' => $voltages
         ];
 
-        $timestamp = date('Y-m-d H:i:s');
         $jsonData = json_encode($entry);
 
         // Ensure directory exists
@@ -205,7 +204,7 @@ class VoltageCollector extends BaseMetricsCollector
 
         $success = false;
         if (flock($fp, LOCK_EX)) {
-            fwrite($fp, "[{$timestamp}] {$jsonData}\n");
+            fwrite($fp, "{$jsonData}\n");
             fflush($fp);
             flock($fp, LOCK_UN);
             $success = true;

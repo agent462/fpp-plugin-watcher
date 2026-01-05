@@ -733,7 +733,7 @@ class MqttEventLoggerTest extends TestCase
         $this->assertEquals('recent.fseq', $result['data'][0]['data']);
     }
 
-    public function testRotateEventsFileCreatesBackup(): void
+    public function testRotateEventsFileCreatesCompressedBackup(): void
     {
         $now = time();
         $this->writeTestEvents([
@@ -743,8 +743,9 @@ class MqttEventLoggerTest extends TestCase
 
         $this->logger->rotateEventsFile(7);
 
-        $backupFile = $this->eventsFile . '.old';
-        $this->assertFileExists($backupFile);
+        // Backup should be gzip compressed
+        $this->assertFileExists($this->eventsFile . '.old.gz');
+        $this->assertFileDoesNotExist($this->eventsFile . '.old');
     }
 
     public function testRotateEventsFileNoOpIfNothingToRemove(): void
@@ -758,8 +759,8 @@ class MqttEventLoggerTest extends TestCase
         $this->logger->rotateEventsFile(7);
 
         // No backup should be created if nothing was purged
-        $backupFile = $this->eventsFile . '.old';
-        $this->assertFileDoesNotExist($backupFile);
+        $this->assertFileDoesNotExist($this->eventsFile . '.old');
+        $this->assertFileDoesNotExist($this->eventsFile . '.old.gz');
     }
 
     // =========================================================================

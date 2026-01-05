@@ -46,9 +46,8 @@ class MetricsStorage
         $success = false;
         if (flock($fp, LOCK_EX)) {
             foreach ($entries as $entry) {
-                $timestamp = date('Y-m-d H:i:s', $entry['timestamp'] ?? time());
                 $jsonData = json_encode($entry);
-                fwrite($fp, "[{$timestamp}] {$jsonData}\n");
+                fwrite($fp, "{$jsonData}\n");
             }
             fflush($fp);
             flock($fp, LOCK_UN);
@@ -103,14 +102,11 @@ class MetricsStorage
                 }
             }
 
-            // Format: [datetime] {json}
-            if (preg_match('/\[.*?\]\s+(.+)$/', $line, $matches)) {
-                $jsonData = trim($matches[1]);
-                $entry = json_decode($jsonData, true);
+            // Parse JSON - handle both new format (pure JSON) and legacy format ([datetime] {json})
+            $entry = FileManager::parseJsonLine($line);
 
-                if ($entry && isset($entry['timestamp'])) {
-                    $entries[] = $entry;
-                }
+            if ($entry && isset($entry['timestamp'])) {
+                $entries[] = $entry;
             }
         }
 
@@ -192,13 +188,16 @@ class MetricsStorage
 
             // Atomic swap: old -> backup, temp -> current
             @unlink($backupFile);
+            @unlink($backupFile . '.gz');
             rename($metricsFile, $backupFile);
             rename($tempFile, $metricsFile);
+
+            // Compress backup file to save space
+            $this->fileManager->gzipFile($backupFile);
 
             $this->logger->info("Metrics purge ({$metricsFile}): removed {$purgedCount} old entries, kept " . count($recentMetrics) . " recent entries.");
 
             $this->fileManager->ensureFppOwnership($metricsFile);
-            $this->fileManager->ensureFppOwnership($backupFile);
 
             $result['purged'] = $purgedCount;
             $result['kept'] = count($recentMetrics);

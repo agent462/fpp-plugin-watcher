@@ -148,16 +148,12 @@ class EfuseCollector extends BaseMetricsCollector
             return true; // Nothing to write
         }
 
-        // Calculate total from all ports
-        $total = array_sum($ports);
-        $ports['_total'] = $total;
-
+        // Note: _total is calculated on read, not stored, to save disk space
         $entry = [
             'timestamp' => time(),
             'ports' => $ports
         ];
 
-        $timestamp = date('Y-m-d H:i:s');
         $jsonData = json_encode($entry);
 
         $fp = @fopen($this->metricsFile, 'a');
@@ -171,7 +167,7 @@ class EfuseCollector extends BaseMetricsCollector
 
         $success = false;
         if (flock($fp, LOCK_EX)) {
-            fwrite($fp, "[{$timestamp}] {$jsonData}\n");
+            fwrite($fp, "{$jsonData}\n");
             fflush($fp);
             flock($fp, LOCK_UN);
             $success = true;
@@ -185,6 +181,7 @@ class EfuseCollector extends BaseMetricsCollector
 
     /**
      * Read raw eFuse metrics from log file
+     * Calculates _total on read if not present in stored data
      */
     public function readRawMetrics(int $hoursBack = 6, ?string $portFilter = null): array
     {
@@ -197,7 +194,22 @@ class EfuseCollector extends BaseMetricsCollector
             };
         }
 
-        return FileManager::getInstance()->readJsonLinesFile($this->metricsFile, $sinceTimestamp, $filterFn);
+        $entries = FileManager::getInstance()->readJsonLinesFile($this->metricsFile, $sinceTimestamp, $filterFn);
+
+        // Calculate _total for each entry if not present (new format without stored _total)
+        foreach ($entries as &$entry) {
+            if (isset($entry['ports']) && !isset($entry['ports']['_total'])) {
+                $total = 0;
+                foreach ($entry['ports'] as $port => $value) {
+                    if (is_numeric($value)) {
+                        $total += $value;
+                    }
+                }
+                $entry['ports']['_total'] = $total;
+            }
+        }
+
+        return $entries;
     }
 
     /**
@@ -278,6 +290,10 @@ class EfuseCollector extends BaseMetricsCollector
 
         $aggregatedPorts = [];
         foreach ($portData as $portName => $data) {
+            // Skip _total in aggregation - we'll calculate it below
+            if ($portName === '_total') {
+                continue;
+            }
             if (empty($data['values'])) {
                 continue;
             }
@@ -294,6 +310,32 @@ class EfuseCollector extends BaseMetricsCollector
                 'max' => max($maxs),
                 'peak' => max($maxs),
                 'samples' => $sampleCount
+            ];
+        }
+
+        // Calculate _total from aggregated port values
+        if (!empty($aggregatedPorts)) {
+            $totalAvg = 0;
+            $totalMin = 0;
+            $totalMax = 0;
+            $totalPeak = 0;
+            $totalSamples = 0;
+
+            foreach ($aggregatedPorts as $portName => $data) {
+                $totalAvg += $data['avg'];
+                $totalMin += $data['min'];
+                $totalMax += $data['max'];
+                $totalPeak += $data['peak'];
+                // Use max samples from any port (they should all be the same)
+                $totalSamples = max($totalSamples, $data['samples']);
+            }
+
+            $aggregatedPorts['_total'] = [
+                'avg' => $totalAvg,
+                'min' => $totalMin,
+                'max' => $totalMax,
+                'peak' => $totalPeak,
+                'samples' => $totalSamples
             ];
         }
 

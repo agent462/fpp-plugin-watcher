@@ -402,13 +402,16 @@ class MqttEventLogger
             fclose($tempFp);
 
             @unlink($backupFile);
+            @unlink($backupFile . '.gz');
             rename($this->eventsFile, $backupFile);
             rename($tempFile, $this->eventsFile);
+
+            // Compress backup file to save space
+            $this->fileManager->gzipFile($backupFile);
 
             $this->logger->info("MQTT events purge: removed {$purgedCount} old entries, kept " . count($recentEvents) . " recent entries.");
 
             $this->fileManager->ensureFppOwnership($this->eventsFile);
-            $this->fileManager->ensureFppOwnership($backupFile);
         } else {
             $this->logger->error("Unable to create temp file for MQTT events purge");
         }

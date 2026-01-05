@@ -1122,9 +1122,8 @@ class RollupProcessorTest extends TestCase
         $result = $this->processor->appendRollupEntries($rollupFile, []);
 
         $this->assertTrue($result);
-        // File should be created but empty
-        $this->assertFileExists($rollupFile);
-        $this->assertEquals(0, filesize($rollupFile));
+        // Empty array should not create file (consistent with FileManager behavior)
+        $this->assertFileDoesNotExist($rollupFile);
     }
 
     public function testAppendRollupEntriesWithSpecialCharacters(): void
@@ -1257,5 +1256,341 @@ class RollupProcessorTest extends TestCase
         $this->assertEquals('5-minute averages', $info['5min']['label']);
         $this->assertEquals('30-minute averages', $info['30min']['label']);
         $this->assertEquals('2-hour averages', $info['2hour']['label']);
+    }
+
+    // =========================================================================
+    // Compression Tests
+    // =========================================================================
+
+    public function testCompressedTiersConstant(): void
+    {
+        $this->assertContains('30min', RollupProcessor::COMPRESSED_TIERS);
+        $this->assertContains('2hour', RollupProcessor::COMPRESSED_TIERS);
+        $this->assertNotContains('1min', RollupProcessor::COMPRESSED_TIERS);
+        $this->assertNotContains('5min', RollupProcessor::COMPRESSED_TIERS);
+    }
+
+    public function testShouldCompressTierFor30min(): void
+    {
+        $this->assertTrue($this->processor->shouldCompressTier('30min'));
+    }
+
+    public function testShouldCompressTierFor2hour(): void
+    {
+        $this->assertTrue($this->processor->shouldCompressTier('2hour'));
+    }
+
+    public function testShouldNotCompressTierFor1min(): void
+    {
+        $this->assertFalse($this->processor->shouldCompressTier('1min'));
+    }
+
+    public function testShouldNotCompressTierFor5min(): void
+    {
+        $this->assertFalse($this->processor->shouldCompressTier('5min'));
+    }
+
+    public function testGetRollupFilePathUncompressed(): void
+    {
+        $baseDir = '/data/metrics';
+
+        $this->assertEquals('/data/metrics/1min.log', $this->processor->getRollupFilePath($baseDir, '1min'));
+        $this->assertEquals('/data/metrics/5min.log', $this->processor->getRollupFilePath($baseDir, '5min'));
+    }
+
+    public function testGetRollupFilePathCompressed(): void
+    {
+        $baseDir = '/data/metrics';
+
+        $this->assertEquals('/data/metrics/30min.log.gz', $this->processor->getRollupFilePath($baseDir, '30min'));
+        $this->assertEquals('/data/metrics/2hour.log.gz', $this->processor->getRollupFilePath($baseDir, '2hour'));
+    }
+
+    public function testGetRollupFilePathHandlesTrailingSlash(): void
+    {
+        $this->assertEquals('/data/metrics/1min.log', $this->processor->getRollupFilePath('/data/metrics/', '1min'));
+        $this->assertEquals('/data/metrics/30min.log.gz', $this->processor->getRollupFilePath('/data/metrics/', '30min'));
+    }
+
+    public function testGetTiersInfoIncludesCompressionStatus(): void
+    {
+        $getFilePath = fn($tier) => $this->testTmpDir . '/' . $tier . '.log';
+
+        $info = $this->processor->getTiersInfo($getFilePath);
+
+        $this->assertFalse($info['1min']['compressed']);
+        $this->assertFalse($info['5min']['compressed']);
+        $this->assertTrue($info['30min']['compressed']);
+        $this->assertTrue($info['2hour']['compressed']);
+    }
+
+    // =========================================================================
+    // Gzip Read/Write Tests
+    // =========================================================================
+
+    public function testAppendRollupEntriesGzip(): void
+    {
+        $rollupFile = $this->testTmpDir . '/30min.log.gz';
+        $entries = [
+            ['timestamp' => time(), 'value' => 'test1'],
+            ['timestamp' => time() + 60, 'value' => 'test2'],
+        ];
+
+        $result = $this->processor->appendRollupEntries($rollupFile, $entries);
+
+        $this->assertTrue($result);
+        $this->assertFileExists($rollupFile);
+    }
+
+    public function testReadRollupDataGzip(): void
+    {
+        $rollupFile = $this->testTmpDir . '/30min.log.gz';
+        $now = time();
+        $entries = [
+            ['timestamp' => $now - 60, 'value' => 'test1'],
+            ['timestamp' => $now, 'value' => 'test2'],
+        ];
+
+        $this->processor->appendRollupEntries($rollupFile, $entries);
+        $result = $this->processor->readRollupData($rollupFile, '30min', $now - 120, $now + 60);
+
+        $this->assertTrue($result['success']);
+        $this->assertCount(2, $result['data']);
+    }
+
+    public function testReadRollupDataGzipWithTimeFilter(): void
+    {
+        $rollupFile = $this->testTmpDir . '/30min.log.gz';
+        $now = time();
+        $entries = [
+            ['timestamp' => $now - 3600, 'value' => 'old'],
+            ['timestamp' => $now - 60, 'value' => 'recent'],
+            ['timestamp' => $now, 'value' => 'now'],
+        ];
+
+        $this->processor->appendRollupEntries($rollupFile, $entries);
+        $result = $this->processor->readRollupData($rollupFile, '30min', $now - 120, $now + 60);
+
+        $this->assertTrue($result['success']);
+        $this->assertCount(2, $result['data']);
+        $this->assertEquals('recent', $result['data'][0]['value']);
+        $this->assertEquals('now', $result['data'][1]['value']);
+    }
+
+    public function testAppendRollupEntriesGzipAppendsToExisting(): void
+    {
+        $rollupFile = $this->testTmpDir . '/30min.log.gz';
+        $now = time();
+
+        $entries1 = [['timestamp' => $now - 60, 'value' => 'first']];
+        $entries2 = [['timestamp' => $now, 'value' => 'second']];
+
+        $this->processor->appendRollupEntries($rollupFile, $entries1);
+        $this->processor->appendRollupEntries($rollupFile, $entries2);
+
+        $result = $this->processor->readRollupData($rollupFile, '30min', $now - 120, $now + 60);
+
+        $this->assertTrue($result['success']);
+        $this->assertCount(2, $result['data']);
+        $this->assertEquals('first', $result['data'][0]['value']);
+        $this->assertEquals('second', $result['data'][1]['value']);
+    }
+
+    public function testAppendRollupEntriesGzipEmptyArray(): void
+    {
+        $rollupFile = $this->testTmpDir . '/empty.log.gz';
+
+        $result = $this->processor->appendRollupEntries($rollupFile, []);
+
+        $this->assertTrue($result);
+        $this->assertFileDoesNotExist($rollupFile);
+    }
+
+    // =========================================================================
+    // Migration Tests
+    // =========================================================================
+
+    public function testMigrateToCompressedMigrates30minFile(): void
+    {
+        $baseDir = $this->testTmpDir;
+        $uncompressedPath = $baseDir . '/30min.log';
+        $compressedPath = $baseDir . '/30min.log.gz';
+
+        // Create uncompressed file
+        $entries = [
+            ['timestamp' => time() - 60, 'value' => 'test1'],
+            ['timestamp' => time(), 'value' => 'test2'],
+        ];
+        $content = '';
+        foreach ($entries as $entry) {
+            $content .= json_encode($entry) . "\n";
+        }
+        file_put_contents($uncompressedPath, $content);
+
+        // Migrate
+        $result = $this->processor->migrateToCompressed($baseDir, '30min');
+
+        $this->assertTrue($result);
+        $this->assertFileDoesNotExist($uncompressedPath);
+        $this->assertFileExists($compressedPath);
+
+        // Verify data is readable
+        $readResult = $this->processor->readRollupData($compressedPath, '30min');
+        $this->assertTrue($readResult['success']);
+        $this->assertCount(2, $readResult['data']);
+    }
+
+    public function testMigrateToCompressedSkipsNonCompressedTiers(): void
+    {
+        $baseDir = $this->testTmpDir;
+        $uncompressedPath = $baseDir . '/1min.log';
+
+        file_put_contents($uncompressedPath, json_encode(['timestamp' => time()]) . "\n");
+
+        $result = $this->processor->migrateToCompressed($baseDir, '1min');
+
+        $this->assertFalse($result);
+        $this->assertFileExists($uncompressedPath);
+    }
+
+    public function testMigrateToCompressedSkipsIfCompressedExists(): void
+    {
+        $baseDir = $this->testTmpDir;
+        $uncompressedPath = $baseDir . '/30min.log';
+        $compressedPath = $baseDir . '/30min.log.gz';
+
+        file_put_contents($uncompressedPath, json_encode(['timestamp' => time(), 'old' => true]) . "\n");
+
+        // Create empty compressed file
+        $fp = gzopen($compressedPath, 'w');
+        gzwrite($fp, json_encode(['timestamp' => time(), 'new' => true]) . "\n");
+        gzclose($fp);
+
+        $result = $this->processor->migrateToCompressed($baseDir, '30min');
+
+        $this->assertFalse($result);
+        // Both files should still exist
+        $this->assertFileExists($uncompressedPath);
+        $this->assertFileExists($compressedPath);
+    }
+
+    public function testMigrateToCompressedSkipsIfNoUncompressedFile(): void
+    {
+        $baseDir = $this->testTmpDir;
+
+        $result = $this->processor->migrateToCompressed($baseDir, '30min');
+
+        $this->assertFalse($result);
+    }
+
+    public function testMigrateToCompressedHandlesEmptyFile(): void
+    {
+        $baseDir = $this->testTmpDir;
+        $uncompressedPath = $baseDir . '/30min.log';
+
+        file_put_contents($uncompressedPath, '');
+
+        $result = $this->processor->migrateToCompressed($baseDir, '30min');
+
+        $this->assertTrue($result);
+        $this->assertFileDoesNotExist($uncompressedPath);
+    }
+
+    // =========================================================================
+    // Gzip Rotate Tests
+    // =========================================================================
+
+    public function testRotateRollupFileGzipSmallFile(): void
+    {
+        $rollupFile = $this->testTmpDir . '/small.log.gz';
+        $now = time();
+
+        // Create a small file
+        $entries = [['timestamp' => $now, 'value' => 'test']];
+        $this->processor->appendRollupEntries($rollupFile, $entries);
+
+        $sizeBefore = filesize($rollupFile);
+        $this->processor->rotateRollupFile($rollupFile, 3600);
+
+        // File should be unchanged (under 100KB threshold)
+        $this->assertEquals($sizeBefore, filesize($rollupFile));
+    }
+
+    public function testRotateRollupFileGzipRemovesOldEntries(): void
+    {
+        $rollupFile = $this->testTmpDir . '/rotate.log.gz';
+        $now = time();
+        $twoHoursAgo = $now - 7200;
+        $recentTime = $now - 60;
+
+        // Create entries - many old, few recent
+        // Need enough data to exceed 100KB compressed threshold
+        $entries = [];
+        for ($i = 0; $i < 5000; $i++) {
+            $entries[] = [
+                'timestamp' => $twoHoursAgo,
+                // Use random-ish data to prevent excessive compression
+                'data' => 'old_entry_' . $i . '_' . md5((string)$i) . str_repeat('x', 100)
+            ];
+        }
+        for ($i = 0; $i < 10; $i++) {
+            $entries[] = [
+                'timestamp' => $recentTime,
+                'data' => 'recent'
+            ];
+        }
+
+        $this->processor->appendRollupEntries($rollupFile, $entries);
+        clearstatcache(true, $rollupFile);
+        $sizeBefore = filesize($rollupFile);
+
+        // Verify file exceeds threshold
+        $this->assertGreaterThan(100 * 1024, $sizeBefore, 'Test file should exceed 100KB threshold');
+
+        // Rotate with 1 hour retention
+        $this->processor->rotateRollupFile($rollupFile, 3600);
+        clearstatcache(true, $rollupFile);
+        $sizeAfter = filesize($rollupFile);
+
+        // File should be smaller
+        $this->assertLessThan($sizeBefore, $sizeAfter);
+
+        // Verify only recent entries remain
+        $result = $this->processor->readRollupData($rollupFile, '30min', $now - 3600, $now + 60);
+        foreach ($result['data'] as $entry) {
+            $this->assertEquals('recent', $entry['data']);
+        }
+    }
+
+    public function testRotateRollupFileGzipAllEntriesExpired(): void
+    {
+        $rollupFile = $this->testTmpDir . '/expired.log.gz';
+        $twoHoursAgo = time() - 7200;
+
+        // Create large file with only old entries
+        // Need enough data to exceed 100KB compressed threshold
+        $entries = [];
+        for ($i = 0; $i < 5000; $i++) {
+            $entries[] = [
+                'timestamp' => $twoHoursAgo,
+                // Use random-ish data to prevent excessive compression
+                'data' => 'expired_' . $i . '_' . md5((string)$i) . str_repeat('x', 100)
+            ];
+        }
+
+        $this->processor->appendRollupEntries($rollupFile, $entries);
+        clearstatcache(true, $rollupFile);
+        $sizeBefore = filesize($rollupFile);
+
+        // Verify file exceeds threshold
+        $this->assertGreaterThan(100 * 1024, $sizeBefore, 'Test file should exceed 100KB threshold');
+
+        // Rotate with 1 hour retention - all entries should be removed
+        $this->processor->rotateRollupFile($rollupFile, 3600);
+        clearstatcache(true, $rollupFile);
+
+        // File should exist but be essentially empty (just gzip header)
+        $this->assertFileExists($rollupFile);
+        $this->assertLessThan(100, filesize($rollupFile));
     }
 }

@@ -75,6 +75,12 @@ class RollupProcessor
         'poor' => 5      // < 5% = poor, >= 5% = critical
     ];
 
+    /**
+     * Tiers that should use gzip compression
+     * These tiers have infrequent writes and rare reads, making compression beneficial
+     */
+    public const COMPRESSED_TIERS = ['30min', '2hour'];
+
     private FileManager $fileManager;
     private Logger $logger;
     private array $tiers;
@@ -136,11 +142,82 @@ class RollupProcessor
                 'retention_label' => self::formatDuration($config['retention']),
                 'label' => $config['label'],
                 'file_exists' => file_exists($filePath),
-                'file_size' => file_exists($filePath) ? filesize($filePath) : 0
+                'file_size' => file_exists($filePath) ? filesize($filePath) : 0,
+                'compressed' => $this->shouldCompressTier($tier)
             ];
         }
 
         return $result;
+    }
+
+    /**
+     * Check if a tier should use gzip compression
+     *
+     * @param string $tier Tier name
+     * @return bool True if tier should be compressed
+     */
+    public function shouldCompressTier(string $tier): bool
+    {
+        return in_array($tier, self::COMPRESSED_TIERS, true);
+    }
+
+    /**
+     * Get rollup file path with appropriate extension
+     *
+     * Adds .gz extension for compressed tiers.
+     *
+     * @param string $baseDir Base directory for rollup files
+     * @param string $tier Tier name
+     * @return string Full file path
+     */
+    public function getRollupFilePath(string $baseDir, string $tier): string
+    {
+        $basePath = rtrim($baseDir, '/') . '/' . $tier . '.log';
+        return $this->shouldCompressTier($tier) ? $basePath . '.gz' : $basePath;
+    }
+
+    /**
+     * Migrate uncompressed tier file to compressed format
+     *
+     * Called automatically when writing to a compressed tier that has an
+     * existing uncompressed file.
+     *
+     * @param string $baseDir Base directory for rollup files
+     * @param string $tier Tier name
+     * @return bool True if migration occurred, false if no migration needed
+     */
+    public function migrateToCompressed(string $baseDir, string $tier): bool
+    {
+        if (!$this->shouldCompressTier($tier)) {
+            return false;
+        }
+
+        $uncompressedPath = rtrim($baseDir, '/') . '/' . $tier . '.log';
+        $compressedPath = $uncompressedPath . '.gz';
+
+        // Check if uncompressed file exists and compressed doesn't
+        if (!file_exists($uncompressedPath) || file_exists($compressedPath)) {
+            return false;
+        }
+
+        // Read entries from uncompressed file
+        $entries = $this->fileManager->readJsonLinesFile($uncompressedPath);
+
+        if (empty($entries)) {
+            // No entries to migrate, just remove the old file
+            @unlink($uncompressedPath);
+            return true;
+        }
+
+        // Write to compressed file
+        if ($this->fileManager->appendGzipJsonLines($compressedPath, $entries)) {
+            // Successfully migrated, remove old file
+            @unlink($uncompressedPath);
+            $this->logger->info("Migrated {$tier} tier to compressed format: " . count($entries) . " entries");
+            return true;
+        }
+
+        return false;
     }
 
     // ========================================================================
@@ -379,6 +456,8 @@ class RollupProcessor
     /**
      * Read rollup data from a file with time filtering
      *
+     * Automatically handles both compressed (.gz) and uncompressed files.
+     *
      * @param string $rollupFile Path to rollup file
      * @param string $tier Tier name
      * @param int|null $startTime Start timestamp (null for tier default)
@@ -414,42 +493,51 @@ class RollupProcessor
             }
         }
 
-        $data = [];
-        $fp = fopen($rollupFile, 'r');
+        // Check if this is a gzip file
+        $isGzip = str_ends_with($rollupFile, '.gz');
 
-        if (!$fp) {
-            return [
-                'success' => false,
-                'error' => 'Unable to read rollup file',
-                'data' => []
-            ];
-        }
+        // Build time range filter
+        $timeRangeFilter = function($entry) use ($startTime, $endTime, $filterFn) {
+            $timestamp = $entry['timestamp'] ?? 0;
+            if ($timestamp < $startTime || $timestamp > $endTime) {
+                return false;
+            }
+            // Apply custom filter if provided
+            return $filterFn === null || $filterFn($entry);
+        };
 
-        if (flock($fp, LOCK_SH)) {
-            while (($line = fgets($fp)) !== false) {
-                if (preg_match('/\[.*?\]\s+(.+)$/', $line, $matches)) {
-                    $jsonData = trim($matches[1]);
-                    $entry = json_decode($jsonData, true);
+        if ($isGzip) {
+            // Use gzip reader for compressed files
+            $data = $this->fileManager->readGzipJsonLines($rollupFile, 0, $timeRangeFilter);
+        } else {
+            // Use standard reader for uncompressed files
+            $data = [];
+            $fp = fopen($rollupFile, 'r');
 
-                    if ($entry && isset($entry['timestamp'])) {
-                        $timestamp = $entry['timestamp'];
+            if (!$fp) {
+                return [
+                    'success' => false,
+                    'error' => 'Unable to read rollup file',
+                    'data' => []
+                ];
+            }
 
-                        if ($timestamp >= $startTime && $timestamp <= $endTime) {
-                            // Apply custom filter if provided
-                            if ($filterFn === null || $filterFn($entry)) {
-                                $data[] = $entry;
-                            }
-                        }
+            if (flock($fp, LOCK_SH)) {
+                while (($line = fgets($fp)) !== false) {
+                    $entry = FileManager::parseJsonLine($line);
+
+                    if ($entry && isset($entry['timestamp']) && $timeRangeFilter($entry)) {
+                        $data[] = $entry;
                     }
                 }
+                flock($fp, LOCK_UN);
             }
-            flock($fp, LOCK_UN);
+
+            fclose($fp);
+
+            // Sort by timestamp
+            usort($data, fn($a, $b) => ($a['timestamp'] ?? 0) <=> ($b['timestamp'] ?? 0));
         }
-
-        fclose($fp);
-
-        // Sort by timestamp
-        usort($data, fn($a, $b) => ($a['timestamp'] ?? 0) <=> ($b['timestamp'] ?? 0));
 
         return [
             'success' => true,
@@ -466,12 +554,24 @@ class RollupProcessor
     /**
      * Append rollup entries to a rollup file
      *
+     * Automatically uses gzip for .gz files.
+     *
      * @param string $rollupFile Path to rollup file
      * @param array $entries Array of entries to append
      * @return bool Success
      */
     public function appendRollupEntries(string $rollupFile, array $entries): bool
     {
+        if (empty($entries)) {
+            return true;
+        }
+
+        // Check if this is a gzip file
+        if (str_ends_with($rollupFile, '.gz')) {
+            return $this->fileManager->appendGzipJsonLines($rollupFile, $entries);
+        }
+
+        // Standard uncompressed file
         $fp = fopen($rollupFile, 'a');
 
         if (!$fp) {
@@ -481,10 +581,8 @@ class RollupProcessor
 
         if (flock($fp, LOCK_EX)) {
             foreach ($entries as $entry) {
-                $timestamp = date('Y-m-d H:i:s', $entry['timestamp']);
                 $jsonData = json_encode($entry);
-                $logEntry = "[{$timestamp}] {$jsonData}\n";
-                fwrite($fp, $logEntry);
+                fwrite($fp, "{$jsonData}\n");
             }
             fflush($fp);
             flock($fp, LOCK_UN);
@@ -498,6 +596,9 @@ class RollupProcessor
     /**
      * Rotate rollup file to keep only entries within retention period
      *
+     * Automatically handles both compressed (.gz) and uncompressed files.
+     * For gzip files, uses a lower size threshold since they're already compressed.
+     *
      * @param string $rollupFile Path to rollup file
      * @param int $retentionSeconds Retention period in seconds
      */
@@ -507,52 +608,83 @@ class RollupProcessor
             return;
         }
 
+        $isGzip = str_ends_with($rollupFile, '.gz');
         $fileSize = filesize($rollupFile);
 
-        // Only rotate if file is larger than 1MB to avoid excessive I/O
-        if ($fileSize < 1024 * 1024) {
+        // For gzip files, use lower threshold (100KB) since they're already compressed
+        // For uncompressed, use 1MB threshold
+        $sizeThreshold = $isGzip ? 100 * 1024 : 1024 * 1024;
+
+        // Only rotate if file exceeds threshold to avoid excessive I/O
+        if ($fileSize < $sizeThreshold) {
             return;
         }
 
         $cutoffTime = time() - $retentionSeconds;
-        $recentEntries = [];
 
-        $fp = fopen($rollupFile, 'r');
-        if (!$fp) {
-            return;
-        }
+        if ($isGzip) {
+            // For gzip files, read all entries and filter
+            $allEntries = $this->fileManager->readGzipJsonLines($rollupFile);
+            $recentEntries = array_filter(
+                $allEntries,
+                fn($entry) => isset($entry['timestamp']) && $entry['timestamp'] >= $cutoffTime
+            );
 
-        if (flock($fp, LOCK_SH)) {
-            while (($line = fgets($fp)) !== false) {
-                if (preg_match('/\[.*?\]\s+(.+)$/', $line, $matches)) {
-                    $jsonData = trim($matches[1]);
-                    $entry = json_decode($jsonData, true);
+            if (!empty($recentEntries)) {
+                // Rewrite with only recent entries
+                $fp = @gzopen($rollupFile, 'w6');
+                if ($fp) {
+                    foreach ($recentEntries as $entry) {
+                        gzwrite($fp, json_encode($entry) . "\n");
+                    }
+                    gzclose($fp);
+                }
+            } else {
+                // Create empty gzip file
+                $fp = @gzopen($rollupFile, 'w6');
+                if ($fp) {
+                    gzclose($fp);
+                }
+            }
+        } else {
+            // Standard uncompressed file rotation
+            $recentEntries = [];
+
+            $fp = fopen($rollupFile, 'r');
+            if (!$fp) {
+                return;
+            }
+
+            if (flock($fp, LOCK_SH)) {
+                while (($line = fgets($fp)) !== false) {
+                    $entry = FileManager::parseJsonLine($line);
 
                     if ($entry && isset($entry['timestamp'])) {
                         if ($entry['timestamp'] >= $cutoffTime) {
-                            $recentEntries[] = $line;
+                            $recentEntries[] = json_encode($entry) . "\n";
                         }
                     }
                 }
-            }
-            flock($fp, LOCK_UN);
-        }
-
-        fclose($fp);
-
-        if (!empty($recentEntries)) {
-            $fp = fopen($rollupFile, 'w');
-            if ($fp && flock($fp, LOCK_EX)) {
-                foreach ($recentEntries as $line) {
-                    fwrite($fp, $line);
-                }
-                fflush($fp);
                 flock($fp, LOCK_UN);
-                fclose($fp);
             }
-        } else {
-            file_put_contents($rollupFile, '');
+
+            fclose($fp);
+
+            if (!empty($recentEntries)) {
+                $fp = fopen($rollupFile, 'w');
+                if ($fp && flock($fp, LOCK_EX)) {
+                    foreach ($recentEntries as $line) {
+                        fwrite($fp, $line);
+                    }
+                    fflush($fp);
+                    flock($fp, LOCK_UN);
+                    fclose($fp);
+                }
+            } else {
+                file_put_contents($rollupFile, '');
+            }
         }
+
         $this->fileManager->ensureFppOwnership($rollupFile);
     }
 

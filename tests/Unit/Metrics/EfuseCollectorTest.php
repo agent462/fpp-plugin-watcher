@@ -68,11 +68,10 @@ class TestableEfuseCollector extends EfuseCollector
         $fileManagerProp->setAccessible(true);
         $fileManagerProp->setValue($this, $fileManager ?? FileManager::getInstance());
 
-        if ($rollup !== null) {
-            $rollupProp = $baseClass->getProperty('rollup');
-            $rollupProp->setAccessible(true);
-            $rollupProp->setValue($this, $rollup);
-        }
+        // Always initialize rollup (required for getRollupFilePath)
+        $rollupProp = $baseClass->getProperty('rollup');
+        $rollupProp->setAccessible(true);
+        $rollupProp->setValue($this, $rollup ?? new RollupProcessor());
     }
 
     /**
@@ -168,14 +167,16 @@ class EfuseCollectorTest extends TestCase
     {
         $path = $this->collector->getRollupFilePath('30min');
 
-        $this->assertStringEndsWith('/30min.log', $path);
+        // 30min tier uses gzip compression
+        $this->assertStringEndsWith('/30min.log.gz', $path);
     }
 
     public function testGetRollupFilePathReturns2HourPath(): void
     {
         $path = $this->collector->getRollupFilePath('2hour');
 
-        $this->assertStringEndsWith('/2hour.log', $path);
+        // 2hour tier uses gzip compression
+        $this->assertStringEndsWith('/2hour.log.gz', $path);
     }
 
     public function testGetStateFilePathReturnsCorrectPath(): void
@@ -351,7 +352,8 @@ class EfuseCollectorTest extends TestCase
 
         $content = file_get_contents($this->rawFile);
         $this->assertStringContainsString('"Port 1":500', $content);
-        $this->assertStringContainsString('"_total":500', $content);
+        // _total is calculated on read, not stored
+        $this->assertStringNotContainsString('"_total"', $content);
     }
 
     public function testWriteRawMetricWithMultiplePorts(): void
@@ -370,7 +372,8 @@ class EfuseCollectorTest extends TestCase
         $this->assertStringContainsString('"Port 1":500', $content);
         $this->assertStringContainsString('"Port 2":750', $content);
         $this->assertStringContainsString('"Port 3":250', $content);
-        $this->assertStringContainsString('"_total":1500', $content);
+        // _total is calculated on read, not stored
+        $this->assertStringNotContainsString('"_total"', $content);
     }
 
     public function testWriteRawMetricAppendsToFile(): void
@@ -384,13 +387,21 @@ class EfuseCollectorTest extends TestCase
         $this->assertCount(2, $lines);
     }
 
-    public function testWriteRawMetricCalculatesTotal(): void
+    public function testReadRawMetricsCalculatesTotal(): void
     {
+        // Write raw data without _total
         $ports = ['Port 1' => 100, 'Port 2' => 200, 'Port 3' => 300];
         $this->collector->writeRawMetric($ports);
 
+        // Verify _total is not stored
         $content = file_get_contents($this->rawFile);
-        $this->assertStringContainsString('"_total":600', $content);
+        $this->assertStringNotContainsString('"_total"', $content);
+
+        // Verify _total is calculated on read
+        $entries = $this->collector->readRawMetrics(1);
+        $this->assertCount(1, $entries);
+        $this->assertArrayHasKey('_total', $entries[0]['ports']);
+        $this->assertEquals(600, $entries[0]['ports']['_total']);
     }
 
     public function testWriteRawMetricWithZeroValues(): void
@@ -400,7 +411,12 @@ class EfuseCollectorTest extends TestCase
 
         $content = file_get_contents($this->rawFile);
         $this->assertStringContainsString('"Port 1":0', $content);
-        $this->assertStringContainsString('"_total":100', $content);
+        // _total is calculated on read, not stored
+        $this->assertStringNotContainsString('"_total"', $content);
+
+        // Verify _total is calculated correctly on read
+        $entries = $this->collector->readRawMetrics(1);
+        $this->assertEquals(100, $entries[0]['ports']['_total']);
     }
 
     // =========================================================================
@@ -941,8 +957,15 @@ class EfuseCollectorTest extends TestCase
         }
 
         $this->assertTrue($result);
+
+        // Verify _total is not stored in raw file
         $content = file_get_contents($this->rawFile);
-        $this->assertStringContainsString("\"_total\":{$expectedTotal}", $content);
+        $this->assertStringNotContainsString('"_total"', $content);
+
+        // Verify _total is calculated correctly on read
+        $entries = $this->collector->readRawMetrics(1);
+        $this->assertCount(1, $entries);
+        $this->assertEquals($expectedTotal, $entries[0]['ports']['_total']);
     }
 
     public static function portDataProvider(): array
@@ -1620,7 +1643,12 @@ class EfuseCollectorTest extends TestCase
         $this->assertStringContainsString('"Port 9A":500', $content);
         $this->assertStringContainsString('"Port 9B":600', $content);
         $this->assertStringContainsString('"Port 9C":700', $content);
-        $this->assertStringContainsString('"_total":1800', $content);
+        // _total is calculated on read, not stored
+        $this->assertStringNotContainsString('"_total"', $content);
+
+        // Verify _total is calculated correctly on read
+        $entries = $this->collector->readRawMetrics(1);
+        $this->assertEquals(1800, $entries[0]['ports']['_total']);
     }
 
     public function testWriteRawMetricWithManyPorts(): void
@@ -1633,9 +1661,14 @@ class EfuseCollectorTest extends TestCase
 
         $this->assertTrue($result);
 
+        // _total is calculated on read, not stored
         $content = file_get_contents($this->rawFile);
+        $this->assertStringNotContainsString('"_total"', $content);
+
+        // Verify _total is calculated correctly on read
         // Total should be sum of 100 + 200 + ... + 1600 = 13600
-        $this->assertStringContainsString('"_total":13600', $content);
+        $entries = $this->collector->readRawMetrics(1);
+        $this->assertEquals(13600, $entries[0]['ports']['_total']);
     }
 
     // =========================================================================
@@ -1716,6 +1749,7 @@ class EfuseCollectorTest extends TestCase
     public function testRollupFilePathsAreConsistent(): void
     {
         $tiers = ['1min', '5min', '30min', '2hour'];
+        $compressedTiers = ['30min', '2hour'];
 
         foreach ($tiers as $tier) {
             $path = $this->collector->getRollupFilePath($tier);
@@ -1723,8 +1757,12 @@ class EfuseCollectorTest extends TestCase
             // Should be in data directory
             $this->assertStringContainsString($this->dataDir, $path);
 
-            // Should have .log extension
-            $this->assertStringEndsWith('.log', $path);
+            // Should have appropriate extension (compressed tiers use .log.gz)
+            if (in_array($tier, $compressedTiers, true)) {
+                $this->assertStringEndsWith('.log.gz', $path);
+            } else {
+                $this->assertStringEndsWith('.log', $path);
+            }
 
             // Should contain tier name
             $this->assertStringContainsString($tier, $path);

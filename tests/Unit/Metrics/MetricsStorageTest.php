@@ -60,11 +60,13 @@ class MetricsStorageTest extends TestCase
         $this->storage->writeBatch($file, $entries);
 
         $content = file_get_contents($file);
-        // Check format: [YYYY-MM-DD HH:MM:SS] {json}
+        // Check format: pure JSON lines (no datetime prefix)
         $this->assertMatchesRegularExpression(
-            '/\[\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}\] \{.+\}/',
-            $content
+            '/^\{"timestamp":\d+,"value":"test"\}$/',
+            trim($content)
         );
+        // Ensure no datetime prefix
+        $this->assertStringNotContainsString('[', $content);
         $this->assertStringContainsString('"timestamp":1700000000', $content);
         $this->assertStringContainsString('"value":"test"', $content);
     }
@@ -114,8 +116,9 @@ class MetricsStorageTest extends TestCase
         $afterTime = time();
 
         $content = file_get_contents($file);
-        // Should use current time - check the datetime format is recent
-        $this->assertMatchesRegularExpression('/\[\d{4}-\d{2}-\d{2}/', $content);
+        // Check it's valid JSON (no datetime prefix)
+        $this->assertStringStartsWith('{', trim($content));
+        $this->assertStringContainsString('"value":"no_timestamp"', $content);
     }
 
     // =========================================================================
@@ -283,7 +286,7 @@ class MetricsStorageTest extends TestCase
         }
     }
 
-    public function testRotateCreatesBackupFile(): void
+    public function testRotateCreatesCompressedBackupFile(): void
     {
         $file = $this->testTmpDir . '/metrics.log';
         $now = time();
@@ -301,7 +304,9 @@ class MetricsStorageTest extends TestCase
 
         $this->storage->rotate($file, 3600);
 
-        $this->assertFileExists($file . '.old');
+        // Backup should be gzip compressed
+        $this->assertFileExists($file . '.old.gz');
+        $this->assertFileDoesNotExist($file . '.old');
     }
 
     public function testRotateWithNoOldEntriesSkipsRewrite(): void
@@ -324,6 +329,7 @@ class MetricsStorageTest extends TestCase
 
         // No backup should be created
         $this->assertFileDoesNotExist($file . '.old');
+        $this->assertFileDoesNotExist($file . '.old.gz');
     }
 
     public function testRotateWithAllOldEntries(): void
@@ -361,8 +367,11 @@ class MetricsStorageTest extends TestCase
 
         $this->storage->rotate($file, 3600, '.backup');
 
-        $this->assertFileExists($file . '.backup');
+        // Custom suffix should be gzip compressed
+        $this->assertFileExists($file . '.backup.gz');
+        $this->assertFileDoesNotExist($file . '.backup');
         $this->assertFileDoesNotExist($file . '.old');
+        $this->assertFileDoesNotExist($file . '.old.gz');
     }
 
     // =========================================================================
